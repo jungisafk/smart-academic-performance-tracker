@@ -15,5 +15,12 @@ data class Subject(
     val semester: String = "",
     val academicYear: String = "",
     val active: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val yearLevelId: String = "", // Reference to YearLevel document ID
+    val courseId: String = "", // Reference to Course document ID
+    val maxStudents: Int = 30, // Maximum number of students that can enroll
+    // Computed fields for display (populated by repository)
+    val yearLevelName: String = "",
+    val courseName: String = "",
+    val courseCode: String = ""
 )

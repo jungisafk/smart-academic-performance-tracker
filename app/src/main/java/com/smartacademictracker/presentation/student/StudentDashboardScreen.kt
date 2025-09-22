@@ -18,10 +18,26 @@ import com.smartacademictracker.presentation.auth.AuthViewModel
 @Composable
 fun StudentDashboardScreen(
     onNavigateToGrades: () -> Unit,
+    onNavigateToSubjects: () -> Unit,
+    onNavigateToSubjectApplication: () -> Unit,
+    onNavigateToProfile: () -> Unit,
+    onNavigateToAnalytics: () -> Unit,
     onSignOut: () -> Unit,
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel(),
+    dashboardViewModel: StudentDashboardViewModel = hiltViewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
+    val dashboardState by dashboardViewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        dashboardViewModel.loadDashboardData()
+    }
+
+    // Refresh data when screen is composed
+    DisposableEffect(Unit) {
+        dashboardViewModel.refreshData()
+        onDispose { }
+    }
     
     Scaffold(
         topBar = {
@@ -93,9 +109,9 @@ fun StudentDashboardScreen(
                     )
                     
                     QuickActionCard(
-                        title = "Subjects",
+                        title = "My Subjects",
                         icon = Icons.Default.Menu,
-                        onClick = { /* TODO: Navigate to subjects */ },
+                        onClick = onNavigateToSubjects,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -107,16 +123,63 @@ fun StudentDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     QuickActionCard(
-                        title = "Analytics",
-                        icon = Icons.Default.Info,
-                        onClick = { /* TODO: Navigate to analytics */ },
+                        title = "Apply for Subjects",
+                        icon = Icons.Default.School,
+                        onClick = onNavigateToSubjectApplication,
                         modifier = Modifier.weight(1f)
                     )
                     
                     QuickActionCard(
+                        title = "Analytics",
+                        icon = Icons.Default.Info,
+                        onClick = onNavigateToAnalytics,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickActionCard(
                         title = "Profile",
                         icon = Icons.Default.Person,
-                        onClick = { /* TODO: Navigate to profile */ },
+                        onClick = onNavigateToProfile,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    // Empty space for balance
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+            
+            item {
+                Text(
+                    text = "Overview",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            item {
+                // Statistics Cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        title = "Enrolled Subjects",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.enrolledSubjects.toString(),
+                        icon = Icons.Default.Menu,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    StatCard(
+                        title = "Recent Grades",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.recentGrades.size.toString(),
+                        icon = Icons.Default.Star,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -160,6 +223,43 @@ fun StudentDashboardScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun StatCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

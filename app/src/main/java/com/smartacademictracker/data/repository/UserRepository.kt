@@ -99,7 +99,7 @@ class UserRepository @Inject constructor(
     suspend fun getUsersByRole(role: UserRole): Result<List<User>> {
         return try {
             val snapshot = usersCollection
-                .whereEqualTo("role", role.name)
+                .whereEqualTo("role", role.value)
                 .get()
                 .await()
             val users = snapshot.toObjects(User::class.java)

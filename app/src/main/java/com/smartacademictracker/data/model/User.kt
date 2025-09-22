@@ -12,7 +12,13 @@ data class User(
     val role: String = "STUDENT", // Store as string for faster serialization
     val profileImageUrl: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val active: Boolean = true // Use 'active' directly to match Firestore
+    val active: Boolean = true, // Use 'active' directly to match Firestore
+    val yearLevelId: String? = null, // For students: Reference to YearLevel document ID
+    val courseId: String? = null, // For students: Reference to Course document ID
+    // Computed fields for display (populated by repository)
+    val yearLevelName: String? = null,
+    val courseName: String? = null,
+    val courseCode: String? = null
 )
 
 enum class UserRole {

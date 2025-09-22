@@ -48,11 +48,12 @@ class TeacherApplicationRepository @Inject constructor(
     suspend fun getAllApplications(): Result<List<TeacherApplication>> {
         return try {
             val snapshot = applicationsCollection
-                .orderBy("appliedAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val applications = snapshot.toObjects(TeacherApplication::class.java)
-            Result.success(applications)
+            // Sort by appliedAt in descending order locally
+            val sortedApplications = applications.sortedByDescending { it.appliedAt }
+            Result.success(sortedApplications)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -62,11 +63,12 @@ class TeacherApplicationRepository @Inject constructor(
         return try {
             val snapshot = applicationsCollection
                 .whereEqualTo("status", status.name)
-                .orderBy("appliedAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val applications = snapshot.toObjects(TeacherApplication::class.java)
-            Result.success(applications)
+            // Sort by appliedAt in descending order locally
+            val sortedApplications = applications.sortedByDescending { it.appliedAt }
+            Result.success(sortedApplications)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -76,11 +78,12 @@ class TeacherApplicationRepository @Inject constructor(
         return try {
             val snapshot = applicationsCollection
                 .whereEqualTo("teacherId", teacherId)
-                .orderBy("appliedAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val applications = snapshot.toObjects(TeacherApplication::class.java)
-            Result.success(applications)
+            // Sort by appliedAt in descending order locally
+            val sortedApplications = applications.sortedByDescending { it.appliedAt }
+            Result.success(sortedApplications)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -90,11 +93,12 @@ class TeacherApplicationRepository @Inject constructor(
         return try {
             val snapshot = applicationsCollection
                 .whereEqualTo("subjectId", subjectId)
-                .orderBy("appliedAt", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val applications = snapshot.toObjects(TeacherApplication::class.java)
-            Result.success(applications)
+            // Sort by appliedAt in descending order locally
+            val sortedApplications = applications.sortedByDescending { it.appliedAt }
+            Result.success(sortedApplications)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -119,6 +119,20 @@ class SubjectRepository @Inject constructor(
         }
     }
 
+    suspend fun getAvailableSubjectsForTeacher(teacherId: String): Result<List<Subject>> {
+        return try {
+            val snapshot = subjectsCollection
+                .whereEqualTo("teacherId", null)
+                .whereEqualTo("active", true)
+                .get()
+                .await()
+            val subjects = snapshot.toObjects(Subject::class.java)
+            Result.success(subjects)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun assignTeacherToSubject(subjectId: String, teacherId: String, teacherName: String): Result<Unit> {
         return try {
             val updates = mapOf(

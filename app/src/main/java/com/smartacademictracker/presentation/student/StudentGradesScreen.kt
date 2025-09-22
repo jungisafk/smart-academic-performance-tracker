@@ -1,16 +1,12 @@
-package com.smartacademictracker.presentation.admin
+package com.smartacademictracker.presentation.student
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,21 +15,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.smartacademictracker.data.model.Subject
+import com.smartacademictracker.data.model.Grade
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminSubjectsScreen(
+fun StudentGradesScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToAddSubject: () -> Unit,
-    onNavigateToEditSubject: (String) -> Unit = {},
-    viewModel: AdminSubjectsViewModel = hiltViewModel()
+    onNavigateToSubjectDetail: (String) -> Unit = {},
+    viewModel: StudentGradesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val subjects by viewModel.subjects.collectAsState()
+    val grades by viewModel.grades.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.loadSubjects()
+        viewModel.loadGrades()
+    }
+
+    // Refresh grades when screen is composed
+    DisposableEffect(Unit) {
+        viewModel.refreshGrades()
+        onDispose { }
     }
 
     Column(
@@ -50,16 +51,16 @@ fun AdminSubjectsScreen(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
             Text(
-                text = "Manage Subjects",
+                text = "My Grades",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            FloatingActionButton(
-                onClick = onNavigateToAddSubject,
-                modifier = Modifier.size(48.dp)
+            IconButton(
+                onClick = { viewModel.refreshGrades() },
+                enabled = !uiState.isLoading
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Subject")
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
         }
 
@@ -74,8 +75,8 @@ fun AdminSubjectsScreen(
                 CircularProgressIndicator()
             }
         } else {
-            // Subjects List
-            if (subjects.isEmpty()) {
+            // Grades List
+            if (grades.isEmpty()) {
                 // Empty State
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -84,33 +85,35 @@ fun AdminSubjectsScreen(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No subjects found",
+                            text = "No grades found",
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Add your first subject to get started",
+                            text = "Your grades will appear here once your teachers start recording them.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = onNavigateToAddSubject) {
-                            Text("Add Subject")
-                        }
                     }
                 }
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(subjects) { subject ->
-                        SubjectCard(
-                            subject = subject,
-                            onEdit = { onNavigateToEditSubject(subject.id) },
-                            onDelete = { viewModel.deleteSubject(subject.id) }
+                    items(grades) { grade ->
+                        GradeCard(
+                            grade = grade,
+                            onNavigateToSubject = { onNavigateToSubjectDetail(grade.subjectId) }
                         )
                     }
                 }
@@ -138,12 +141,12 @@ fun AdminSubjectsScreen(
 }
 
 @Composable
-fun SubjectCard(
-    subject: Subject,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+fun GradeCard(
+    grade: Grade,
+    onNavigateToSubject: () -> Unit
 ) {
     Card(
+        onClick = onNavigateToSubject,
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -159,61 +162,39 @@ fun SubjectCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = subject.name,
+                        text = grade.subjectName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = subject.code,
+                        text = grade.description.ifBlank { grade.gradeType.name },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (subject.description.isNotBlank()) {
-                        Text(
-                            text = subject.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
                 }
                 
-                // Status Badge
+                // Grade Badge
                 Surface(
-                    color = if (subject.teacherId != null) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
+                    color = when {
+                        grade.percentage >= 90 -> MaterialTheme.colorScheme.primaryContainer
+                        grade.percentage >= 80 -> MaterialTheme.colorScheme.secondaryContainer
+                        grade.percentage >= 70 -> MaterialTheme.colorScheme.tertiaryContainer
+                        else -> MaterialTheme.colorScheme.errorContainer
                     },
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text(
-                        text = if (subject.teacherId != null) "ASSIGNED" else "AVAILABLE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (subject.teacherId != null) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        text = grade.letterGrade,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            grade.percentage >= 90 -> MaterialTheme.colorScheme.onPrimaryContainer
+                            grade.percentage >= 80 -> MaterialTheme.colorScheme.onSecondaryContainer
+                            grade.percentage >= 70 -> MaterialTheme.colorScheme.onTertiaryContainer
+                            else -> MaterialTheme.colorScheme.onErrorContainer
                         },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
-                }
-                
-                Row {
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit Subject",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete Subject",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
                 }
             }
             
@@ -224,43 +205,24 @@ fun SubjectCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Credits: ${subject.credits}",
+                    text = "Score: ${grade.score.toInt()}/${grade.maxScore.toInt()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Semester: ${subject.semester}",
+                    text = "Percentage: ${String.format("%.1f", grade.percentage)}%",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             
-            if (subject.teacherName != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Assigned to: ${subject.teacherName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Date: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(grade.dateRecorded))}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -18,10 +18,23 @@ import com.smartacademictracker.presentation.auth.AuthViewModel
 fun TeacherDashboardScreen(
     onNavigateToSubjects: () -> Unit,
     onNavigateToApplications: () -> Unit,
+    onNavigateToStudentApplications: () -> Unit,
     onSignOut: () -> Unit,
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel(),
+    dashboardViewModel: TeacherDashboardViewModel = hiltViewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
+    val dashboardState by dashboardViewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        dashboardViewModel.loadDashboardData()
+    }
+
+    // Refresh data when screen is composed
+    DisposableEffect(Unit) {
+        dashboardViewModel.refreshData()
+        onDispose { }
+    }
     
     Scaffold(
         topBar = {
@@ -114,11 +127,28 @@ fun TeacherDashboardScreen(
                     )
                     
                     QuickActionCard(
+                        title = "Student Applications",
+                        icon = Icons.Default.Person,
+                        onClick = onNavigateToStudentApplications,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickActionCard(
                         title = "Analytics",
                         icon = Icons.Default.Info,
                         onClick = { /* TODO: Navigate to analytics */ },
                         modifier = Modifier.weight(1f)
                     )
+                    
+                    // Empty space for balance
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
             
@@ -147,16 +177,20 @@ fun TeacherDashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(
-                                    text = "Active Subjects: 0",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = "Total Students: 0",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (dashboardState.isLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text(
+                                        text = "Active Subjects: ${dashboardState.activeSubjects}",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Total Students: ${dashboardState.totalStudents}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

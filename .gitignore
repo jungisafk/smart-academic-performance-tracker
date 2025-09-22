@@ -20,6 +20,7 @@ out/
 # Gradle files
 .gradle/
 build/
+app/build/
 
 # Local configuration file (sdk path, etc)
 local.properties
@@ -144,9 +145,72 @@ key.properties
 # Build outputs
 app/build/
 build/
+**/build/
 
 # Generated files
 *.generated.*
+**/generated/
+**/intermediates/
+**/tmp/
+**/kspCaches/
+**/kotlin/
+**/classes/
+**/dex/
+**/aar_metadata_check/
+**/annotation_processor_list/
+**/apk/
+**/apk_ide_redirect_file/
+**/app_metadata/
+**/assets/
+**/compatible_screen_manifest/
+**/compile_and_runtime_not_namespaced_r_class_jar/
+**/compressed_assets/
+**/data_binding_layout_info_type_merge/
+**/data_binding_layout_info_type_package/
+**/desugar_graph/
+**/duplicate_classes_check/
+**/external_file_lib_dex_archives/
+**/external_libs_dex_archive/
+**/external_libs_dex_archive_with_artifact_transforms/
+**/global_synthetics_dex/
+**/global_synthetics_external_lib/
+**/global_synthetics_external_libs_artifact_transform/
+**/global_synthetics_file_lib/
+**/global_synthetics_mixed_scope/
+**/global_synthetics_project/
+**/global_synthetics_subproject/
+**/hilt/
+**/incremental/
+**/java_res/
+**/javac/
+**/linked_resources_binary_format/
+**/local_only_symbol_list/
+**/merged_java_res/
+**/merged_jni_libs/
+**/merged_manifest/
+**/merged_manifests/
+**/merged_native_libs/
+**/merged_res/
+**/merged_res_blame_folder/
+**/merged_shaders/
+**/merged_test_only_native_libs/
+**/mixed_scope_dex_archive/
+**/navigation_json/
+**/nested_resources_validation_report/
+**/packaged_manifests/
+**/packaged_res/
+**/project_dex_archive/
+**/runtime_symbol_list/
+**/signing_config_versions/
+**/source_set_path_map/
+**/stable_resource_ids_file/
+**/stripped_native_libs/
+**/sub_project_dex_archive/
+**/symbol_list_with_package_name/
+**/validate_signing_config/
+**/outputs/
+**/crashlytics/
+**/gmpAppId/
 
 # Local database files
 *.db

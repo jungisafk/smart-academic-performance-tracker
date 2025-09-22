@@ -27,7 +27,7 @@ class EnrollmentRepository @Inject constructor(
         return try {
             val snapshot = enrollmentsCollection
                 .whereEqualTo("studentId", studentId)
-                .whereEqualTo("isActive", true)
+                .whereEqualTo("active", true)
                 .get()
                 .await()
             val enrollments = snapshot.toObjects(Enrollment::class.java)
@@ -41,7 +41,7 @@ class EnrollmentRepository @Inject constructor(
         return try {
             val snapshot = enrollmentsCollection
                 .whereEqualTo("subjectId", subjectId)
-                .whereEqualTo("isActive", true)
+                .whereEqualTo("active", true)
                 .get()
                 .await()
             val enrollments = snapshot.toObjects(Enrollment::class.java)
@@ -56,7 +56,7 @@ class EnrollmentRepository @Inject constructor(
             val snapshot = enrollmentsCollection
                 .whereEqualTo("studentId", studentId)
                 .whereEqualTo("subjectId", subjectId)
-                .whereEqualTo("isActive", true)
+                .whereEqualTo("active", true)
                 .get()
                 .await()
             Result.success(!snapshot.isEmpty)
@@ -95,16 +95,29 @@ class EnrollmentRepository @Inject constructor(
             val snapshot = enrollmentsCollection
                 .whereEqualTo("studentId", studentId)
                 .whereEqualTo("subjectId", subjectId)
-                .whereEqualTo("isActive", true)
+                .whereEqualTo("active", true)
                 .get()
                 .await()
             
             for (document in snapshot.documents) {
                 enrollmentsCollection.document(document.id)
-                    .update("isActive", false)
+                    .update("active", false)
                     .await()
             }
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getAllEnrollments(): Result<List<Enrollment>> {
+        return try {
+            val snapshot = enrollmentsCollection
+                .whereEqualTo("active", true)
+                .get()
+                .await()
+            val enrollments = snapshot.toObjects(Enrollment::class.java)
+            Result.success(enrollments)
         } catch (e: Exception) {
             Result.failure(e)
         }

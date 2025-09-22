@@ -18,17 +18,37 @@ import com.smartacademictracker.presentation.auth.AuthViewModel
 fun AdminDashboardScreen(
     onNavigateToSubjects: () -> Unit,
     onNavigateToApplications: () -> Unit,
+    onNavigateToCourseManagement: () -> Unit,
+    onNavigateToYearLevelManagement: () -> Unit,
     onNavigateToUsers: () -> Unit,
     onSignOut: () -> Unit,
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel(),
+    dashboardViewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
+    val dashboardState by dashboardViewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        dashboardViewModel.loadDashboardData()
+    }
+
+    // Refresh data when screen is composed (e.g., when navigating back)
+    DisposableEffect(Unit) {
+        dashboardViewModel.refreshData()
+        onDispose { }
+    }
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Admin Dashboard") },
                 actions = {
+                    IconButton(
+                        onClick = { dashboardViewModel.refreshData() },
+                        enabled = !dashboardState.isLoading
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
                     IconButton(onClick = onSignOut) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Sign Out")
                     }
@@ -108,6 +128,27 @@ fun AdminDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     QuickActionCard(
+                        title = "Manage Courses",
+                        icon = Icons.Default.School,
+                        onClick = onNavigateToCourseManagement,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    QuickActionCard(
+                        title = "Manage Year Levels",
+                        icon = Icons.Default.List,
+                        onClick = onNavigateToYearLevelManagement,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickActionCard(
                         title = "Manage Users",
                         icon = Icons.Default.Person,
                         onClick = onNavigateToUsers,
@@ -139,14 +180,14 @@ fun AdminDashboardScreen(
                 ) {
                     StatCard(
                         title = "Total Students",
-                        value = "0",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.totalStudents.toString(),
                         icon = Icons.Default.Person,
                         modifier = Modifier.weight(1f)
                     )
                     
                     StatCard(
                         title = "Total Teachers",
-                        value = "0",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.totalTeachers.toString(),
                         icon = Icons.Default.Person,
                         modifier = Modifier.weight(1f)
                     )
@@ -160,15 +201,36 @@ fun AdminDashboardScreen(
                 ) {
                     StatCard(
                         title = "Active Subjects",
-                        value = "0",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.activeSubjects.toString(),
                         icon = Icons.Default.Menu,
                         modifier = Modifier.weight(1f)
                     )
                     
                     StatCard(
                         title = "Pending Applications",
-                        value = "0",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.pendingApplications.toString(),
                         icon = Icons.Default.List,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        title = "Total Enrollments",
+                        value = if (dashboardState.isLoading) "..." else dashboardState.totalEnrollments.toString(),
+                        icon = Icons.Default.School,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    StatCard(
+                        title = "Available Subjects",
+                        value = if (dashboardState.isLoading) "..." else (dashboardState.activeSubjects - dashboardState.pendingApplications).toString(),
+                        icon = Icons.Default.CheckCircle,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -208,6 +270,24 @@ fun AdminDashboardScreen(
                             text = "System activities and updates will appear here",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            // Error Message
+            dashboardState.error?.let { error ->
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(16.dp)
                         )
                     }
                 }
