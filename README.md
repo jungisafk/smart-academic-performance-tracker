@@ -1,52 +1,50 @@
 # Smart Academic Performance Tracker
 
-A comprehensive Android application built with Kotlin and Jetpack Compose for managing academic performance across different user roles (Students, Teachers, and Administrators). The app provides a complete solution for academic management with role-based access control, real-time data synchronization, and modern UI/UX design.
+A comprehensive Android application built with Kotlin and Jetpack Compose for managing academic grade tracking across different user roles (Students, Teachers, Administrators, and Registrar). The app enables teachers to input Prelim, Midterm, and Final grades, provides students with real-time grade viewing and performance analytics, ensures automated computation of final averages, and offers administrators comprehensive oversight of grade submissions with offline functionality for greater accessibility.
 
 ## 🚀 Current Features
 
 ### 👨‍🎓 Student Features
-- **Dashboard**: View enrolled subjects, academic progress, and quick access to key functions
-- **Subject Management**: 
-  - Browse available subjects filtered by year level and course
-  - Apply for subjects with application tracking
-  - View applied subjects with status updates (Pending/Approved/Rejected)
-  - Track application history and teacher feedback
-- **Grade Tracking**: View grades for quizzes, activities, and exams
-- **Profile Management**: Update personal information, year level, and course details
-- **Real-time Notifications**: Get notified of application status changes
+- **Grade Dashboard**: Real-time viewing of Prelim, Midterm, and Final grades across all subjects
+- **Performance Analytics**: 
+  - Automated final average computation based on teacher inputs
+  - Visual performance insights with charts and graphs
+  - Performance status indicators (Passing/At-Risk/Failing)
+  - Historical grade trends and comparisons
+- **Real-time Updates**: Instant grade notifications when teachers submit new grades
+- **Offline Access**: View previously loaded grades without internet connection
+- **Academic Tracking**: Monitor academic performance trends and progress over time
 
 ### 👨‍🏫 Teacher Features
-- **Dashboard**: Overview of active subjects, total students, and quick actions
-- **Subject Management**:
-  - Apply for available subjects
-  - Manage assigned subjects
-  - View subject details and student enrollment
-- **Student Application Management**:
-  - Review student applications for their subjects
-  - Approve or reject applications with comments
-  - Track application history and status
+- **Grade Input Dashboard**: Efficient interface for inputting Prelim, Midterm, and Final grades
+- **Automated Calculations**: System automatically computes final averages using standard academic formulas
 - **Grade Management**:
-  - Input student grades for different assessment types
-  - Calculate student averages
-  - Manage grade submissions
-- **Student Overview**: View enrolled students and their performance
+  - Batch grade input for entire classes
+  - Individual student grade updates
+  - Grade validation and error checking
+  - Submission tracking and confirmation
+- **Offline Functionality**: Input grades without internet connection, sync when online
+- **Student Performance Overview**: Monitor student progress and identify at-risk students
+- **Submission Management**: Track grade submission deadlines and completion status
 
-### 👨‍💼 Admin Features
-- **Dashboard**: System overview with statistics and management tools
-- **Subject Management**:
-  - Create and manage subjects
-  - Assign subjects to year levels and courses
-  - Set subject capacity and requirements
-  - Edit subject details and descriptions
-- **Course & Year Level Management**:
-  - Create and manage courses (ICT/IT, etc.)
-  - Manage year levels (1st-4th year)
-  - Assign courses to year levels
-- **Teacher Application Management**:
-  - Review teacher applications for subjects
-  - Approve or reject applications
-  - Assign teachers to subjects
-- **User Management**: Oversee system operations and user accounts
+### 👨‍💼 Admin & Registrar Features
+- **Grade Oversight Dashboard**: Comprehensive monitoring of all grade submissions across the system
+- **Submission Monitoring**:
+  - Track teacher grade submission timeliness and accuracy
+  - Monitor completion status of all grade entries
+  - Generate compliance and quality assurance reports
+- **Data Integrity Management**:
+  - Audit trail of all grade changes and submissions
+  - Automated validation of grade accuracy and completeness
+  - Anomaly detection and quality control measures
+- **Academic Administration**:
+  - User management (Students, Teachers, Registrar staff)
+  - Subject and course management
+  - Academic period and semester setup
+- **Reporting & Analytics**:
+  - Comprehensive grade submission reports
+  - Teacher performance and compliance metrics
+  - System-wide academic performance analytics
 
 ## 🛠️ Tech Stack
 
@@ -272,119 +270,81 @@ The project includes:
 
 ## 🚧 Future Features & Roadmap
 
-### Phase 1: Enhanced Academic Management
-- [ ] **Advanced Grade Analytics**
-  - Grade distribution charts and statistics
-  - Performance trend analysis
-  - Comparative performance reports
-  - Grade prediction algorithms
+### Phase 1: Enhanced Grade Analytics
+- [ ] **Advanced Visual Analytics**
+  - Interactive grade distribution charts and statistics
+  - Performance trend analysis with detailed graphs
+  - Comparative performance reports across subjects
+  - Historical performance tracking and visualization
 
-- [ ] **Assignment Management**
-  - Create and manage assignments
-  - Due date tracking and reminders
-  - File upload and submission system
-  - Plagiarism detection integration
+- [ ] **Enhanced Reporting System**
+  - Comprehensive grade reports for students, teachers, and administrators
+  - Customizable report generation with filters
+  - Export capabilities (PDF, Excel, CSV)
+  - Automated report scheduling and distribution
 
-- [ ] **Attendance Tracking**
-  - QR code-based attendance system
-  - Attendance reports and analytics
-  - Absence tracking and notifications
-  - Integration with grade calculations
+- [ ] **Improved Offline Functionality**
+  - Complete offline grade input and viewing
+  - Enhanced data synchronization capabilities
+  - Conflict resolution for offline changes
+  - Improved offline performance and reliability
 
-### Phase 2: Communication & Collaboration
-- [ ] **Messaging System**
-  - Teacher-student communication
-  - Group messaging for classes
-  - File sharing and attachments
-  - Push notifications
+### Phase 2: System Enhancement & User Experience
+- [ ] **Enhanced User Interface**
+  - Improved user experience and navigation
+  - Advanced accessibility features
+  - Customizable dashboard layouts
+  - Enhanced mobile responsiveness
 
-- [ ] **Announcement System**
-  - School-wide announcements
-  - Class-specific notifications
-  - Emergency alerts
-  - Scheduled announcements
+- [ ] **Communication Features**
+  - Grade notification system
+  - Teacher-student messaging for grade inquiries
+  - System announcements and updates
+  - Email integration for important notifications
 
-- [ ] **Discussion Forums**
-  - Subject-specific discussion boards
-  - Q&A sections
-  - Peer-to-peer learning
-  - Moderated discussions
+- [ ] **Advanced Security & Compliance**
+  - Enhanced data encryption and security measures
+  - Audit trail improvements
+  - Compliance with academic data protection standards
+  - Advanced user authentication options
 
-### Phase 3: Advanced Analytics & Reporting
-- [ ] **Comprehensive Reporting**
-  - Academic performance reports
-  - Teacher evaluation reports
-  - Student progress tracking
-  - Custom report generation
+### Phase 3: Cross-Platform & Integration
+- [ ] **Multi-Platform Support**
+  - Web application for desktop access
+  - Tablet-optimized interface
+  - Cross-platform data synchronization
+  - Responsive design for all devices
 
-- [ ] **Data Visualization**
-  - Interactive charts and graphs
-  - Performance dashboards
-  - Trend analysis tools
-  - Export capabilities (PDF, Excel)
-
-- [ ] **Predictive Analytics**
-  - Student performance prediction
-  - At-risk student identification
-  - Course recommendation system
-  - Learning outcome forecasting
-
-### Phase 4: Mobile & Cross-Platform
-- [ ] **Offline Support**
-  - Complete offline functionality
-  - Data synchronization when online
-  - Offline grade input
-  - Cached data management
-
-- [ ] **Cross-Platform Support**
-  - iOS app development
-  - Web application
-  - Desktop application
-  - API for third-party integrations
-
-- [ ] **Advanced Mobile Features**
-  - Biometric authentication
-  - Camera integration for document scanning
-  - Voice notes and recording
-  - Augmented reality features
-
-### Phase 5: AI & Machine Learning
-- [ ] **AI-Powered Features**
-  - Intelligent grade prediction
-  - Automated feedback generation
-  - Smart course recommendations
-  - Learning pattern analysis
-
-- [ ] **Chatbot Integration**
-  - Student support chatbot
-  - FAQ automation
-  - 24/7 assistance
-  - Multi-language support
+- [ ] **System Integration**
+  - Integration with existing Student Information Systems (SIS)
+  - Export capabilities to external academic systems
+  - API development for third-party integrations
+  - Backup and recovery system enhancements
 
 - [ ] **Advanced Analytics**
-  - Machine learning insights
-  - Behavioral analysis
-  - Performance optimization
-  - Personalized learning paths
+  - Comprehensive academic performance analytics
+  - Teacher effectiveness metrics
+  - System usage and performance monitoring
+  - Data-driven insights for academic improvement
 
-### Phase 6: Enterprise & Scalability
+### Phase 4: Enterprise & Scalability
 - [ ] **Multi-Institution Support**
-  - Multiple school management
-  - Centralized administration
-  - Cross-institution analytics
-  - Federation support
+  - Multiple school management capabilities
+  - Centralized administration dashboard
+  - Cross-institution grade analytics
+  - Standardized reporting across institutions
 
-- [ ] **Advanced Security**
-  - Two-factor authentication
-  - Single sign-on (SSO)
-  - Advanced encryption
-  - Compliance management
+- [ ] **Advanced Security & Compliance**
+  - Two-factor authentication implementation
+  - Single sign-on (SSO) integration
+  - Advanced data encryption standards
+  - Educational data compliance (FERPA, etc.)
 
-- [ ] **Integration Ecosystem**
-  - Learning Management System (LMS) integration
-  - Student Information System (SIS) connectivity
-  - Third-party tool integrations
-  - API marketplace
+- [ ] **Performance & Scalability**
+  - System performance optimization for large user bases
+  - Advanced caching and data management
+  - Load balancing and high availability
+  - Comprehensive monitoring and alerting systems
 
 ## 🤝 Contributing
 
