@@ -27,11 +27,12 @@ class YearLevelRepository @Inject constructor(
         return try {
             val snapshot = yearLevelsCollection
                 .whereEqualTo("active", true)
-                .orderBy("level")
                 .get()
                 .await()
             val yearLevels = snapshot.toObjects(YearLevel::class.java)
-            Result.success(yearLevels)
+            // Sort in memory to avoid composite index requirement
+            val sortedYearLevels = yearLevels.sortedBy { it.level }
+            Result.success(sortedYearLevels)
         } catch (e: Exception) {
             Result.failure(e)
         }

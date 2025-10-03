@@ -18,6 +18,13 @@ class AddYearLevelViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddYearLevelUiState())
     val uiState: StateFlow<AddYearLevelUiState> = _uiState.asStateFlow()
+    
+    private var _courseId: String = ""
+    
+    fun setCourseId(courseId: String) {
+        _courseId = courseId
+        println("DEBUG: AddYearLevelViewModel - Set courseId: '$courseId'")
+    }
 
     fun setYearLevelName(name: String) {
         _uiState.value = _uiState.value.copy(
@@ -53,10 +60,12 @@ class AddYearLevelViewModel @Inject constructor(
             
             try {
                 val yearLevel = YearLevel(
+                    courseId = _courseId,
                     name = _uiState.value.yearLevelName.trim(),
                     level = _uiState.value.level,
                     description = _uiState.value.description.trim()
                 )
+                println("DEBUG: AddYearLevelViewModel - Creating year level with courseId: '$_courseId'")
                 
                 val createResult = yearLevelRepository.createYearLevel(yearLevel)
                 createResult.onSuccess {

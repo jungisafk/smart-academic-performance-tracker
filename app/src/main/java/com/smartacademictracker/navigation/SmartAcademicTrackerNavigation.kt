@@ -27,8 +27,7 @@ import com.smartacademictracker.presentation.teacher.TeacherGradeInputScreen
 import com.smartacademictracker.presentation.admin.AdminDashboardScreen
 import com.smartacademictracker.presentation.admin.AdminSubjectsScreen
 import com.smartacademictracker.presentation.admin.AdminApplicationsScreen
-import com.smartacademictracker.presentation.admin.AdminCourseManagementScreen
-import com.smartacademictracker.presentation.admin.AdminYearLevelManagementScreen
+import com.smartacademictracker.presentation.admin.HierarchicalAcademicManagementScreen
 import com.smartacademictracker.presentation.admin.AddSubjectScreen
 import com.smartacademictracker.presentation.admin.AddCourseScreen
 import com.smartacademictracker.presentation.admin.AddYearLevelScreen
@@ -287,11 +286,8 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToApplications = {
                     navController.navigate(Screen.AdminApplications.route)
                 },
-                onNavigateToCourseManagement = {
-                    navController.navigate(Screen.AdminCourseManagement.route)
-                },
-                onNavigateToYearLevelManagement = {
-                    navController.navigate(Screen.AdminYearLevelManagement.route)
+                onNavigateToHierarchicalAcademicManagement = {
+                    navController.navigate(Screen.HierarchicalAcademicManagement.route)
                 },
                 onNavigateToUsers = {
                     navController.navigate(Screen.ManageUsers.route)
@@ -330,30 +326,29 @@ fun SmartAcademicTrackerNavigation(
             )
         }
         
-        composable(Screen.AdminCourseManagement.route) {
-            AdminCourseManagementScreen(
+        
+        composable(Screen.HierarchicalAcademicManagement.route) {
+            HierarchicalAcademicManagementScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
                 onNavigateToAddCourse = {
                     navController.navigate(Screen.AddCourse.route)
                 },
+                onNavigateToAddYearLevel = { courseId ->
+                    navController.navigate("${Screen.AddYearLevel.route}?courseId=$courseId")
+                },
+                onNavigateToAddSubject = { courseId, yearLevelId ->
+                    navController.navigate("${Screen.AddSubject.route}?courseId=$courseId&yearLevelId=$yearLevelId")
+                },
                 onNavigateToEditCourse = { courseId ->
                     // TODO: Implement edit course navigation
-                }
-            )
-        }
-        
-        composable(Screen.AdminYearLevelManagement.route) {
-            AdminYearLevelManagementScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onNavigateToAddYearLevel = {
-                    navController.navigate(Screen.AddYearLevel.route)
                 },
                 onNavigateToEditYearLevel = { yearLevelId ->
                     // TODO: Implement edit year level navigation
+                },
+                onNavigateToEditSubject = { subjectId ->
+                    // TODO: Implement edit subject navigation
                 }
             )
         }
@@ -390,8 +385,12 @@ fun SmartAcademicTrackerNavigation(
             Text("Add Academic Period Screen - Coming Soon")
         }
         
-        composable(Screen.AddSubject.route) {
+        composable(Screen.AddSubject.route) { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
+            val yearLevelId = backStackEntry.arguments?.getString("yearLevelId") ?: ""
             AddSubjectScreen(
+                courseId = courseId,
+                yearLevelId = yearLevelId,
                 onNavigateBack = {
                     navController.popBackStack()
                 },
@@ -412,8 +411,11 @@ fun SmartAcademicTrackerNavigation(
             )
         }
         
-        composable(Screen.AddYearLevel.route) {
+        composable(Screen.AddYearLevel.route) { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
+            println("DEBUG: Navigation - AddYearLevel route, courseId from arguments: '$courseId'")
             AddYearLevelScreen(
+                courseId = courseId,
                 onNavigateBack = {
                     navController.popBackStack()
                 },

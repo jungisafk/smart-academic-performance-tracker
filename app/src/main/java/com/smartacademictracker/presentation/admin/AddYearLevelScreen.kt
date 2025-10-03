@@ -16,11 +16,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddYearLevelScreen(
+    courseId: String = "",
     onNavigateBack: () -> Unit,
     onYearLevelAdded: () -> Unit,
     viewModel: AddYearLevelViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(courseId) {
+        println("DEBUG: AddYearLevelScreen - Received courseId: '$courseId'")
+        if (courseId.isNotEmpty()) {
+            viewModel.setCourseId(courseId)
+            println("DEBUG: AddYearLevelScreen - Set courseId in ViewModel: '$courseId'")
+        } else {
+            println("DEBUG: AddYearLevelScreen - courseId is empty!")
+        }
+    }
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {

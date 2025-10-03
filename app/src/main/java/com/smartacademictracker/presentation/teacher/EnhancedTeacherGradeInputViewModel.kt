@@ -240,7 +240,7 @@ class EnhancedTeacherGradeInputViewModel @Inject constructor(
                         letterGrade = pendingGrade.letterGrade,
                         description = "",
                         dateRecorded = pendingGrade.dateRecorded,
-                        semester = _subject.value?.semester ?: "",
+                        semester = _subject.value?.semester?.displayName ?: "",
                         academicYear = _subject.value?.academicYear ?: ""
                     )
                     
@@ -301,7 +301,7 @@ class EnhancedTeacherGradeInputViewModel @Inject constructor(
                         letterGrade = pendingGrade.letterGrade,
                         description = "",
                         dateRecorded = pendingGrade.dateRecorded,
-                        semester = _subject.value?.semester ?: "",
+                        semester = _subject.value?.semester?.displayName ?: "",
                         academicYear = _subject.value?.academicYear ?: ""
                     )
                     

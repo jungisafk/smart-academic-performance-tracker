@@ -1,0 +1,210 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions for role-based access
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+    
+    function isTeacher() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'TEACHER';
+    }
+    
+    function isStudent() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'STUDENT';
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidGrade(grade) {
+      return grade >= 0 && grade <= 100;
+    }
+    
+    function isValidGradePeriod(period) {
+      return period in ['PRELIM', 'MIDTERM', 'FINAL'];
+    }
+    
+    function isActiveUser() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE';
+    }
+    
+    // Users collection - Role-based access
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isAdmin() || isOwner(userId));
+      allow create: if isAuthenticated() && isAdmin();
+      allow update: if isAuthenticated() && (isAdmin() || isOwner(userId));
+      allow delete: if isAuthenticated() && isAdmin();
+    }
+    
+    // Subjects collection - Admin and Teacher access
+    match /subjects/{subjectId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher());
+      allow create: if isAuthenticated() && isAdmin();
+      allow update: if isAuthenticated() && isAdmin();
+      allow delete: if isAuthenticated() && isAdmin();
+    }
+    
+    // Grades collection - Period-specific access control
+    match /grades/{gradeId} {
+      allow read: if isAuthenticated() && isActiveUser() && (
+        // Students can read their own grades
+        (isStudent() && resource.data.studentId == request.auth.uid) ||
+        // Teachers can read grades for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can read all grades
+        isAdmin()
+      );
+      
+      allow create: if isAuthenticated() && isActiveUser() && (
+        // Teachers can create grades for their subjects
+        (isTeacher() && request.resource.data.teacherId == request.auth.uid) ||
+        // Admins can create any grade
+        isAdmin()
+      ) && isValidGrade(request.resource.data.score) && 
+         isValidGrade(request.resource.data.maxScore) &&
+         isValidGradePeriod(request.resource.data.gradePeriod);
+      
+      allow update: if isAuthenticated() && isActiveUser() && (
+        // Teachers can update grades for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can update any grade
+        isAdmin()
+      ) && isValidGrade(request.resource.data.score) && 
+         isValidGrade(request.resource.data.maxScore) &&
+         isValidGradePeriod(request.resource.data.gradePeriod);
+      
+      allow delete: if isAuthenticated() && isActiveUser() && (
+        // Teachers can delete grades for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can delete any grade
+        isAdmin()
+      );
+    }
+    
+    // Enrollments collection - Student and Admin access
+    match /enrollments/{enrollmentId} {
+      allow read: if isAuthenticated() && isActiveUser() && (
+        // Students can read their own enrollments
+        (isStudent() && resource.data.studentId == request.auth.uid) ||
+        // Teachers can read enrollments for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can read all enrollments
+        isAdmin()
+      );
+      
+      allow create: if isAuthenticated() && isActiveUser() && isAdmin();
+      allow update: if isAuthenticated() && isActiveUser() && isAdmin();
+      allow delete: if isAuthenticated() && isActiveUser() && isAdmin();
+    }
+    
+    // Student Applications collection
+    match /student_applications/{applicationId} {
+      allow read: if isAuthenticated() && isActiveUser() && (
+        // Students can read their own applications
+        (isStudent() && resource.data.studentId == request.auth.uid) ||
+        // Teachers can read applications for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can read all applications
+        isAdmin()
+      );
+      
+      allow create: if isAuthenticated() && isActiveUser() && isStudent() && 
+                   request.resource.data.studentId == request.auth.uid;
+      
+      allow update: if isAuthenticated() && isActiveUser() && (
+        // Students can update their own applications
+        (isStudent() && resource.data.studentId == request.auth.uid) ||
+        // Teachers can update applications for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can update any application
+        isAdmin()
+      );
+      
+      allow delete: if isAuthenticated() && isActiveUser() && (
+        // Students can delete their own applications
+        (isStudent() && resource.data.studentId == request.auth.uid) ||
+        // Admins can delete any application
+        isAdmin()
+      );
+    }
+    
+    // Teacher Applications collection
+    match /teacher_applications/{applicationId} {
+      allow read: if isAuthenticated() && isActiveUser() && (
+        // Teachers can read their own applications
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can read all applications
+        isAdmin()
+      );
+      
+      allow create: if isAuthenticated() && isActiveUser() && isTeacher() && 
+                   request.resource.data.teacherId == request.auth.uid;
+      
+      allow update: if isAuthenticated() && isActiveUser() && (
+        // Teachers can update their own applications
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can update any application
+        isAdmin()
+      );
+      
+      allow delete: if isAuthenticated() && isActiveUser() && (
+        // Teachers can delete their own applications
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can delete any application
+        isAdmin()
+      );
+    }
+    
+    // Courses collection - Admin only
+    match /courses/{courseId} {
+      allow read: if isAuthenticated() && isActiveUser();
+      allow create, update, delete: if isAuthenticated() && isActiveUser() && isAdmin();
+    }
+    
+    // Year Levels collection - Admin only
+    match /year_levels/{yearLevelId} {
+      allow read: if isAuthenticated() && isActiveUser();
+      allow create, update, delete: if isAuthenticated() && isActiveUser() && isAdmin();
+    }
+    
+    // Academic Periods collection - Admin only
+    match /academic_periods/{periodId} {
+      allow read: if isAuthenticated() && isActiveUser();
+      allow create, update, delete: if isAuthenticated() && isActiveUser() && isAdmin();
+    }
+    
+    // Audit Trails collection - Read-only for most users
+    match /audit_trails/{auditId} {
+      allow read: if isAuthenticated() && isActiveUser() && (
+        // Students can read audit trails for their grades
+        (isStudent() && resource.data.studentId == request.auth.uid) ||
+        // Teachers can read audit trails for their subjects
+        (isTeacher() && resource.data.teacherId == request.auth.uid) ||
+        // Admins can read all audit trails
+        isAdmin()
+      );
+      
+      // Only system can create audit trails (server-side only)
+      allow create: if false;
+      allow update, delete: if false;
+    }
+    
+    // System Configuration - Admin only
+    match /system_config/{configId} {
+      allow read: if isAuthenticated() && isActiveUser();
+      allow create, update, delete: if isAuthenticated() && isActiveUser() && isAdmin();
+    }
+  }
+}

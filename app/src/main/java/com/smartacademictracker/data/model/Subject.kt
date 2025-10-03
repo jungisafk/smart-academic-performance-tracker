@@ -12,7 +12,7 @@ data class Subject(
     val teacherId: String? = null,
     val teacherName: String? = null,
     val credits: Int = 3,
-    val semester: String = "",
+    val semester: Semester = Semester.FIRST_SEMESTER,
     val academicYear: String = "",
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),

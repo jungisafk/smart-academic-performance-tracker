@@ -2,6 +2,7 @@ package com.smartacademictracker.data.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.smartacademictracker.data.model.Subject
+import com.smartacademictracker.data.model.Semester
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -71,7 +72,9 @@ class SubjectRepository @Inject constructor(
         description: String,
         credits: Int,
         semester: String,
-        academicYear: String
+        academicYear: String,
+        courseId: String,
+        yearLevelId: String
     ): Result<Subject> {
         return try {
             val subject = Subject(
@@ -79,8 +82,10 @@ class SubjectRepository @Inject constructor(
                 code = code,
                 description = description,
                 credits = credits,
-                semester = semester,
-                academicYear = academicYear
+                semester = Semester.valueOf(semester),
+                academicYear = academicYear,
+                courseId = courseId,
+                yearLevelId = yearLevelId
             )
             val docRef = subjectsCollection.add(subject).await()
             val createdSubject = subject.copy(id = docRef.id)

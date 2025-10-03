@@ -17,8 +17,7 @@ import com.smartacademictracker.presentation.teacher.TeacherDashboardScreen
 fun AdminDashboardScreen(
     onNavigateToSubjects: () -> Unit = {},
     onNavigateToApplications: () -> Unit = {},
-    onNavigateToCourseManagement: () -> Unit = {},
-    onNavigateToYearLevelManagement: () -> Unit = {},
+    onNavigateToHierarchicalAcademicManagement: () -> Unit = {},
     onNavigateToUsers: () -> Unit = {},
     onNavigateToGradeMonitoring: () -> Unit = {},
     onNavigateToAcademicPeriods: () -> Unit = {},
@@ -125,35 +124,17 @@ fun AdminDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = onNavigateToCourseManagement,
+                                onClick = onNavigateToHierarchicalAcademicManagement,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Courses")
+                                Text("Academic Structure")
                             }
-                            Button(
-                                onClick = onNavigateToYearLevelManagement,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Year Levels")
-                            }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
                             Button(
                                 onClick = onNavigateToUsers,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Manage Users")
                             }
-                            Button(
-                                onClick = onNavigateToGradeMonitoring,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Grade Monitoring")
-                            }
                         }
                         
                         Row(
@@ -161,11 +142,23 @@ fun AdminDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
+                                onClick = onNavigateToGradeMonitoring,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Grade Monitoring")
+                            }
+                            Button(
                                 onClick = onNavigateToAcademicPeriods,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Academic Periods")
                             }
+                        }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Button(
                                 onClick = onNavigateToProfile,
                                 modifier = Modifier.weight(1f)

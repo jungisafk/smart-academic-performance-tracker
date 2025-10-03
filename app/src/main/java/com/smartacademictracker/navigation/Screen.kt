@@ -44,6 +44,7 @@ sealed class Screen(val route: String) {
     object AdminApplications : Screen("admin_applications")
     object AdminCourseManagement : Screen("admin_course_management")
     object AdminYearLevelManagement : Screen("admin_year_level_management")
+    object HierarchicalAcademicManagement : Screen("hierarchical_academic_management")
     object AdminGradeMonitoring : Screen("admin_grade_monitoring")
     object AdminAcademicPeriods : Screen("admin_academic_periods")
     object AddSubject : Screen("add_subject")

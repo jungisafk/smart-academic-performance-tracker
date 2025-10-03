@@ -27,11 +27,12 @@ class CourseRepository @Inject constructor(
         return try {
             val snapshot = coursesCollection
                 .whereEqualTo("active", true)
-                .orderBy("name")
                 .get()
                 .await()
             val courses = snapshot.toObjects(Course::class.java)
-            Result.success(courses)
+            // Sort in memory to avoid composite index requirement
+            val sortedCourses = courses.sortedBy { it.name }
+            Result.success(sortedCourses)
         } catch (e: Exception) {
             Result.failure(e)
         }

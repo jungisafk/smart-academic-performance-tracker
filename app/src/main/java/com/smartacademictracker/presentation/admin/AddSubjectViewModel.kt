@@ -17,6 +17,17 @@ class AddSubjectViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddSubjectUiState())
     val uiState: StateFlow<AddSubjectUiState> = _uiState.asStateFlow()
+    
+    private var _courseId: String = ""
+    private var _yearLevelId: String = ""
+    
+    fun setCourseId(courseId: String) {
+        _courseId = courseId
+    }
+    
+    fun setYearLevelId(yearLevelId: String) {
+        _yearLevelId = yearLevelId
+    }
 
     fun addSubject(
         name: String,
@@ -36,7 +47,9 @@ class AddSubjectViewModel @Inject constructor(
                     description = description,
                     credits = credits,
                     semester = semester,
-                    academicYear = academicYear
+                    academicYear = academicYear,
+                    courseId = _courseId,
+                    yearLevelId = _yearLevelId
                 )
                 result.onSuccess {
                     _uiState.value = _uiState.value.copy(

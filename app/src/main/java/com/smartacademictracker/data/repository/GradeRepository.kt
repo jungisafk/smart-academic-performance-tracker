@@ -7,6 +7,8 @@ import com.smartacademictracker.data.model.Grade
 import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.utils.GradeCalculationEngine
+import com.smartacademictracker.data.validation.GradeValidationService
+import com.smartacademictracker.data.audit.SecurityAuditLogger
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,13 +16,25 @@ import javax.inject.Singleton
 @Singleton
 class GradeRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val auditTrailRepository: AuditTrailRepository
+    private val auditTrailRepository: AuditTrailRepository,
+    private val gradeValidationService: GradeValidationService,
+    private val securityAuditLogger: SecurityAuditLogger
 ) {
     private val gradesCollection = firestore.collection("grades")
     private val gradeAggregatesCollection = firestore.collection("grade_aggregates")
 
     suspend fun createGrade(grade: Grade): Result<Grade> {
+        return createGrade(grade, "system", "SYSTEM")
+    }
+    
+    suspend fun createGrade(grade: Grade, userId: String, userRole: String): Result<Grade> {
         return try {
+            // Validate grade before creation
+            val validationResult = gradeValidationService.validateGrade(grade)
+            if (!validationResult.isValid) {
+                return Result.failure(Exception("Grade validation failed: ${validationResult.errors.joinToString(", ")}"))
+            }
+            
             val gradeWithCalculatedValues = grade.copy(
                 percentage = grade.calculatePercentage(),
                 letterGrade = grade.calculateLetterGrade()
@@ -35,6 +49,17 @@ class GradeRepository @Inject constructor(
                 action = AuditAction.CREATED,
                 newValue = createdGrade.score,
                 newLetterGrade = createdGrade.letterGrade
+            )
+            
+            // Log security event
+            securityAuditLogger.logGradeModificationEvent(
+                eventType = com.smartacademictracker.data.audit.GradeModificationEventType.GRADE_CREATED,
+                userId = userId,
+                userRole = userRole,
+                gradeId = createdGrade.id,
+                studentId = createdGrade.studentId,
+                subjectId = createdGrade.subjectId,
+                newValue = createdGrade.score
             )
             
             Result.success(createdGrade)
@@ -110,11 +135,12 @@ class GradeRepository @Inject constructor(
         return try {
             val snapshot = gradesCollection
                 .whereEqualTo("studentId", studentId)
-                .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
-            Result.success(grades)
+            // Sort in memory to avoid composite index requirement
+            val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+            Result.success(sortedGrades)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -138,11 +164,12 @@ class GradeRepository @Inject constructor(
             val snapshot = gradesCollection
                 .whereEqualTo("studentId", studentId)
                 .whereEqualTo("subjectId", subjectId)
-                .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
-            Result.success(grades)
+            // Sort in memory to avoid composite index requirement
+            val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+            Result.success(sortedGrades)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -152,11 +179,12 @@ class GradeRepository @Inject constructor(
         return try {
             val snapshot = gradesCollection
                 .whereEqualTo("subjectId", subjectId)
-                .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
-            Result.success(grades)
+            // Sort in memory to avoid composite index requirement
+            val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+            Result.success(sortedGrades)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -166,11 +194,12 @@ class GradeRepository @Inject constructor(
         return try {
             val snapshot = gradesCollection
                 .whereEqualTo("teacherId", teacherId)
-                .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
-            Result.success(grades)
+            // Sort in memory to avoid composite index requirement
+            val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+            Result.success(sortedGrades)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -180,11 +209,12 @@ class GradeRepository @Inject constructor(
         return try {
             val snapshot = gradesCollection
                 .whereEqualTo("gradePeriod", gradePeriod.name)
-                .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
-            Result.success(grades)
+            // Sort in memory to avoid composite index requirement
+            val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+            Result.success(sortedGrades)
         } catch (e: Exception) {
             Result.failure(e)
         }

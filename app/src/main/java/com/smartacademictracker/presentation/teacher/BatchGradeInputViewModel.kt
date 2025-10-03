@@ -236,7 +236,7 @@ class BatchGradeInputViewModel @Inject constructor(
                         letterGrade = batchGrade.letterGrade,
                         description = "Batch input",
                         dateRecorded = System.currentTimeMillis(),
-                        semester = subject.semester,
+                        semester = subject.semester.displayName,
                         academicYear = subject.academicYear
                     )
                     

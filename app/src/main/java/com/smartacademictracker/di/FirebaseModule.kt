@@ -8,6 +8,11 @@ import com.smartacademictracker.data.network.NetworkMonitor
 import com.smartacademictracker.data.sync.GradeSyncManager
 import com.smartacademictracker.data.sync.SyncScheduler
 import com.smartacademictracker.data.repository.OfflineGradeRepository
+import com.smartacademictracker.data.validation.GradeValidationService
+import com.smartacademictracker.data.audit.SecurityAuditLogger
+import com.smartacademictracker.data.integrity.DataIntegrityChecker
+import com.smartacademictracker.data.security.SecurityConfiguration
+import com.smartacademictracker.data.migration.DatabaseMigrationService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -71,5 +76,35 @@ object FirebaseModule {
         gradeSyncManager: GradeSyncManager
     ): OfflineGradeRepository {
         return OfflineGradeRepository(database, gradeRepository, networkMonitor, gradeSyncManager)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideGradeValidationService(): GradeValidationService {
+        return GradeValidationService()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSecurityAuditLogger(firestore: FirebaseFirestore): SecurityAuditLogger {
+        return SecurityAuditLogger(firestore)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideDataIntegrityChecker(firestore: FirebaseFirestore): DataIntegrityChecker {
+        return DataIntegrityChecker(firestore)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSecurityConfiguration(): SecurityConfiguration {
+        return SecurityConfiguration()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideDatabaseMigrationService(firestore: FirebaseFirestore): DatabaseMigrationService {
+        return DatabaseMigrationService(firestore)
     }
 }

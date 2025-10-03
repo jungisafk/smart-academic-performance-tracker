@@ -18,6 +18,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSubjectScreen(
+    courseId: String = "",
+    yearLevelId: String = "",
     onNavigateBack: () -> Unit,
     onSubjectAdded: () -> Unit,
     viewModel: AddSubjectViewModel = hiltViewModel()
@@ -30,6 +32,15 @@ fun AddSubjectScreen(
     var academicYear by remember { mutableStateOf("") }
 
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(courseId, yearLevelId) {
+        if (courseId.isNotEmpty()) {
+            viewModel.setCourseId(courseId)
+        }
+        if (yearLevelId.isNotEmpty()) {
+            viewModel.setYearLevelId(yearLevelId)
+        }
+    }
 
     val isFormValid = name.isNotBlank() && 
                      code.isNotBlank() && 
