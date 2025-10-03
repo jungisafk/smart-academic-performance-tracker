@@ -19,7 +19,7 @@ fun TeacherDashboardScreen(
     onNavigateToSubjects: () -> Unit,
     onNavigateToApplications: () -> Unit,
     onNavigateToStudentApplications: () -> Unit,
-    onSignOut: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
     dashboardViewModel: TeacherDashboardViewModel = hiltViewModel()
 ) {
@@ -39,12 +39,7 @@ fun TeacherDashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Teacher Dashboard") },
-                actions = {
-                    IconButton(onClick = onSignOut) {
-                        Icon(Icons.Default.ExitToApp, contentDescription = "Sign Out")
-                    }
-                }
+                title = { Text("Teacher Dashboard") }
             )
         }
     ) { paddingValues ->
@@ -147,8 +142,12 @@ fun TeacherDashboardScreen(
                         modifier = Modifier.weight(1f)
                     )
                     
-                    // Empty space for balance
-                    Spacer(modifier = Modifier.weight(1f))
+                    QuickActionCard(
+                        title = "Profile",
+                        icon = Icons.Default.Person,
+                        onClick = onNavigateToProfile,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
             

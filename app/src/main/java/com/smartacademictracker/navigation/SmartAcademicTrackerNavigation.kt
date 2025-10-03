@@ -37,6 +37,7 @@ import com.smartacademictracker.presentation.admin.AdminGradeMonitoringScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.student.StudentAnalyticsScreen
 import com.smartacademictracker.presentation.teacher.TeacherAnalyticsScreen
+import com.smartacademictracker.presentation.profile.ProfileScreen
 
 @Composable
 fun SmartAcademicTrackerNavigation(
@@ -128,7 +129,7 @@ fun SmartAcademicTrackerNavigation(
                     navController.navigate(Screen.StudentSubjectApplication.route)
                 },
                 onNavigateToProfile = {
-                    navController.navigate(Screen.StudentProfile.route)
+                    navController.navigate(Screen.Profile.route)
                 },
                 onNavigateToAnalytics = {
                     navController.navigate(Screen.StudentAnalytics.route)
@@ -226,11 +227,8 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToStudentApplications = {
                     navController.navigate(Screen.TeacherStudentApplications.route)
                 },
-                onSignOut = {
-                    authViewModel.signOut()
-                    navController.navigate(Screen.SignIn.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                onNavigateToProfile = {
+                    navController.navigate(Screen.Profile.route)
                 }
             )
         }
@@ -304,11 +302,8 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToAcademicPeriods = {
                     navController.navigate(Screen.AdminAcademicPeriods.route)
                 },
-                onSignOut = {
-                    authViewModel.signOut()
-                    navController.navigate(Screen.SignIn.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                onNavigateToProfile = {
+                    navController.navigate(Screen.Profile.route)
                 }
             )
         }
@@ -424,6 +419,21 @@ fun SmartAcademicTrackerNavigation(
                 },
                 onYearLevelAdded = {
                     navController.popBackStack()
+                }
+            )
+        }
+        
+        // Profile Screen (Common for all roles)
+        composable(Screen.Profile.route) {
+            ProfileScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onSignOut = {
+                    authViewModel.signOut()
+                    navController.navigate(Screen.SignIn.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }

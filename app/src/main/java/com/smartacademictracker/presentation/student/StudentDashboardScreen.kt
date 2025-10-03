@@ -46,9 +46,6 @@ fun StudentDashboardScreen(
                     IconButton(onClick = { dashboardViewModel.refreshData() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
-                    IconButton(onClick = onSignOut) {
-                        Icon(Icons.Default.ExitToApp, contentDescription = "Sign Out")
-                    }
                 }
             )
         }

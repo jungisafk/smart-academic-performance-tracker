@@ -22,7 +22,7 @@ fun AdminDashboardScreen(
     onNavigateToUsers: () -> Unit = {},
     onNavigateToGradeMonitoring: () -> Unit = {},
     onNavigateToAcademicPeriods: () -> Unit = {},
-    onSignOut: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
     viewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -31,38 +31,48 @@ fun AdminDashboardScreen(
         viewModel.loadDashboardData()
     }
     
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Admin Dashboard",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Admin Dashboard") }
+            )
+        }
+    ) { paddingValues ->
         if (uiState.isLoading) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
             }
         } else if (uiState.error != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp)
             ) {
-                Text(
-                    text = uiState.error ?: "Unknown error",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text(
+                            text = uiState.error ?: "Unknown error",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
@@ -82,108 +92,97 @@ fun AdminDashboardScreen(
                 item {
                     Text(
                         text = "Quick Actions",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
-                    
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.height(200.dp)
+                }
+                
+                item {
+                    // Quick Actions Grid
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onNavigateToSubjects,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Button(
-                                    onClick = onNavigateToSubjects,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Manage Subjects")
-                                }
-                                Button(
-                                    onClick = onNavigateToApplications,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Applications")
-                                }
+                                Text("Manage Subjects")
+                            }
+                            Button(
+                                onClick = onNavigateToApplications,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Applications")
                             }
                         }
                         
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onNavigateToCourseManagement,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Button(
-                                    onClick = onNavigateToCourseManagement,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Courses")
-                                }
-                                Button(
-                                    onClick = onNavigateToYearLevelManagement,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Year Levels")
-                                }
+                                Text("Courses")
+                            }
+                            Button(
+                                onClick = onNavigateToYearLevelManagement,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Year Levels")
                             }
                         }
                         
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onNavigateToUsers,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Button(
-                                    onClick = onNavigateToUsers,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Manage Users")
-                                }
-                                Button(
-                                    onClick = onNavigateToGradeMonitoring,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Grade Monitoring")
-                                }
+                                Text("Manage Users")
+                            }
+                            Button(
+                                onClick = onNavigateToGradeMonitoring,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Grade Monitoring")
                             }
                         }
                         
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onNavigateToAcademicPeriods,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Button(
-                                    onClick = onNavigateToAcademicPeriods,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Academic Periods")
-                                }
-                                Button(
-                                    onClick = { viewModel.refreshData() },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Refresh Data")
-                                }
+                                Text("Academic Periods")
+                            }
+                            Button(
+                                onClick = onNavigateToProfile,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Profile")
                             }
                         }
                         
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Button(
+                                onClick = { viewModel.refreshData() },
+                                modifier = Modifier.weight(1f)
                             ) {
-                                OutlinedButton(
-                                    onClick = onSignOut,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
-                                ) {
-                                    Text("Sign Out")
-                                }
+                                Text("Refresh Data")
                             }
                         }
                     }
