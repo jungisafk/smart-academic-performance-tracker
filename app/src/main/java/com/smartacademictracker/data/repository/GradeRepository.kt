@@ -2,17 +2,22 @@ package com.smartacademictracker.data.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.smartacademictracker.data.model.AuditAction
 import com.smartacademictracker.data.model.Grade
-import com.smartacademictracker.data.model.GradeType
+import com.smartacademictracker.data.model.GradePeriod
+import com.smartacademictracker.data.model.StudentGradeAggregate
+import com.smartacademictracker.data.utils.GradeCalculationEngine
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class GradeRepository @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val auditTrailRepository: AuditTrailRepository
 ) {
     private val gradesCollection = firestore.collection("grades")
+    private val gradeAggregatesCollection = firestore.collection("grade_aggregates")
 
     suspend fun createGrade(grade: Grade): Result<Grade> {
         return try {
@@ -23,6 +28,15 @@ class GradeRepository @Inject constructor(
             val docRef = gradesCollection.add(gradeWithCalculatedValues).await()
             val createdGrade = gradeWithCalculatedValues.copy(id = docRef.id)
             gradesCollection.document(docRef.id).set(createdGrade).await()
+            
+            // Create audit trail entry
+            auditTrailRepository.createAuditEntry(
+                grade = createdGrade,
+                action = AuditAction.CREATED,
+                newValue = createdGrade.score,
+                newLetterGrade = createdGrade.letterGrade
+            )
+            
             Result.success(createdGrade)
         } catch (e: Exception) {
             Result.failure(e)
@@ -31,11 +45,26 @@ class GradeRepository @Inject constructor(
 
     suspend fun updateGrade(grade: Grade): Result<Unit> {
         return try {
+            // Get the old grade for audit trail
+            val oldGradeDoc = gradesCollection.document(grade.id).get().await()
+            val oldGrade = oldGradeDoc.toObject(Grade::class.java)
+            
             val updatedGrade = grade.copy(
                 percentage = grade.calculatePercentage(),
                 letterGrade = grade.calculateLetterGrade()
             )
             gradesCollection.document(grade.id).set(updatedGrade).await()
+            
+            // Create audit trail entry
+            auditTrailRepository.createAuditEntry(
+                grade = updatedGrade,
+                action = AuditAction.UPDATED,
+                oldValue = oldGrade?.score,
+                newValue = updatedGrade.score,
+                oldLetterGrade = oldGrade?.letterGrade,
+                newLetterGrade = updatedGrade.letterGrade
+            )
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -44,7 +73,22 @@ class GradeRepository @Inject constructor(
 
     suspend fun deleteGrade(gradeId: String): Result<Unit> {
         return try {
+            // Get the grade before deletion for audit trail
+            val gradeDoc = gradesCollection.document(gradeId).get().await()
+            val grade = gradeDoc.toObject(Grade::class.java)
+            
             gradesCollection.document(gradeId).delete().await()
+            
+            // Create audit trail entry
+            if (grade != null) {
+                auditTrailRepository.createAuditEntry(
+                    grade = grade,
+                    action = AuditAction.DELETED,
+                    oldValue = grade.score,
+                    oldLetterGrade = grade.letterGrade
+                )
+            }
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -66,6 +110,19 @@ class GradeRepository @Inject constructor(
         return try {
             val snapshot = gradesCollection
                 .whereEqualTo("studentId", studentId)
+                .orderBy("dateRecorded", Query.Direction.DESCENDING)
+                .get()
+                .await()
+            val grades = snapshot.toObjects(Grade::class.java)
+            Result.success(grades)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getAllGrades(): Result<List<Grade>> {
+        return try {
+            val snapshot = gradesCollection
                 .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
@@ -119,10 +176,10 @@ class GradeRepository @Inject constructor(
         }
     }
 
-    suspend fun getGradesByType(gradeType: GradeType): Result<List<Grade>> {
+    suspend fun getGradesByPeriod(gradePeriod: GradePeriod): Result<List<Grade>> {
         return try {
             val snapshot = gradesCollection
-                .whereEqualTo("gradeType", gradeType.name)
+                .whereEqualTo("gradePeriod", gradePeriod.name)
                 .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
@@ -132,34 +189,154 @@ class GradeRepository @Inject constructor(
             Result.failure(e)
         }
     }
-
-    suspend fun calculateStudentAverageForSubject(studentId: String, subjectId: String): Result<Double> {
+    
+    suspend fun getGradesByStudentSubjectAndPeriod(
+        studentId: String, 
+        subjectId: String, 
+        gradePeriod: GradePeriod
+    ): Result<Grade?> {
         return try {
-            val gradesResult = getGradesByStudentAndSubject(studentId, subjectId)
-            val grades = gradesResult.getOrThrow()
-            
-            if (grades.isEmpty()) {
-                Result.success(0.0)
-            } else {
-                val average = grades.map { it.percentage }.average()
-                Result.success(average)
-            }
+            val snapshot = gradesCollection
+                .whereEqualTo("studentId", studentId)
+                .whereEqualTo("subjectId", subjectId)
+                .whereEqualTo("gradePeriod", gradePeriod.name)
+                .limit(1)
+                .get()
+                .await()
+            val grade = snapshot.documents.firstOrNull()?.toObject(Grade::class.java)
+            Result.success(grade)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun calculateStudentOverallAverage(studentId: String): Result<Double> {
+    // ===== STUDENT GRADE AGGREGATE METHODS =====
+    
+    suspend fun createOrUpdateStudentGradeAggregate(
+        studentId: String,
+        subjectId: String,
+        studentName: String,
+        subjectName: String,
+        teacherId: String,
+        semester: String,
+        academicYear: String
+    ): Result<StudentGradeAggregate> {
         return try {
-            val gradesResult = getGradesByStudent(studentId)
+            val gradesResult = getGradesByStudentAndSubject(studentId, subjectId)
             val grades = gradesResult.getOrThrow()
             
-            if (grades.isEmpty()) {
-                Result.success(0.0)
-            } else {
-                val average = grades.map { it.percentage }.average()
-                Result.success(average)
+            val aggregate = GradeCalculationEngine.createStudentGradeAggregate(
+                grades = grades,
+                studentId = studentId,
+                studentName = studentName,
+                subjectId = subjectId,
+                subjectName = subjectName,
+                teacherId = teacherId,
+                semester = semester,
+                academicYear = academicYear
+            )
+            
+            gradeAggregatesCollection.document(aggregate.id).set(aggregate).await()
+            Result.success(aggregate)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getStudentGradeAggregate(
+        studentId: String,
+        subjectId: String,
+        semester: String,
+        academicYear: String
+    ): Result<StudentGradeAggregate?> {
+        return try {
+            val aggregateId = "${studentId}_${subjectId}_${semester}_${academicYear}"
+            val document = gradeAggregatesCollection.document(aggregateId).get().await()
+            val aggregate = document.toObject(StudentGradeAggregate::class.java)
+            Result.success(aggregate)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getStudentGradeAggregatesByStudent(studentId: String): Result<List<StudentGradeAggregate>> {
+        return try {
+            val snapshot = gradeAggregatesCollection
+                .whereEqualTo("studentId", studentId)
+                .get()
+                .await()
+            val aggregates = snapshot.toObjects(StudentGradeAggregate::class.java)
+                .sortedByDescending { it.lastUpdated }
+            Result.success(aggregates)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getStudentGradeAggregatesBySubject(subjectId: String): Result<List<StudentGradeAggregate>> {
+        return try {
+            val snapshot = gradeAggregatesCollection
+                .whereEqualTo("subjectId", subjectId)
+                .get()
+                .await()
+            val aggregates = snapshot.toObjects(StudentGradeAggregate::class.java)
+                .sortedByDescending { it.lastUpdated }
+            Result.success(aggregates)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getStudentGradeAggregatesByTeacher(teacherId: String): Result<List<StudentGradeAggregate>> {
+        return try {
+            val snapshot = gradeAggregatesCollection
+                .whereEqualTo("teacherId", teacherId)
+                .get()
+                .await()
+            val aggregates = snapshot.toObjects(StudentGradeAggregate::class.java)
+                .sortedByDescending { it.lastUpdated }
+            Result.success(aggregates)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // ===== CALCULATION METHODS =====
+    
+    suspend fun calculateStudentFinalAverageForSubject(
+        studentId: String, 
+        subjectId: String
+    ): Result<Double?> {
+        return try {
+            val prelimResult = getGradesByStudentSubjectAndPeriod(studentId, subjectId, GradePeriod.PRELIM)
+            val midtermResult = getGradesByStudentSubjectAndPeriod(studentId, subjectId, GradePeriod.MIDTERM)
+            val finalResult = getGradesByStudentSubjectAndPeriod(studentId, subjectId, GradePeriod.FINAL)
+            
+            val prelimGrade = prelimResult.getOrNull()?.score
+            val midtermGrade = midtermResult.getOrNull()?.score
+            val finalGrade = finalResult.getOrNull()?.score
+            
+            val finalAverage = GradeCalculationEngine.calculateFinalAverage(
+                prelimGrade, midtermGrade, finalGrade
+            )
+            
+            Result.success(finalAverage)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun calculateClassAverageForSubject(subjectId: String): Result<Map<GradePeriod, Double?>> {
+        return try {
+            val gradesResult = getGradesBySubject(subjectId)
+            val grades = gradesResult.getOrThrow()
+            
+            val averages = GradePeriod.values().associateWith { period ->
+                val periodGrades = grades.filter { it.gradePeriod == period }
+                GradeCalculationEngine.calculateClassAverage(periodGrades)
             }
+            
+            Result.success(averages)
         } catch (e: Exception) {
             Result.failure(e)
         }

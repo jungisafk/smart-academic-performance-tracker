@@ -133,7 +133,8 @@ fun TeacherSubjectsScreen(
                             items(mySubjects) { subject ->
                                 MySubjectCard(
                                     subject = subject,
-                                    onNavigateToGradeInput = { onNavigateToGradeInput(subject.id) }
+                                    onNavigateToGradeInput = { onNavigateToGradeInput(subject.id) },
+                                    viewModel = viewModel
                                 )
                             }
                         }
@@ -239,8 +240,15 @@ fun TeacherSubjectsScreen(
 @Composable
 fun MySubjectCard(
     subject: Subject,
-    onNavigateToGradeInput: () -> Unit
+    onNavigateToGradeInput: () -> Unit,
+    viewModel: TeacherSubjectsViewModel = hiltViewModel()
 ) {
+    var studentCount by remember { mutableStateOf(0) }
+    
+    LaunchedEffect(subject.id) {
+        studentCount = viewModel.getStudentCountForSubject(subject.id)
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),

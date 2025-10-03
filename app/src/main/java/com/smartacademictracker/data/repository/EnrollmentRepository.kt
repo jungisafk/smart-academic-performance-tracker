@@ -14,25 +14,34 @@ class EnrollmentRepository @Inject constructor(
 
     suspend fun createEnrollment(enrollment: Enrollment): Result<Enrollment> {
         return try {
+            println("DEBUG: EnrollmentRepository - Creating enrollment for student: ${enrollment.studentId}, subject: ${enrollment.subjectId}")
             val docRef = enrollmentsCollection.add(enrollment).await()
             val createdEnrollment = enrollment.copy(id = docRef.id)
             enrollmentsCollection.document(docRef.id).set(createdEnrollment).await()
+            println("DEBUG: EnrollmentRepository - Enrollment created successfully with ID: ${createdEnrollment.id}")
             Result.success(createdEnrollment)
         } catch (e: Exception) {
+            println("DEBUG: EnrollmentRepository - Error creating enrollment: ${e.message}")
             Result.failure(e)
         }
     }
 
     suspend fun getEnrollmentsByStudent(studentId: String): Result<List<Enrollment>> {
         return try {
+            println("DEBUG: EnrollmentRepository - Querying enrollments for student: $studentId")
             val snapshot = enrollmentsCollection
                 .whereEqualTo("studentId", studentId)
                 .whereEqualTo("active", true)
                 .get()
                 .await()
             val enrollments = snapshot.toObjects(Enrollment::class.java)
+            println("DEBUG: EnrollmentRepository - Found ${enrollments.size} enrollments for student $studentId")
+            enrollments.forEach { enrollment ->
+                println("DEBUG: Enrollment - ID: ${enrollment.id}, Subject: ${enrollment.subjectName}, Active: ${enrollment.active}")
+            }
             Result.success(enrollments)
         } catch (e: Exception) {
+            println("DEBUG: EnrollmentRepository - Error querying enrollments: ${e.message}")
             Result.failure(e)
         }
     }

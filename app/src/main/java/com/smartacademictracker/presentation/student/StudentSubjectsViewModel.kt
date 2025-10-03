@@ -69,6 +69,11 @@ class StudentSubjectsViewModel @Inject constructor(
     fun refreshEnrollments() {
         loadEnrollments()
     }
+    
+    fun updateEnrollments(enrollments: List<com.smartacademictracker.data.model.Enrollment>) {
+        _enrollments.value = enrollments
+        println("DEBUG: StudentSubjectsViewModel - Updated enrollments: ${enrollments.size} total")
+    }
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)

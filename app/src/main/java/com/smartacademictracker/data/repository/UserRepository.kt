@@ -116,4 +116,22 @@ class UserRepository @Inject constructor(
     fun isUserSignedIn(): Boolean {
         return auth.currentUser != null
     }
+
+    suspend fun updateUserStatus(userId: String, active: Boolean): Result<Unit> {
+        return try {
+            usersCollection.document(userId).update("active", active).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateUserRole(userId: String, newRole: String): Result<Unit> {
+        return try {
+            usersCollection.document(userId).update("role", newRole).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

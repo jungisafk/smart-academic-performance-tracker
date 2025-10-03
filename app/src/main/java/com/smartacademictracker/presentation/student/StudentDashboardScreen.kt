@@ -13,6 +13,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.presentation.auth.AuthViewModel
+import com.smartacademictracker.data.model.Grade
+import com.smartacademictracker.data.model.GradePeriod
+import com.smartacademictracker.data.model.GradeStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,6 +25,7 @@ fun StudentDashboardScreen(
     onNavigateToSubjectApplication: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToAnalytics: () -> Unit,
+    onNavigateToPerformanceTracking: () -> Unit,
     onSignOut: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
     dashboardViewModel: StudentDashboardViewModel = hiltViewModel()
@@ -29,14 +33,9 @@ fun StudentDashboardScreen(
     val currentUser by authViewModel.currentUser.collectAsState()
     val dashboardState by dashboardViewModel.uiState.collectAsState()
 
+    // Load dashboard data when screen is composed
     LaunchedEffect(Unit) {
         dashboardViewModel.loadDashboardData()
-    }
-
-    // Refresh data when screen is composed
-    DisposableEffect(Unit) {
-        dashboardViewModel.refreshData()
-        onDispose { }
     }
     
     Scaffold(
@@ -44,6 +43,9 @@ fun StudentDashboardScreen(
             TopAppBar(
                 title = { Text("Student Dashboard") },
                 actions = {
+                    IconButton(onClick = { dashboardViewModel.refreshData() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
                     IconButton(onClick = onSignOut) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Sign Out")
                     }
@@ -144,14 +146,18 @@ fun StudentDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     QuickActionCard(
+                        title = "Performance",
+                        icon = Icons.Default.TrendingUp,
+                        onClick = onNavigateToPerformanceTracking,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    QuickActionCard(
                         title = "Profile",
                         icon = Icons.Default.Person,
                         onClick = onNavigateToProfile,
                         modifier = Modifier.weight(1f)
                     )
-                    
-                    // Empty space for balance
-                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
             
@@ -164,7 +170,7 @@ fun StudentDashboardScreen(
             }
             
             item {
-                // Statistics Cards
+                // Grade Overview Cards
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -177,10 +183,30 @@ fun StudentDashboardScreen(
                     )
                     
                     StatCard(
-                        title = "Recent Grades",
-                        value = if (dashboardState.isLoading) "..." else dashboardState.recentGrades.size.toString(),
+                        title = "Average Grade",
+                        value = if (dashboardState.isLoading) "..." else String.format("%.1f", dashboardState.averageGrade),
                         icon = Icons.Default.Star,
                         modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                // Grade Period Overview
+                if (dashboardState.recentGrades.isNotEmpty()) {
+                    Text(
+                        text = "Recent Grade Updates",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            if (dashboardState.recentGrades.isNotEmpty()) {
+                items(dashboardState.recentGrades.take(3)) { grade ->
+                    RecentGradeCard(
+                        grade = grade,
+                        onClick = { onNavigateToGrades() }
                     )
                 }
             }
@@ -290,6 +316,67 @@ fun QuickActionCard(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun RecentGradeCard(
+    grade: Grade,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Grade Period Icon
+            Icon(
+                imageVector = when (grade.gradePeriod) {
+                    GradePeriod.PRELIM -> Icons.Default.Schedule
+                    GradePeriod.MIDTERM -> Icons.Default.Star
+                    GradePeriod.FINAL -> Icons.Default.CheckCircle
+                },
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = when (grade.gradePeriod) {
+                    GradePeriod.PRELIM -> MaterialTheme.colorScheme.primary
+                    GradePeriod.MIDTERM -> MaterialTheme.colorScheme.secondary
+                    GradePeriod.FINAL -> MaterialTheme.colorScheme.tertiary
+                }
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = grade.subjectName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${grade.gradePeriod.displayName} - ${String.format("%.1f", grade.percentage)}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Grade Score
+            Text(
+                text = "${grade.score}/${grade.maxScore}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    grade.percentage >= 90 -> MaterialTheme.colorScheme.primary
+                    grade.percentage >= 75 -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.error
+                }
             )
         }
     }

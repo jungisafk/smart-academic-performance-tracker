@@ -8,6 +8,7 @@ import com.smartacademictracker.data.model.ApplicationStatus
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.TeacherApplicationRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.repository.EnrollmentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ import javax.inject.Inject
 class TeacherSubjectsViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val teacherApplicationRepository: TeacherApplicationRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val enrollmentRepository: EnrollmentRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherSubjectsUiState())
@@ -169,6 +171,16 @@ class TeacherSubjectsViewModel @Inject constructor(
 
     fun refreshSubjects() {
         loadSubjects()
+    }
+    
+    suspend fun getStudentCountForSubject(subjectId: String): Int {
+        return try {
+            val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
+            enrollmentsResult.getOrNull()?.size ?: 0
+        } catch (e: Exception) {
+            println("DEBUG: TeacherSubjectsViewModel - Error getting student count for subject $subjectId: ${e.message}")
+            0
+        }
     }
 
     private suspend fun filterAvailableSubjects(teacherId: String, subjects: List<Subject>) {

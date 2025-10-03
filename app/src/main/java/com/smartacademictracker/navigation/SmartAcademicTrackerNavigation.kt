@@ -18,6 +18,7 @@ import com.smartacademictracker.presentation.student.StudentGradesScreen
 import com.smartacademictracker.presentation.student.StudentSubjectsScreen
 import com.smartacademictracker.presentation.student.StudentSubjectApplicationScreen
 import com.smartacademictracker.presentation.student.StudentProfileScreen
+import com.smartacademictracker.presentation.student.StudentPerformanceTrackingScreen
 import com.smartacademictracker.presentation.teacher.TeacherDashboardScreen
 import com.smartacademictracker.presentation.teacher.TeacherSubjectsScreen
 import com.smartacademictracker.presentation.teacher.TeacherApplicationsScreen
@@ -31,6 +32,11 @@ import com.smartacademictracker.presentation.admin.AdminYearLevelManagementScree
 import com.smartacademictracker.presentation.admin.AddSubjectScreen
 import com.smartacademictracker.presentation.admin.AddCourseScreen
 import com.smartacademictracker.presentation.admin.AddYearLevelScreen
+import com.smartacademictracker.presentation.admin.ManageUsersScreen
+import com.smartacademictracker.presentation.admin.AdminGradeMonitoringScreen
+import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
+import com.smartacademictracker.presentation.student.StudentAnalyticsScreen
+import com.smartacademictracker.presentation.teacher.TeacherAnalyticsScreen
 
 @Composable
 fun SmartAcademicTrackerNavigation(
@@ -127,6 +133,9 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToAnalytics = {
                     navController.navigate(Screen.StudentAnalytics.route)
                 },
+                onNavigateToPerformanceTracking = {
+                    navController.navigate(Screen.StudentPerformanceTracking.route)
+                },
                 onSignOut = {
                     authViewModel.signOut()
                     navController.navigate(Screen.SignIn.route) {
@@ -184,8 +193,19 @@ fun SmartAcademicTrackerNavigation(
         }
         
         composable(Screen.StudentAnalytics.route) {
-            // TODO: Implement StudentAnalyticsScreen
-            Text("Student Analytics Screen - Coming Soon")
+            StudentAnalyticsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.StudentPerformanceTracking.route) {
+            StudentPerformanceTrackingScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
         }
         
         composable(Screen.StudentSubjectDetail.route) { backStackEntry ->
@@ -252,6 +272,14 @@ fun SmartAcademicTrackerNavigation(
             )
         }
         
+        composable(Screen.TeacherAnalytics.route) {
+            TeacherAnalyticsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
         // Admin Screens
         composable(Screen.AdminDashboard.route) {
             AdminDashboardScreen(
@@ -269,6 +297,12 @@ fun SmartAcademicTrackerNavigation(
                 },
                 onNavigateToUsers = {
                     navController.navigate(Screen.ManageUsers.route)
+                },
+                onNavigateToGradeMonitoring = {
+                    navController.navigate(Screen.AdminGradeMonitoring.route)
+                },
+                onNavigateToAcademicPeriods = {
+                    navController.navigate(Screen.AdminAcademicPeriods.route)
                 },
                 onSignOut = {
                     authViewModel.signOut()
@@ -330,8 +364,35 @@ fun SmartAcademicTrackerNavigation(
         }
         
         composable(Screen.ManageUsers.route) {
-            // TODO: Implement ManageUsersScreen
-            Text("Manage Users Screen - Coming Soon")
+            ManageUsersScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.AdminGradeMonitoring.route) {
+            AdminGradeMonitoringScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.AdminAcademicPeriods.route) {
+            AdminAcademicPeriodScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToAddPeriod = {
+                    navController.navigate(Screen.AddAcademicPeriod.route)
+                }
+            )
+        }
+        
+        composable(Screen.AddAcademicPeriod.route) {
+            // TODO: Implement AddAcademicPeriodScreen
+            Text("Add Academic Period Screen - Coming Soon")
         }
         
         composable(Screen.AddSubject.route) {

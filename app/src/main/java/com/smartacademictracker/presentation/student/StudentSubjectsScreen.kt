@@ -27,14 +27,9 @@ fun StudentSubjectsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val enrollments by viewModel.enrollments.collectAsState()
 
+    // Load enrollments when screen is composed
     LaunchedEffect(Unit) {
         viewModel.loadEnrollments()
-    }
-
-    // Refresh enrollments when screen is composed
-    DisposableEffect(Unit) {
-        viewModel.refreshEnrollments()
-        onDispose { }
     }
 
     Column(

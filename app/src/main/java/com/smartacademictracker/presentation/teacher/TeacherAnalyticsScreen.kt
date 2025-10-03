@@ -1,0 +1,316 @@
+package com.smartacademictracker.presentation.teacher
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.smartacademictracker.presentation.common.ChartUtils
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TeacherAnalyticsScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: TeacherAnalyticsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val classPerformance by viewModel.classPerformance.collectAsState()
+    
+    LaunchedEffect(Unit) {
+        viewModel.loadAnalyticsData()
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onNavigateBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                text = "Class Analytics",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = { viewModel.refreshData() },
+                enabled = !uiState.isLoading
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (uiState.error != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Text(
+                    text = uiState.error ?: "Unknown error",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Overall Class Performance
+                item {
+                    OverallClassPerformanceCard(
+                        totalStudents = uiState.totalStudents,
+                        averageGrade = uiState.classAverage,
+                        passingStudents = uiState.passingStudents,
+                        atRiskStudents = uiState.atRiskStudents
+                    )
+                }
+                
+                // Subject Performance Overview
+                items(classPerformance) { subjectPerformance ->
+                    SubjectPerformanceOverviewCard(
+                        subjectName = subjectPerformance.subjectName,
+                        totalStudents = subjectPerformance.totalStudents,
+                        averageGrade = subjectPerformance.averageGrade,
+                        passingRate = subjectPerformance.passingRate,
+                        gradeDistribution = subjectPerformance.gradeDistribution
+                    )
+                }
+                
+                // Class Performance Comparison Chart
+                if (classPerformance.size > 1) {
+                    item {
+                        ClassPerformanceComparisonChart(
+                            subjects = classPerformance.map { 
+                                it.subjectName to it.averageGrade 
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OverallClassPerformanceCard(
+    totalStudents: Int,
+    averageGrade: Double?,
+    passingStudents: Int,
+    atRiskStudents: Int,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Class Performance Overview",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            
+            if (averageGrade != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Class Average: ${String.format("%.1f", averageGrade)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Passing Rate: ${String.format("%.1f", (passingStudents.toDouble() / totalStudents * 100))}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                Text(
+                    text = "No grade data available yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Performance Statistics
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                ClassStatItem("Total Students", totalStudents.toString())
+                ClassStatItem("Passing", passingStudents.toString())
+                ClassStatItem("At Risk", atRiskStudents.toString())
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClassStatItem(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun SubjectPerformanceOverviewCard(
+    subjectName: String,
+    totalStudents: Int,
+    averageGrade: Double,
+    passingRate: Double,
+    gradeDistribution: Map<String, Int>,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = subjectName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Average: ${String.format("%.1f", averageGrade)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Passing Rate: ${String.format("%.1f", passingRate)}%",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Grade Distribution
+            Text(
+                text = "Grade Distribution",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                gradeDistribution.forEach { (grade, count) ->
+                    GradeDistributionItem(grade, count, totalStudents)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GradeDistributionItem(
+    grade: String,
+    count: Int,
+    totalStudents: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = grade,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "${String.format("%.1f", (count.toDouble() / totalStudents * 100))}%",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+fun ClassPerformanceComparisonChart(
+    subjects: List<Pair<String, Double>>,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Subject Performance Comparison",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            ChartUtils.SubjectComparisonChart(
+                subjects = subjects,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}

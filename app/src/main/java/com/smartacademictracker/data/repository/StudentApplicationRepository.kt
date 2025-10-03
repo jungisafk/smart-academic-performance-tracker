@@ -181,6 +181,17 @@ class StudentApplicationRepository @Inject constructor(
         }
     }
 
+    suspend fun getAllApplications(): Result<List<StudentApplication>> {
+        return try {
+            val snapshot = applicationsCollection.get().await()
+            val applications = snapshot.toObjects(StudentApplication::class.java)
+                .sortedByDescending { it.appliedAt }
+            Result.success(applications)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteApplication(applicationId: String): Result<Unit> {
         return try {
             applicationsCollection.document(applicationId).delete().await()

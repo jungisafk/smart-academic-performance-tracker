@@ -86,6 +86,24 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
     
+    // Charting
+    implementation("com.github.PhilJay:MPAndroidChart:3.1.0")
+    
+    // Room Database
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+    
+    // WorkManager for background sync
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    
+    // Network monitoring
+    implementation("androidx.lifecycle:lifecycle-process:2.8.4")
+    
+    // Gson for JSON serialization
+    implementation("com.google.code.gson:gson:2.10.1")
+    
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
     implementation("com.google.firebase:firebase-auth")
