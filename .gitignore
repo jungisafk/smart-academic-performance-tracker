@@ -226,6 +226,13 @@ build/
 *.sublime-project
 *.sublime-workspace
 
+# Kotlin
+.kotlin/
+
+# Android Studio caches
+.idea/caches/
+.idea/deviceStreaming.xml
+
 # Gradle wrapper (keep gradle-wrapper.jar but ignore other gradle files)
 !gradle/wrapper/gradle-wrapper.jar
 
