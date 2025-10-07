@@ -165,6 +165,15 @@
 - [x] **FIX Teacher Dashboard Navigation**: Fixed Input Grades and Analytics quick actions navigation
 - [x] **ENHANCE Grade Input Access**: Enhanced grade input functionality accessibility from teacher dashboard
 - [x] **COMPLETE Teacher Analytics**: Completed Teacher Analytics navigation and functionality
+- [x] **FIX Teacher Grade Input Functions**: Enhanced error handling and success feedback for grade input
+- [x] **FIX Teacher Analytics Functions**: Added empty state handling and improved analytics display
+- [x] **FIX Student Subject Application**: Implemented hierarchical Course → Year Level → Subjects view for student applications
+- [x] **FIX Teacher Subject Application**: Implemented hierarchical Course → Year Level → Subjects view for teacher applications
+- [x] **CREATE Hierarchical Subject Selector**: Created reusable hierarchical subject selector component for both student and teacher applications
+- [x] **FIX Admin Academic Structure Add Subject**: Fixed navigation and parameter passing for adding subjects in hierarchical academic structure
+- [x] **REMOVE Manage Subjects Conflict**: Removed Manage Subjects functionality to avoid conflict with Academic Structure - all subject management now goes through Academic Structure
+- [x] **FIX Student Subject Application Permission**: Fixed Firestore rules to allow students to read subjects and manage their applications without isActiveUser() requirement
+- [x] **FIX Teacher Student Applications Permission**: Fixed Firestore rules to allow teachers to read student applications for their subjects
 
 ### Admin Features (Missing from Flowchart)
 - [x] **IMPLEMENT Dropdown Choices for Admin Forms**: Year level (1-4), semester (First/Second/Summer), course duration (2-6 years)

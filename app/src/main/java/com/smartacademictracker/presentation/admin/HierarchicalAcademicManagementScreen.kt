@@ -131,7 +131,10 @@ fun HierarchicalAcademicManagementScreen(
                         },
                         onEditYearLevel = onNavigateToEditYearLevel,
                         onDeleteYearLevel = { viewModel.deleteYearLevel(it) },
-                        onAddSubject = { yearLevelId -> onNavigateToAddSubject(course.id, yearLevelId) },
+                        onAddSubject = { yearLevelId -> 
+                            println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add subject for course: '${course.id}', yearLevel: '$yearLevelId'")
+                            onNavigateToAddSubject(course.id, yearLevelId) 
+                        },
                         onEditSubject = onNavigateToEditSubject,
                         onDeleteSubject = { viewModel.deleteSubject(it) }
                     )

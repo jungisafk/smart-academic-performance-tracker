@@ -4,11 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,28 +14,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Subject
-import com.smartacademictracker.data.model.StudentApplication
-import com.smartacademictracker.data.model.StudentApplicationStatus
+import com.smartacademictracker.data.model.SubjectApplication
+import com.smartacademictracker.data.model.ApplicationStatus
+import com.smartacademictracker.presentation.common.HierarchicalSubjectSelector
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudentSubjectApplicationScreen(
+fun HierarchicalStudentSubjectApplicationScreen(
     onNavigateBack: () -> Unit,
     onNavigateToApplicationDetail: (String) -> Unit = {},
-    viewModel: StudentSubjectApplicationViewModel = hiltViewModel()
+    viewModel: HierarchicalStudentSubjectApplicationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val availableSubjects by viewModel.availableSubjects.collectAsState()
+    val courses by viewModel.courses.collectAsState()
+    val yearLevels by viewModel.yearLevels.collectAsState()
+    val subjects by viewModel.subjects.collectAsState()
     val myApplications by viewModel.myApplications.collectAsState()
-    val selectedYearLevel by viewModel.selectedYearLevel.collectAsState()
-    val selectedCourse by viewModel.selectedCourse.collectAsState()
+    val selectedCourseId by viewModel.selectedCourseId.collectAsState()
+    val selectedYearLevelId by viewModel.selectedYearLevelId.collectAsState()
     
     var selectedTab by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
-        viewModel.loadAvailableSubjects()
-        viewModel.loadMyApplications()
+        viewModel.loadData()
     }
     
     // Show success snackbar when application is successful
@@ -71,7 +69,7 @@ fun StudentSubjectApplicationScreen(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
             Text(
-                text = "Available Subjects",
+                text = "Apply for Subjects",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
@@ -96,7 +94,7 @@ fun StudentSubjectApplicationScreen(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Available (${availableSubjects.size})") }
+                text = { Text("Browse Subjects") }
             )
             Tab(
                 selected = selectedTab == 1,
@@ -105,7 +103,7 @@ fun StudentSubjectApplicationScreen(
                     // Force refresh applications when switching to Applied tab
                     viewModel.loadMyApplications()
                 },
-                text = { Text("Applied (${myApplications.size})") }
+                text = { Text("My Applications (${myApplications.size})") }
             )
         }
 
@@ -122,51 +120,23 @@ fun StudentSubjectApplicationScreen(
         } else {
             when (selectedTab) {
                 0 -> {
-                    // Available Subjects Tab
-                    if (availableSubjects.isEmpty()) {
-                        // Empty State
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    Icons.Default.School,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "No subjects available",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "No subjects match your current filters or year level.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                    // Browse Subjects Tab
+                    HierarchicalSubjectSelector(
+                        courses = courses,
+                        yearLevels = yearLevels,
+                        subjects = subjects,
+                        selectedCourseId = selectedCourseId,
+                        selectedYearLevelId = selectedYearLevelId,
+                        onCourseSelected = { courseId ->
+                            viewModel.selectCourse(courseId)
+                        },
+                        onYearLevelSelected = { yearLevelId ->
+                            viewModel.selectYearLevel(yearLevelId)
+                        },
+                        onSubjectSelected = { subject ->
+                            viewModel.applyForSubject(subject.id)
                         }
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(availableSubjects) { subject ->
-                                AvailableSubjectCard(
-                                    subject = subject,
-                                    isApplied = myApplications.any { it.subjectId == subject.id },
-                                    onApply = { viewModel.applyForSubject(subject.id) },
-                                    isApplying = uiState.applyingSubjects.contains(subject.id)
-                                )
-                            }
-                        }
-                    }
+                    )
                 }
                 1 -> {
                     // Applied Subjects Tab
@@ -205,26 +175,10 @@ fun StudentSubjectApplicationScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(myApplications) { application ->
-                                // Simple card for old screen compatibility
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp)
-                                    ) {
-                                        Text(
-                                            text = application.subjectName,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "Status: ${application.status.name}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
+                                AppliedSubjectCard(
+                                    application = application,
+                                    onNavigateToDetail = { onNavigateToApplicationDetail(application.id) }
+                                )
                             }
                         }
                     }
@@ -277,56 +231,103 @@ fun StudentSubjectApplicationScreen(
 }
 
 @Composable
-fun AvailableSubjectCard(
-    subject: Subject,
-    isApplied: Boolean,
-    onApply: () -> Unit,
-    isApplying: Boolean
+fun AppliedSubjectCard(
+    application: SubjectApplication,
+    onNavigateToDetail: () -> Unit
 ) {
     Card(
+        onClick = onNavigateToDetail,
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isApplied) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+            containerColor = when (application.status) {
+                ApplicationStatus.PENDING -> MaterialTheme.colorScheme.surfaceVariant
+                ApplicationStatus.APPROVED -> MaterialTheme.colorScheme.primaryContainer
+                ApplicationStatus.REJECTED -> MaterialTheme.colorScheme.errorContainer
+                ApplicationStatus.WITHDRAWN -> MaterialTheme.colorScheme.surfaceVariant
+            }
         )
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = subject.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = subject.code,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = application.subjectName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = application.subjectId, // Using subjectId as code since subjectCode doesn't exist
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                // Status Badge
+                Surface(
+                    color = when (application.status) {
+                        ApplicationStatus.PENDING -> MaterialTheme.colorScheme.primary
+                        ApplicationStatus.APPROVED -> MaterialTheme.colorScheme.primary
+                        ApplicationStatus.REJECTED -> MaterialTheme.colorScheme.error
+                        ApplicationStatus.WITHDRAWN -> MaterialTheme.colorScheme.secondary
+                    },
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        text = application.status.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = when (application.status) {
+                            ApplicationStatus.PENDING -> MaterialTheme.colorScheme.onPrimary
+                            ApplicationStatus.APPROVED -> MaterialTheme.colorScheme.onPrimary
+                            ApplicationStatus.REJECTED -> MaterialTheme.colorScheme.onError
+                            ApplicationStatus.WITHDRAWN -> MaterialTheme.colorScheme.onSecondary
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            
             Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Year: ${application.yearLevelName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Course: ${application.courseName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Text(
-                text = subject.description,
+                text = "Applied: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(application.appliedDate))}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = onApply,
-                enabled = !isApplied && !isApplying,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isApplying) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Applying...")
-                } else if (isApplied) {
-                    Text("Already Applied")
-                } else {
-                    Text("Apply for Subject")
-                }
+            
+            if (application.notes != null && application.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Notes: ${application.notes}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

@@ -35,6 +35,7 @@ fun AddSubjectScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(courseId, yearLevelId) {
+        println("DEBUG: AddSubjectScreen - Received courseId: '$courseId', yearLevelId: '$yearLevelId'")
         if (courseId.isNotEmpty()) {
             viewModel.setCourseId(courseId)
         }

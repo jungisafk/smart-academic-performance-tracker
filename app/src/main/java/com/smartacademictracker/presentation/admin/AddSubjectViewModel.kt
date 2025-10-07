@@ -22,10 +22,12 @@ class AddSubjectViewModel @Inject constructor(
     private var _yearLevelId: String = ""
     
     fun setCourseId(courseId: String) {
+        println("DEBUG: AddSubjectViewModel - Setting courseId: '$courseId'")
         _courseId = courseId
     }
     
     fun setYearLevelId(yearLevelId: String) {
+        println("DEBUG: AddSubjectViewModel - Setting yearLevelId: '$yearLevelId'")
         _yearLevelId = yearLevelId
     }
 
@@ -39,6 +41,8 @@ class AddSubjectViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            println("DEBUG: AddSubjectViewModel - Adding subject with courseId: '$_courseId', yearLevelId: '$_yearLevelId'")
             
             try {
                 val result = subjectRepository.addSubject(

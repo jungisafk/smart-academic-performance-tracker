@@ -62,6 +62,19 @@ class GradeRepository @Inject constructor(
                 newValue = createdGrade.score
             )
             
+            // Recompute student's aggregate for this subject after grade creation
+            try {
+                createOrUpdateStudentGradeAggregate(
+                    studentId = createdGrade.studentId,
+                    subjectId = createdGrade.subjectId,
+                    studentName = createdGrade.studentName,
+                    subjectName = createdGrade.subjectName,
+                    teacherId = createdGrade.teacherId,
+                    semester = createdGrade.semester,
+                    academicYear = createdGrade.academicYear
+                )
+            } catch (_: Exception) { /* no-op */ }
+
             Result.success(createdGrade)
         } catch (e: Exception) {
             Result.failure(e)
@@ -90,6 +103,19 @@ class GradeRepository @Inject constructor(
                 newLetterGrade = updatedGrade.letterGrade
             )
             
+            // Recompute student's aggregate for this subject after grade update
+            try {
+                createOrUpdateStudentGradeAggregate(
+                    studentId = updatedGrade.studentId,
+                    subjectId = updatedGrade.subjectId,
+                    studentName = updatedGrade.studentName,
+                    subjectName = updatedGrade.subjectName,
+                    teacherId = updatedGrade.teacherId,
+                    semester = updatedGrade.semester,
+                    academicYear = updatedGrade.academicYear
+                )
+            } catch (_: Exception) { /* no-op */ }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

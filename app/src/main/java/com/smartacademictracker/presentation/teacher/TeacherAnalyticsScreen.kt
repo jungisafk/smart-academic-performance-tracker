@@ -92,14 +92,42 @@ fun TeacherAnalyticsScreen(
                 }
                 
                 // Subject Performance Overview
-                items(classPerformance) { subjectPerformance ->
-                    SubjectPerformanceOverviewCard(
-                        subjectName = subjectPerformance.subjectName,
-                        totalStudents = subjectPerformance.totalStudents,
-                        averageGrade = subjectPerformance.averageGrade,
-                        passingRate = subjectPerformance.passingRate,
-                        gradeDistribution = subjectPerformance.gradeDistribution
-                    )
+                if (classPerformance.isNotEmpty()) {
+                    items(classPerformance) { subjectPerformance ->
+                        SubjectPerformanceOverviewCard(
+                            subjectName = subjectPerformance.subjectName,
+                            totalStudents = subjectPerformance.totalStudents,
+                            averageGrade = subjectPerformance.averageGrade,
+                            passingRate = subjectPerformance.passingRate,
+                            gradeDistribution = subjectPerformance.gradeDistribution
+                        )
+                    }
+                } else {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "No Performance Data Available",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Start inputting grades to see analytics",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 // Class Performance Comparison Chart

@@ -104,4 +104,24 @@ class SubjectApplicationRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun getApplicationsForTeacherSubjects(subjectIds: List<String>): Result<List<SubjectApplication>> {
+        return try {
+            if (subjectIds.isEmpty()) return Result.success(emptyList())
+
+            val applications = mutableListOf<SubjectApplication>()
+            val batches = subjectIds.chunked(10)
+            for (batch in batches) {
+                val snapshot = applicationsCollection
+                    .whereIn("subjectId", batch)
+                    .get()
+                    .await()
+                applications.addAll(snapshot.toObjects(SubjectApplication::class.java))
+            }
+            val sorted = applications.sortedByDescending { it.appliedDate }
+            Result.success(sorted)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

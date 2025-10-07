@@ -15,7 +15,6 @@ import com.smartacademictracker.presentation.teacher.TeacherDashboardScreen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
-    onNavigateToSubjects: () -> Unit = {},
     onNavigateToApplications: () -> Unit = {},
     onNavigateToHierarchicalAcademicManagement: () -> Unit = {},
     onNavigateToUsers: () -> Unit = {},
@@ -106,16 +105,16 @@ fun AdminDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = onNavigateToSubjects,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Manage Subjects")
-                            }
-                            Button(
                                 onClick = onNavigateToApplications,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Applications")
+                            }
+                            Button(
+                                onClick = onNavigateToHierarchicalAcademicManagement,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Academic Structure")
                             }
                         }
                         

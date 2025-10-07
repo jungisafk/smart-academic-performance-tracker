@@ -27,7 +27,6 @@ import com.smartacademictracker.presentation.teacher.TeacherGradeInputScreen
 import com.smartacademictracker.presentation.admin.AddAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.AdminDashboardScreen
-import com.smartacademictracker.presentation.admin.AdminSubjectsScreen
 import com.smartacademictracker.presentation.admin.AdminApplicationsScreen
 import com.smartacademictracker.presentation.admin.HierarchicalAcademicManagementScreen
 import com.smartacademictracker.presentation.admin.AddSubjectScreen
@@ -41,7 +40,9 @@ import com.smartacademictracker.presentation.student.StudentApplicationDetailScr
 import com.smartacademictracker.presentation.student.StudentGradeHistoryScreen
 import com.smartacademictracker.presentation.student.StudentGradeComparisonScreen
 import com.smartacademictracker.presentation.student.StudentStudyProgressScreen
+import com.smartacademictracker.presentation.student.HierarchicalStudentSubjectApplicationScreen
 import com.smartacademictracker.presentation.teacher.TeacherAnalyticsScreen
+import com.smartacademictracker.presentation.teacher.HierarchicalTeacherSubjectApplicationScreen
 import com.smartacademictracker.presentation.profile.ProfileScreen
 
 @Composable
@@ -183,7 +184,7 @@ fun SmartAcademicTrackerNavigation(
         }
         
         composable(Screen.StudentSubjectApplication.route) {
-            StudentSubjectApplicationScreen(
+            HierarchicalStudentSubjectApplicationScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
@@ -301,7 +302,7 @@ fun SmartAcademicTrackerNavigation(
         }
         
         composable(Screen.TeacherApplications.route) {
-            TeacherApplicationsScreen(
+            HierarchicalTeacherSubjectApplicationScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }
@@ -337,9 +338,6 @@ fun SmartAcademicTrackerNavigation(
         // Admin Screens
         composable(Screen.AdminDashboard.route) {
             AdminDashboardScreen(
-                onNavigateToSubjects = {
-                    navController.navigate(Screen.AdminSubjects.route)
-                },
                 onNavigateToApplications = {
                     navController.navigate(Screen.AdminApplications.route)
                 },
@@ -361,19 +359,6 @@ fun SmartAcademicTrackerNavigation(
             )
         }
         
-        composable(Screen.AdminSubjects.route) {
-            AdminSubjectsScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onNavigateToAddSubject = {
-                    navController.navigate(Screen.AddSubject.route)
-                },
-                onNavigateToEditSubject = { subjectId ->
-                    // TODO: Implement edit subject navigation
-                }
-            )
-        }
         
         composable(Screen.AdminApplications.route) {
             AdminApplicationsScreen(
@@ -396,7 +381,9 @@ fun SmartAcademicTrackerNavigation(
                     navController.navigate("add_year_level?courseId=$courseId")
                 },
                 onNavigateToAddSubject = { courseId, yearLevelId ->
-                    navController.navigate("${Screen.AddSubject.route}?courseId=$courseId&yearLevelId=$yearLevelId")
+                    val route = Screen.AddSubject.createRoute(courseId, yearLevelId)
+                    println("DEBUG: SmartAcademicTrackerNavigation - Navigating to AddSubject with route: '$route'")
+                    navController.navigate(route)
                 },
                 onNavigateToEditCourse = { courseId ->
                     // TODO: Implement edit course navigation

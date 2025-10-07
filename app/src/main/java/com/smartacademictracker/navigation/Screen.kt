@@ -46,14 +46,16 @@ sealed class Screen(val route: String) {
     
     // Admin Screens
     object AdminDashboard : Screen("admin_dashboard")
-    object AdminSubjects : Screen("admin_subjects")
     object AdminApplications : Screen("admin_applications")
     object AdminCourseManagement : Screen("admin_course_management")
     object AdminYearLevelManagement : Screen("admin_year_level_management")
     object HierarchicalAcademicManagement : Screen("hierarchical_academic_management")
     object AdminGradeMonitoring : Screen("admin_grade_monitoring")
     object AdminAcademicPeriods : Screen("admin_academic_periods")
-    object AddSubject : Screen("add_subject")
+    object AddSubject : Screen("add_subject?courseId={courseId}&yearLevelId={yearLevelId}") {
+        fun createRoute(courseId: String, yearLevelId: String) =
+            "add_subject?courseId=$courseId&yearLevelId=$yearLevelId"
+    }
     object AddCourse : Screen("add_course")
     object AddYearLevel : Screen("add_year_level?courseId={courseId}") {
         fun createRoute(courseId: String) = "add_year_level?courseId=$courseId"
