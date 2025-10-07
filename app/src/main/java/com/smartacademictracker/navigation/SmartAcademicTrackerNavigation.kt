@@ -278,6 +278,13 @@ fun SmartAcademicTrackerNavigation(
                 },
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
+                },
+                onNavigateToGradeInput = {
+                    // Navigate to subjects first, then user can select a subject for grade input
+                    navController.navigate(Screen.TeacherSubjects.route)
+                },
+                onNavigateToAnalytics = {
+                    navController.navigate(Screen.TeacherAnalytics.route)
                 }
             )
         }

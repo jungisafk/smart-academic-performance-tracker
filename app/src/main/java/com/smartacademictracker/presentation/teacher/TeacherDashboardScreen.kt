@@ -20,6 +20,8 @@ fun TeacherDashboardScreen(
     onNavigateToApplications: () -> Unit,
     onNavigateToStudentApplications: () -> Unit,
     onNavigateToProfile: () -> Unit,
+    onNavigateToGradeInput: () -> Unit,
+    onNavigateToAnalytics: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
     dashboardViewModel: TeacherDashboardViewModel = hiltViewModel()
 ) {
@@ -103,7 +105,7 @@ fun TeacherDashboardScreen(
                     QuickActionCard(
                         title = "Input Grades",
                         icon = Icons.Default.Edit,
-                        onClick = { /* TODO: Navigate to grade input */ },
+                        onClick = onNavigateToGradeInput,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -138,7 +140,7 @@ fun TeacherDashboardScreen(
                     QuickActionCard(
                         title = "Analytics",
                         icon = Icons.Default.Info,
-                        onClick = { /* TODO: Navigate to analytics */ },
+                        onClick = onNavigateToAnalytics,
                         modifier = Modifier.weight(1f)
                     )
                     
