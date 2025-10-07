@@ -19,6 +19,9 @@ local.properties
 google-services.json
 firebase-debug.log
 firebase-debug.*.log
+firestore.rules
+firestore.indexes.json
+google-services.json.template
 
 # Personal/Sensitive Information
 *.keystore
@@ -28,6 +31,15 @@ secrets.properties
 .env
 .env.local
 .env.production
+
+# Personal Documentation
+*_TODO.md
+*_SUMMARY.md
+*_STATUS.md
+*_EXPLANATION.md
+*_FIX.md
+*_SETUP.md
+firebase-setup-instructions.md
 
 # Logs
 *.log
@@ -50,6 +62,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.kotlin/
 *.swp
 *.swo
 
