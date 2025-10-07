@@ -24,6 +24,8 @@ import com.smartacademictracker.presentation.teacher.TeacherSubjectsScreen
 import com.smartacademictracker.presentation.teacher.TeacherApplicationsScreen
 import com.smartacademictracker.presentation.teacher.TeacherStudentApplicationsScreen
 import com.smartacademictracker.presentation.teacher.TeacherGradeInputScreen
+import com.smartacademictracker.presentation.admin.AddAcademicPeriodScreen
+import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.AdminDashboardScreen
 import com.smartacademictracker.presentation.admin.AdminSubjectsScreen
 import com.smartacademictracker.presentation.admin.AdminApplicationsScreen
@@ -35,6 +37,10 @@ import com.smartacademictracker.presentation.admin.ManageUsersScreen
 import com.smartacademictracker.presentation.admin.AdminGradeMonitoringScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.student.StudentAnalyticsScreen
+import com.smartacademictracker.presentation.student.StudentApplicationDetailScreen
+import com.smartacademictracker.presentation.student.StudentGradeHistoryScreen
+import com.smartacademictracker.presentation.student.StudentGradeComparisonScreen
+import com.smartacademictracker.presentation.student.StudentStudyProgressScreen
 import com.smartacademictracker.presentation.teacher.TeacherAnalyticsScreen
 import com.smartacademictracker.presentation.profile.ProfileScreen
 
@@ -136,13 +142,22 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToPerformanceTracking = {
                     navController.navigate(Screen.StudentPerformanceTracking.route)
                 },
+                onNavigateToGradeHistory = {
+                    navController.navigate(Screen.StudentGradeHistory.route)
+                },
+                onNavigateToGradeComparison = {
+                    navController.navigate(Screen.StudentGradeComparison.route)
+                },
+                onNavigateToStudyProgress = {
+                    navController.navigate(Screen.StudentStudyProgress.route)
+                },
                 onSignOut = {
                     authViewModel.signOut()
                     navController.navigate(Screen.SignIn.route) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
-            )
+                )
         }
         
         composable(Screen.StudentGrades.route) {
@@ -173,10 +188,45 @@ fun SmartAcademicTrackerNavigation(
                     navController.popBackStack()
                 },
                 onNavigateToApplicationDetail = { applicationId ->
-                    // TODO: Implement application detail navigation
+                    navController.navigate(Screen.StudentApplicationDetail.createRoute(applicationId))
                 }
             )
         }
+        
+        composable(Screen.StudentApplicationDetail.route) { backStackEntry ->
+            val applicationId = backStackEntry.arguments?.getString("applicationId") ?: ""
+            StudentApplicationDetailScreen(
+                applicationId = applicationId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.StudentGradeHistory.route) {
+            StudentGradeHistoryScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.StudentGradeComparison.route) {
+            StudentGradeComparisonScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.StudentStudyProgress.route) {
+            StudentStudyProgressScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
         
         composable(Screen.StudentProfile.route) {
             StudentProfileScreen(
@@ -336,7 +386,7 @@ fun SmartAcademicTrackerNavigation(
                     navController.navigate(Screen.AddCourse.route)
                 },
                 onNavigateToAddYearLevel = { courseId ->
-                    navController.navigate("${Screen.AddYearLevel.route}?courseId=$courseId")
+                    navController.navigate("add_year_level?courseId=$courseId")
                 },
                 onNavigateToAddSubject = { courseId, yearLevelId ->
                     navController.navigate("${Screen.AddSubject.route}?courseId=$courseId&yearLevelId=$yearLevelId")
@@ -381,8 +431,14 @@ fun SmartAcademicTrackerNavigation(
         }
         
         composable(Screen.AddAcademicPeriod.route) {
-            // TODO: Implement AddAcademicPeriodScreen
-            Text("Add Academic Period Screen - Coming Soon")
+            AddAcademicPeriodScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onPeriodAdded = {
+                    navController.popBackStack()
+                }
+            )
         }
         
         composable(Screen.AddSubject.route) { backStackEntry ->
@@ -420,6 +476,7 @@ fun SmartAcademicTrackerNavigation(
                     navController.popBackStack()
                 },
                 onYearLevelAdded = {
+                    // Refresh the hierarchical management screen when year level is added
                     navController.popBackStack()
                 }
             )

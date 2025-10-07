@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,25 +70,79 @@ fun AddYearLevelScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Year Level Name
-            OutlinedTextField(
-                value = uiState.yearLevelName,
-                onValueChange = viewModel::setYearLevelName,
-                label = { Text("Year Level Name") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = uiState.yearLevelNameError != null,
-                supportingText = uiState.yearLevelNameError?.let { { Text(it) } }
-            )
+            // Year Level Dropdown (1-4)
+            var expandedYearLevel by remember { mutableStateOf(false) }
+            val yearLevelOptions = listOf("1st Year", "2nd Year", "3rd Year", "4th Year")
+            
+            ExposedDropdownMenuBox(
+                expanded = expandedYearLevel,
+                onExpandedChange = { expandedYearLevel = !expandedYearLevel },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = uiState.yearLevelName,
+                    onValueChange = { },
+                    readOnly = true,
+                    label = { Text("Year Level") },
+                    trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    isError = uiState.yearLevelNameError != null,
+                    supportingText = uiState.yearLevelNameError?.let { { Text(it) } }
+                )
+                ExposedDropdownMenu(
+                    expanded = expandedYearLevel,
+                    onDismissRequest = { expandedYearLevel = false }
+                ) {
+                    yearLevelOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.setYearLevelName(option)
+                                expandedYearLevel = false
+                            }
+                        )
+                    }
+                }
+            }
 
-            // Level Number
-            OutlinedTextField(
-                value = uiState.level.toString(),
-                onValueChange = { viewModel.setLevel(it.toIntOrNull() ?: 1) },
-                label = { Text("Level Number") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = uiState.levelError != null,
-                supportingText = uiState.levelError?.let { { Text(it) } }
-            )
+            // Level Number Dropdown (1-4)
+            var expandedLevel by remember { mutableStateOf(false) }
+            val levelOptions = listOf(1, 2, 3, 4)
+            
+            ExposedDropdownMenuBox(
+                expanded = expandedLevel,
+                onExpandedChange = { expandedLevel = !expandedLevel },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = uiState.level.toString(),
+                    onValueChange = { },
+                    readOnly = true,
+                    label = { Text("Level Number") },
+                    trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    isError = uiState.levelError != null,
+                    supportingText = uiState.levelError?.let { { Text(it) } }
+                )
+                ExposedDropdownMenu(
+                    expanded = expandedLevel,
+                    onDismissRequest = { expandedLevel = false }
+                ) {
+                    levelOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text("$option") },
+                            onClick = {
+                                viewModel.setLevel(option)
+                                expandedLevel = false
+                            }
+                        )
+                    }
+                }
+            }
 
             // Description
             OutlinedTextField(

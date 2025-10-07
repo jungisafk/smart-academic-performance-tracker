@@ -26,6 +26,9 @@ fun StudentDashboardScreen(
     onNavigateToProfile: () -> Unit,
     onNavigateToAnalytics: () -> Unit,
     onNavigateToPerformanceTracking: () -> Unit,
+    onNavigateToGradeHistory: () -> Unit,
+    onNavigateToGradeComparison: () -> Unit,
+    onNavigateToStudyProgress: () -> Unit,
     onSignOut: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
     dashboardViewModel: StudentDashboardViewModel = hiltViewModel()
@@ -153,6 +156,56 @@ fun StudentDashboardScreen(
                         title = "Profile",
                         icon = Icons.Default.Person,
                         onClick = onNavigateToProfile,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                Text(
+                    text = "Advanced Features",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickActionCard(
+                        title = "Grade History",
+                        icon = Icons.Default.History,
+                        onClick = onNavigateToGradeHistory,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    QuickActionCard(
+                        title = "Compare Grades",
+                        icon = Icons.Default.Compare,
+                        onClick = onNavigateToGradeComparison,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickActionCard(
+                        title = "Study Progress",
+                        icon = Icons.Default.TrackChanges,
+                        onClick = onNavigateToStudyProgress,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    QuickActionCard(
+                        title = "Study Tips",
+                        icon = Icons.Default.Lightbulb,
+                        onClick = { /* TODO: Implement study tips */ },
                         modifier = Modifier.weight(1f)
                     )
                 }

@@ -141,3 +141,99 @@
 - [ ] **IMPLEMENT Caching Strategy**: Local data caching for performance
 - [ ] **ADD Background Processing**: Async operations for heavy tasks
 - [ ] **OPTIMIZE UI Rendering**: Smooth animations and transitions
+
+## 🔄 FLOWCHART-BASED MISSING FUNCTIONALITIES
+
+### Authentication & Session Management
+- [ ] **IMPLEMENT Session Timeout**: Automatic logout after inactivity
+- [ ] **ADD Remember Me Functionality**: Persistent login option
+- [ ] **CREATE Password Reset Flow**: Email-based password recovery
+- [ ] **IMPLEMENT Account Lockout**: Security after failed login attempts
+
+### Student Features (Missing from Flowchart)
+- [x] **CREATE Subject Application Detail View**: Detailed application status tracking
+- [x] **IMPLEMENT Grade History Timeline**: Historical grade progression view
+- [x] **ADD Grade Comparison Tools**: Compare performance across subjects
+- [x] **CREATE Study Progress Tracking**: Learning milestone tracking
+
+### Teacher Features (Missing from Flowchart)
+- [x] **CREATE Submission Tracking Interface**: Monitor student assignment submissions
+- [x] **IMPLEMENT Grade Comment System**: Add feedback to individual grades
+- [x] **ADD Grade Export Functionality**: Export grades to Excel/PDF
+- [x] **CREATE Class Attendance Integration**: Link attendance with grade input
+- [x] **IMPLEMENT Grade Curve Tools**: Statistical grade adjustment tools
+
+### Admin Features (Missing from Flowchart)
+- [x] **IMPLEMENT Dropdown Choices for Admin Forms**: Year level (1-4), semester (First/Second/Summer), course duration (2-6 years)
+- [x] **FIX Semester Enum Constant Error**: Fixed "No enum constant" error by adding string-to-enum conversion
+- [x] **FIX Corrupted Subjects Database Error**: Added error handling for corrupted semester data and automatic cleanup
+- [x] **FIX Subjects Not Showing in Admin Manage**: Fixed cleanup execution timing and added to all ViewModels
+- [x] **IMPLEMENT Academic Periods Management**: Complete academic period creation, management, and activation system
+- [x] **FIX Academic Periods Permission Error**: Updated Firestore security rules and enhanced error handling
+- [ ] **CREATE System Health Monitoring**: Real-time system status dashboard
+- [ ] **IMPLEMENT Data Backup Management**: Automated backup scheduling
+- [ ] **ADD System Configuration Panel**: App-wide settings management
+- [ ] **CREATE User Activity Logs**: Detailed user action tracking
+- [ ] **IMPLEMENT System Maintenance Tools**: Database cleanup and optimization
+
+### Notification System (Critical Missing)
+- [ ] **IMPLEMENT Push Notifications**: Firebase Cloud Messaging integration
+- [ ] **CREATE Email Notification System**: SMTP integration for email alerts
+- [ ] **ADD In-App Notification Center**: Centralized notification management
+- [ ] **IMPLEMENT Notification Preferences**: User-customizable notification settings
+- [ ] **CREATE Notification Templates**: Predefined message templates for different events
+- [ ] **ADD Real-time Notification Delivery**: Instant notification system
+
+### Advanced Analytics (Missing from Flowchart)
+- [ ] **IMPLEMENT Trend Analysis Engine**: Advanced statistical analysis
+- [ ] **ADD Comparative Performance Metrics**: Cross-class and cross-subject comparisons
+- [ ] **CREATE Performance Benchmarking**: Industry-standard performance metrics
+
+### Data Processing & Validation (Missing)
+- [ ] **CREATE Advanced Data Validation**: Multi-layer validation system
+- [ ] **IMPLEMENT Data Quality Checks**: Automated data integrity verification
+- [ ] **ADD Data Transformation Tools**: Data format conversion utilities
+- [ ] **CREATE Data Migration Tools**: Seamless data transfer between systems
+- [ ] **IMPLEMENT Data Archiving**: Long-term data storage management
+
+### Security & Audit (Enhanced)
+- [ ] **IMPLEMENT Advanced Security Audit**: Comprehensive security monitoring
+- [ ] **CREATE Data Encryption**: End-to-end data encryption
+- [ ] **ADD Security Incident Response**: Automated security threat handling
+- [ ] **IMPLEMENT Compliance Reporting**: Regulatory compliance documentation
+- [ ] **CREATE Security Dashboard**: Real-time security status monitoring
+
+### Integration & API (Missing)
+- [ ] **CREATE REST API Endpoints**: External system integration
+- [ ] **IMPLEMENT Webhook System**: Real-time data synchronization
+- [ ] **ADD Third-party Integrations**: LMS and SIS system connections
+- [ ] **CREATE API Documentation**: Comprehensive API documentation
+- [ ] **IMPLEMENT Rate Limiting**: API usage control and monitoring
+
+### Mobile-Specific Features (Missing)
+- [ ] **IMPLEMENT Biometric Authentication**: Fingerprint/Face ID login
+- [ ] **ADD Offline Mode Indicators**: Clear offline status communication
+- [ ] **CREATE Data Usage Monitoring**: Track mobile data consumption
+- [ ] **IMPLEMENT Battery Optimization**: Efficient background processing
+- [ ] **ADD Accessibility Features**: Screen reader and accessibility support
+
+### Reporting & Export (Missing)
+- [ ] **CREATE PDF Report Generation**: Automated PDF report creation
+- [ ] **IMPLEMENT Excel Export**: Comprehensive Excel export functionality
+- [ ] **ADD Custom Report Builder**: User-defined report creation
+- [ ] **CREATE Scheduled Reports**: Automated report generation and delivery
+- [ ] **IMPLEMENT Report Templates**: Predefined report formats
+
+### Workflow Management (Missing)
+- [ ] **CREATE Approval Workflows**: Multi-step approval processes
+- [ ] **IMPLEMENT Task Assignment**: Automated task distribution
+- [ ] **ADD Deadline Management**: Comprehensive deadline tracking
+- [ ] **CREATE Workflow Automation**: Rule-based process automation
+- [ ] **IMPLEMENT Status Tracking**: Real-time workflow status monitoring
+
+### Advanced User Management (Missing)
+- [ ] **CREATE Bulk User Operations**: Mass user management tools
+- [ ] **IMPLEMENT User Import/Export**: CSV-based user data management
+- [ ] **ADD User Group Management**: Role-based user grouping
+- [ ] **CREATE User Activity Analytics**: Detailed user behavior tracking
+- [ ] **IMPLEMENT User Onboarding**: Automated user setup processes

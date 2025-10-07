@@ -19,8 +19,3 @@ data class TeacherApplication(
     val adminComments: String? = null
 )
 
-enum class ApplicationStatus {
-    PENDING,
-    APPROVED,
-    REJECTED
-}

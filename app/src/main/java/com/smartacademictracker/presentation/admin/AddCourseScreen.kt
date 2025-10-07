@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -88,15 +89,42 @@ fun AddCourseScreen(
                 maxLines = 5
             )
 
-            // Duration
-            OutlinedTextField(
-                value = uiState.duration.toString(),
-                onValueChange = { viewModel.setDuration(it.toIntOrNull() ?: 4) },
-                label = { Text("Duration (Years)") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = uiState.durationError != null,
-                supportingText = uiState.durationError?.let { { Text(it) } }
-            )
+            // Duration Dropdown
+            var expandedDuration by remember { mutableStateOf(false) }
+            val durationOptions = listOf(2, 3, 4, 5, 6)
+            
+            ExposedDropdownMenuBox(
+                expanded = expandedDuration,
+                onExpandedChange = { expandedDuration = !expandedDuration },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = uiState.duration.toString(),
+                    onValueChange = { },
+                    readOnly = true,
+                    label = { Text("Duration (Years)") },
+                    trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    isError = uiState.durationError != null,
+                    supportingText = uiState.durationError?.let { { Text(it) } }
+                )
+                ExposedDropdownMenu(
+                    expanded = expandedDuration,
+                    onDismissRequest = { expandedDuration = false }
+                ) {
+                    durationOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text("$option years") },
+                            onClick = {
+                                viewModel.setDuration(option)
+                                expandedDuration = false
+                            }
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

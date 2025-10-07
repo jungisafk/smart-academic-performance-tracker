@@ -2,6 +2,8 @@ package com.smartacademictracker.presentation.admin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartacademictracker.data.model.AcademicPeriod
+import com.smartacademictracker.data.model.AcademicPeriodSummary
 import com.smartacademictracker.data.repository.AcademicPeriodRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,126 +20,132 @@ class AdminAcademicPeriodViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AdminAcademicPeriodUiState())
     val uiState: StateFlow<AdminAcademicPeriodUiState> = _uiState.asStateFlow()
 
-    private val _academicPeriods = MutableStateFlow<List<com.smartacademictracker.data.model.AcademicPeriod>>(emptyList())
-    val academicPeriods: StateFlow<List<com.smartacademictracker.data.model.AcademicPeriod>> = _academicPeriods.asStateFlow()
+    private val _academicPeriods = MutableStateFlow<List<AcademicPeriod>>(emptyList())
+    val academicPeriods: StateFlow<List<AcademicPeriod>> = _academicPeriods.asStateFlow()
+
+    private val _activePeriod = MutableStateFlow<AcademicPeriod?>(null)
+    val activePeriod: StateFlow<AcademicPeriod?> = _activePeriod.asStateFlow()
+
+    private val _summary = MutableStateFlow(AcademicPeriodSummary())
+    val summary: StateFlow<AcademicPeriodSummary> = _summary.asStateFlow()
 
     fun loadAcademicPeriods() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
-                val result = academicPeriodRepository.getAllAcademicPeriods()
-                result.onSuccess { periodsList ->
-                    _academicPeriods.value = periodsList
-                    
-                    // Find current period
-                    val currentPeriod = periodsList.find { it.isCurrent }
+                // Load all academic periods
+                academicPeriodRepository.getAllAcademicPeriods().onSuccess { periods ->
+                    _academicPeriods.value = periods
+                    println("DEBUG: AdminAcademicPeriodViewModel - Loaded ${periods.size} academic periods")
+                }.onFailure { exception ->
+                    println("DEBUG: AdminAcademicPeriodViewModel - Error loading academic periods: ${exception.message}")
+                    if (exception.message?.contains("PERMISSION_DENIED") == true) {
+                        _uiState.value = _uiState.value.copy(
+                            error = "Permission denied. Please check Firestore security rules for academic_periods collection."
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            error = "Failed to load academic periods: ${exception.message}"
+                        )
+                    }
+                }
+
+                // Load active period
+                academicPeriodRepository.getActiveAcademicPeriod().onSuccess { activePeriod ->
+                    _activePeriod.value = activePeriod
+                    println("DEBUG: AdminAcademicPeriodViewModel - Active period: ${activePeriod?.name ?: "None"}")
+                }.onFailure { exception ->
+                    println("DEBUG: AdminAcademicPeriodViewModel - Error loading active period: ${exception.message}")
+                }
+
+                // Load summary
+                academicPeriodRepository.getAcademicPeriodSummary().onSuccess { summary ->
+                    _summary.value = summary
+                    println("DEBUG: AdminAcademicPeriodViewModel - Summary: ${summary.totalPeriods} periods, active: ${summary.activePeriod?.name}")
+                }.onFailure { exception ->
+                    println("DEBUG: AdminAcademicPeriodViewModel - Error loading summary: ${exception.message}")
+                }
+
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load data: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun setActivePeriod(periodId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                academicPeriodRepository.setActivePeriod(periodId).onSuccess {
+                    // Reload data after setting active period
+                    loadAcademicPeriods()
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        currentPeriod = currentPeriod?.name,
-                        currentPeriodId = currentPeriod?.id
+                        successMessage = "Academic period activated successfully"
                     )
-                    
-                    println("DEBUG: AdminAcademicPeriodViewModel - Loaded ${periodsList.size} academic periods")
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = exception.message ?: "Failed to load academic periods"
+                        error = "Failed to activate period: ${exception.message}"
                     )
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Failed to load academic periods"
+                    error = "Failed to activate period: ${e.message}"
                 )
             }
         }
     }
 
-    fun setCurrentPeriod(periodId: String) {
+    fun deleteAcademicPeriod(periodId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                processingPeriods = _uiState.value.processingPeriods + periodId,
-                error = null
-            )
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
-                val result = academicPeriodRepository.setCurrentPeriod(periodId)
-                result.onSuccess {
-                    // Reload periods to reflect changes
+                academicPeriodRepository.deleteAcademicPeriod(periodId).onSuccess {
+                    // Reload data after deletion
                     loadAcademicPeriods()
                     _uiState.value = _uiState.value.copy(
-                        processingPeriods = _uiState.value.processingPeriods - periodId
+                        isLoading = false,
+                        successMessage = "Academic period deleted successfully"
                     )
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
-                        processingPeriods = _uiState.value.processingPeriods - periodId,
-                        error = exception.message ?: "Failed to set current period"
+                        isLoading = false,
+                        error = "Failed to delete period: ${exception.message}"
                     )
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    processingPeriods = _uiState.value.processingPeriods - periodId,
-                    error = e.message ?: "Failed to set current period"
+                    isLoading = false,
+                    error = "Failed to delete period: ${e.message}"
                 )
             }
         }
     }
 
-    fun createAcademicPeriod(
-        name: String,
-        semester: String,
-        academicYear: String,
-        startDate: Long,
-        endDate: Long
-    ) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isCreating = true,
-                error = null
-            )
-            
-            try {
-                val result = academicPeriodRepository.createAcademicPeriod(
-                    name = name,
-                    semester = semester,
-                    academicYear = academicYear,
-                    startDate = startDate,
-                    endDate = endDate
-                )
-                result.onSuccess {
-                    // Reload periods to reflect changes
-                    loadAcademicPeriods()
-                    _uiState.value = _uiState.value.copy(isCreating = false)
-                }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isCreating = false,
-                        error = exception.message ?: "Failed to create academic period"
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isCreating = false,
-                    error = e.message ?: "Failed to create academic period"
-                )
-            }
-        }
+    fun refreshData() {
+        loadAcademicPeriods()
     }
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    fun refreshAcademicPeriods() {
-        loadAcademicPeriods()
+    fun clearSuccessMessage() {
+        _uiState.value = _uiState.value.copy(successMessage = null)
     }
 }
 
 data class AdminAcademicPeriodUiState(
     val isLoading: Boolean = false,
-    val isCreating: Boolean = false,
     val error: String? = null,
-    val currentPeriod: String? = null,
-    val currentPeriodId: String? = null,
-    val processingPeriods: Set<String> = emptySet()
+    val successMessage: String? = null
 )

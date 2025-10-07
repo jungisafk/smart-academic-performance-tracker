@@ -41,6 +41,14 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
+                // First, clean up corrupted subjects
+                println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaning up corrupted subjects...")
+                subjectRepository.cleanupCorruptedSubjects().onSuccess { corruptedCount ->
+                    if (corruptedCount > 0) {
+                        println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaned up $corruptedCount corrupted subjects")
+                    }
+                }
+                
                 // Load courses
                 courseRepository.getAllCourses().onSuccess { coursesList ->
                     _courses.value = coursesList
@@ -84,6 +92,14 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
     
     fun refreshData() {
         viewModelScope.launch {
+            // First, clean up corrupted subjects
+            println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaning up corrupted subjects in refresh...")
+            subjectRepository.cleanupCorruptedSubjects().onSuccess { corruptedCount ->
+                if (corruptedCount > 0) {
+                    println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaned up $corruptedCount corrupted subjects")
+                }
+            }
+            
             // Load courses
             courseRepository.getAllCourses().onSuccess { coursesList ->
                 _courses.value = coursesList
@@ -101,6 +117,30 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
             // Load subjects
             subjectRepository.getAllSubjects().onSuccess { subjectsList ->
                 _subjects.value = subjectsList
+            }
+        }
+    }
+    
+    fun cleanupOrphanedYearLevels() {
+        viewModelScope.launch {
+            try {
+                // Get all year levels with empty courseId
+                val orphanedYearLevels = _yearLevels.value.filter { it.courseId.isEmpty() }
+                
+                if (orphanedYearLevels.isNotEmpty()) {
+                    println("DEBUG: HierarchicalAcademicManagementViewModel - Found ${orphanedYearLevels.size} orphaned year levels, cleaning up...")
+                    
+                    // Delete orphaned year levels
+                    for (yearLevel in orphanedYearLevels) {
+                        yearLevelRepository.deleteYearLevel(yearLevel.id)
+                        println("DEBUG: HierarchicalAcademicManagementViewModel - Deleted orphaned year level: ${yearLevel.name}")
+                    }
+                    
+                    // Refresh data after cleanup
+                    refreshData()
+                }
+            } catch (e: Exception) {
+                println("DEBUG: HierarchicalAcademicManagementViewModel - Error cleaning up orphaned year levels: ${e.message}")
             }
         }
     }

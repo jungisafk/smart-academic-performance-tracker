@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -139,16 +140,43 @@ fun AddSubjectScreen(
                     singleLine = true
                 )
 
-                // Semester
-                OutlinedTextField(
-                    value = semester,
-                    onValueChange = { semester = it },
-                    label = { Text("Semester *") },
+                // Semester Dropdown
+                var expandedSemester by remember { mutableStateOf(false) }
+                val semesterOptions = listOf("1st Semester", "2nd Semester", "Summer Class")
+                
+                ExposedDropdownMenuBox(
+                    expanded = expandedSemester,
+                    onExpandedChange = { expandedSemester = !expandedSemester },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    singleLine = true
-                )
+                        .padding(bottom = 16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = semester,
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Semester *") },
+                        trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        singleLine = true
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedSemester,
+                        onDismissRequest = { expandedSemester = false }
+                    ) {
+                        semesterOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    semester = option
+                                    expandedSemester = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 // Academic Year
                 OutlinedTextField(

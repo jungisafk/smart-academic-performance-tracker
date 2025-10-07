@@ -15,6 +15,12 @@ sealed class Screen(val route: String) {
     object StudentSubjectDetail : Screen("student_subject_detail/{subjectId}") {
         fun createRoute(subjectId: String) = "student_subject_detail/$subjectId"
     }
+    object StudentApplicationDetail : Screen("student_application_detail/{applicationId}") {
+        fun createRoute(applicationId: String) = "student_application_detail/$applicationId"
+    }
+    object StudentGradeHistory : Screen("student_grade_history")
+    object StudentGradeComparison : Screen("student_grade_comparison")
+    object StudentStudyProgress : Screen("student_study_progress")
     
     // Teacher Screens
     object TeacherDashboard : Screen("teacher_dashboard")
@@ -49,7 +55,9 @@ sealed class Screen(val route: String) {
     object AdminAcademicPeriods : Screen("admin_academic_periods")
     object AddSubject : Screen("add_subject")
     object AddCourse : Screen("add_course")
-    object AddYearLevel : Screen("add_year_level")
+    object AddYearLevel : Screen("add_year_level?courseId={courseId}") {
+        fun createRoute(courseId: String) = "add_year_level?courseId=$courseId"
+    }
     object AddAcademicPeriod : Screen("add_academic_period")
     object ManageUsers : Screen("manage_users")
     

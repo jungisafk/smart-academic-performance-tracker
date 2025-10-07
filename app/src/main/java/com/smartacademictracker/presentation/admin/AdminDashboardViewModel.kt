@@ -76,6 +76,18 @@ class AdminDashboardViewModel @Inject constructor(
             try {
                 // Add timeout to prevent infinite loading
                 withTimeout(10000) { // 10 second timeout
+                    // First, try to clean up corrupted subjects
+                    println("DEBUG: AdminDashboardViewModel - Cleaning up corrupted subjects...")
+                    val cleanupResult = subjectRepository.cleanupCorruptedSubjects()
+                    cleanupResult.onSuccess { corruptedCount ->
+                        if (corruptedCount > 0) {
+                            println("DEBUG: AdminDashboardViewModel - Cleaned up $corruptedCount corrupted subjects")
+                        }
+                    }
+                    
+                    // Wait for cleanup to complete before loading subjects
+                    cleanupResult.getOrNull()
+                    
                     // Load all data in parallel
                     println("DEBUG: AdminDashboardViewModel - Loading subjects...")
                     val subjectsResult = subjectRepository.getAllSubjects()

@@ -59,7 +59,22 @@ class SubjectRepository @Inject constructor(
                 .whereEqualTo("active", true)
                 .get()
                 .await()
-            val subjects = snapshot.toObjects(Subject::class.java)
+            
+            // Handle potential deserialization errors for corrupted data
+            val subjects = mutableListOf<Subject>()
+            for (document in snapshot.documents) {
+                try {
+                    val subject = document.toObject(Subject::class.java)
+                    if (subject != null) {
+                        subjects.add(subject)
+                    }
+                } catch (e: Exception) {
+                    println("DEBUG: SubjectRepository - Skipping corrupted subject ${document.id}: ${e.message}")
+                    // Optionally, you could fix the corrupted data here
+                    // For now, we'll just skip it and continue
+                }
+            }
+            
             Result.success(subjects)
         } catch (e: Exception) {
             Result.failure(e)
@@ -82,7 +97,7 @@ class SubjectRepository @Inject constructor(
                 code = code,
                 description = description,
                 credits = credits,
-                semester = Semester.valueOf(semester),
+                semester = convertStringToSemester(semester),
                 academicYear = academicYear,
                 courseId = courseId,
                 yearLevelId = yearLevelId
@@ -93,6 +108,15 @@ class SubjectRepository @Inject constructor(
             Result.success(createdSubject)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    
+    private fun convertStringToSemester(semesterString: String): Semester {
+        return when (semesterString) {
+            "1st Semester" -> Semester.FIRST_SEMESTER
+            "2nd Semester" -> Semester.SECOND_SEMESTER
+            "Summer Class" -> Semester.SUMMER_CLASS
+            else -> throw IllegalArgumentException("Invalid semester: $semesterString")
         }
     }
 
@@ -159,6 +183,30 @@ class SubjectRepository @Inject constructor(
             )
             subjectsCollection.document(subjectId).update(updates).await()
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun cleanupCorruptedSubjects(): Result<Int> {
+        return try {
+            val snapshot = subjectsCollection
+                .whereEqualTo("active", true)
+                .get()
+                .await()
+            
+            var corruptedCount = 0
+            for (document in snapshot.documents) {
+                try {
+                    document.toObject(Subject::class.java)
+                } catch (e: Exception) {
+                    println("DEBUG: SubjectRepository - Found corrupted subject ${document.id}, deleting...")
+                    subjectsCollection.document(document.id).delete().await()
+                    corruptedCount++
+                }
+            }
+            
+            Result.success(corruptedCount)
         } catch (e: Exception) {
             Result.failure(e)
         }

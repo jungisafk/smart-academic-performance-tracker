@@ -37,7 +37,7 @@ service cloud.firestore {
     
     function isActiveUser() {
       return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE';
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
     }
     
     // Users collection - Role-based access
@@ -181,8 +181,8 @@ service cloud.firestore {
     
     // Academic Periods collection - Admin only
     match /academic_periods/{periodId} {
-      allow read: if isAuthenticated() && isActiveUser();
-      allow create, update, delete: if isAuthenticated() && isActiveUser() && isAdmin();
+      allow read: if isAuthenticated() && (isAdmin() || isActiveUser());
+      allow create, update, delete: if isAuthenticated() && isAdmin();
     }
     
     // Audit Trails collection - Read-only for most users

@@ -35,11 +35,20 @@ fun HierarchicalAcademicManagementScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadAllData()
+        // Clean up orphaned year levels (those with empty courseId)
+        viewModel.cleanupOrphanedYearLevels()
     }
     
     // Refresh data when screen comes back into focus
     LaunchedEffect(Unit) {
         viewModel.refreshData()
+    }
+    
+    // Refresh data when returning from other screens
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.refreshData()
+        }
     }
 
     Column(
