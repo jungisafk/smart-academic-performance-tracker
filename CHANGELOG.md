@@ -3,9 +3,9 @@
 All notable changes to the Smart Academic Performance Tracker project will be documented in this file.
 
 **Author**: Sentillas  
-**Last Updated**: October 22, 2025
+**Last Updated**: October 11, 2025
 
-## [1.1.0] - 2025-10-22
+## [1.1.0] - 2025-10-11
 
 ### 🔒 Security & Privacy Improvements
 - **Fixed Teacher Application Privacy**: Teachers can now only see student applications for subjects they actually teach

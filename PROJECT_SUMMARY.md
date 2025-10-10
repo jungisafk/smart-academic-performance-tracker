@@ -1,7 +1,7 @@
 # Smart Academic Performance Tracker - Project Summary
 
 **Author**: Sentillas  
-**Last Updated**: October 22, 2025  
+**Last Updated**: October 11, 2025  
 **Version**: 1.1.0
 
 ## 🎯 Project Overview
