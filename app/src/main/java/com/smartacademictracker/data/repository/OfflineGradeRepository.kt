@@ -201,13 +201,13 @@ class OfflineGradeRepository @Inject constructor(
     }
     
     /**
-     * Get grades with conflicts - temporarily disabled
+     * Get grades with conflicts
      */
-    // fun getGradesWithConflicts(): Flow<List<Grade>> {
-    //     return offlineGradeDao.getGradesWithConflicts().map { offlineGrades ->
-    //         offlineGrades.map { convertToServerGrade(it) }
-    //     }
-    // }
+    fun getConflictGrades(): Flow<List<Grade>> {
+        return offlineGradeDao.getGradesBySyncStatus(SyncStatus.CONFLICT).map { offlineGrades ->
+            offlineGrades.map { convertToServerGrade(it) }
+        }
+    }
     
     private fun convertToOfflineGrade(grade: Grade, syncStatus: SyncStatus): OfflineGrade {
         return OfflineGrade(

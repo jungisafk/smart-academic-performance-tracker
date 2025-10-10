@@ -4,6 +4,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.smartacademictracker.data.model.AcademicPeriod
 import com.smartacademictracker.data.model.AcademicPeriodOverview
 import com.smartacademictracker.data.model.Semester
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,10 +20,12 @@ class AcademicPeriodRepository @Inject constructor(
             println("DEBUG: AcademicPeriodRepository - Creating academic period: ${academicPeriod.name}")
             println("DEBUG: AcademicPeriodRepository - isActive flag: ${academicPeriod.isActive}")
             
-            // If this period is being set as active, deactivate all other periods
+            // If this period is being set as active, deactivate all other periods first
             if (academicPeriod.isActive) {
                 println("DEBUG: AcademicPeriodRepository - Period is marked as active, deactivating other periods")
                 deactivateAllPeriods()
+                // Small delay to ensure deactivation completes
+                delay(100)
             } else {
                 println("DEBUG: AcademicPeriodRepository - Period is not marked as active, skipping deactivation")
             }
@@ -46,14 +49,20 @@ class AcademicPeriodRepository @Inject constructor(
 
     suspend fun updateAcademicPeriod(academicPeriod: AcademicPeriod): Result<Unit> {
         return try {
-            // If this period is being set as active, deactivate all other periods
+            println("DEBUG: AcademicPeriodRepository - Updating academic period: ${academicPeriod.name}, isActive: ${academicPeriod.isActive}")
+            
+            // If this period is being set as active, deactivate all other periods first
             if (academicPeriod.isActive) {
                 deactivateAllPeriods()
+                // Small delay to ensure deactivation completes
+                kotlinx.coroutines.delay(100)
             }
             
             academicPeriodsCollection.document(academicPeriod.id).set(academicPeriod).await()
+            println("DEBUG: AcademicPeriodRepository - Successfully updated academic period: ${academicPeriod.id}")
             Result.success(Unit)
         } catch (e: Exception) {
+            println("DEBUG: AcademicPeriodRepository - Error updating academic period: ${e.message}")
             Result.failure(e)
         }
     }
@@ -127,14 +136,22 @@ class AcademicPeriodRepository @Inject constructor(
 
     suspend fun setActivePeriod(periodId: String): Result<Unit> {
         return try {
-            // First deactivate all periods
+            println("DEBUG: AcademicPeriodRepository - Setting period $periodId as active")
+            
+            // First deactivate all periods using batch write for atomic operation
             deactivateAllPeriods()
+            
+            // Small delay to ensure deactivation completes
+            delay(100)
             
             // Then activate the selected period
             val updates = mapOf("active" to true)
             academicPeriodsCollection.document(periodId).update(updates).await()
+            
+            println("DEBUG: AcademicPeriodRepository - Successfully set period $periodId as active")
             Result.success(Unit)
         } catch (e: Exception) {
+            println("DEBUG: AcademicPeriodRepository - Error setting active period: ${e.message}")
             Result.failure(e)
         }
     }
@@ -167,22 +184,75 @@ class AcademicPeriodRepository @Inject constructor(
     private suspend fun deactivateAllPeriods() {
         try {
             println("DEBUG: AcademicPeriodRepository - Deactivating all existing active periods")
-            val snapshot = academicPeriodsCollection
-                .whereEqualTo("active", true)
-                .get()
-                .await()
             
-            println("DEBUG: AcademicPeriodRepository - Found ${snapshot.documents.size} active periods to deactivate")
+            // Get ALL periods first (not just active ones) to ensure we catch everything
+            val allPeriodsSnapshot = academicPeriodsCollection.get().await()
             
-            for (document in snapshot.documents) {
-                val updates = mapOf("active" to false)
-                academicPeriodsCollection.document(document.id).update(updates).await()
-                println("DEBUG: AcademicPeriodRepository - Deactivated period: ${document.id}")
+            // Use batch write for atomic operation
+            val batch = firestore.batch()
+            var deactivatedCount = 0
+            
+            for (document in allPeriodsSnapshot.documents) {
+                val data = document.data
+                val isActive = data?.get("active") as? Boolean ?: false
+                
+                if (isActive) {
+                    batch.update(document.reference, "active", false)
+                    deactivatedCount++
+                    println("DEBUG: AcademicPeriodRepository - Marking period ${document.id} for deactivation")
+                }
             }
             
-            println("DEBUG: AcademicPeriodRepository - Successfully deactivated all active periods")
+            if (deactivatedCount > 0) {
+                batch.commit().await()
+                println("DEBUG: AcademicPeriodRepository - Successfully deactivated $deactivatedCount active periods")
+            } else {
+                println("DEBUG: AcademicPeriodRepository - No active periods found to deactivate")
+            }
         } catch (e: Exception) {
             println("DEBUG: AcademicPeriodRepository - Error deactivating periods: ${e.message}")
+            throw e // Re-throw to ensure caller knows if deactivation failed
+        }
+    }
+    
+    /**
+     * Cleanup function to ensure only one active period exists
+     * This can be called to fix any data inconsistencies
+     */
+    suspend fun ensureSingleActivePeriod(): Result<Unit> {
+        return try {
+            println("DEBUG: AcademicPeriodRepository - Ensuring only one active period exists")
+            
+            // Get all periods
+            val allPeriods = getAllAcademicPeriods().getOrNull() ?: emptyList()
+            val activePeriods = allPeriods.filter { it.isActive }
+            
+            if (activePeriods.size > 1) {
+                println("DEBUG: AcademicPeriodRepository - Found ${activePeriods.size} active periods, deactivating all except the most recent")
+                
+                // Sort by creation date, keep the most recent one active
+                val sortedActive = activePeriods.sortedByDescending { it.createdAt }
+                val keepActive = sortedActive.first()
+                
+                // Deactivate all
+                deactivateAllPeriods()
+                delay(100)
+                
+                // Activate only the most recent one
+                val updates = mapOf("active" to true)
+                academicPeriodsCollection.document(keepActive.id).update(updates).await()
+                
+                println("DEBUG: AcademicPeriodRepository - Kept period ${keepActive.id} as active, deactivated ${activePeriods.size - 1} others")
+            } else if (activePeriods.isEmpty()) {
+                println("DEBUG: AcademicPeriodRepository - No active periods found")
+            } else {
+                println("DEBUG: AcademicPeriodRepository - Only one active period exists (${activePeriods.first().id})")
+            }
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("DEBUG: AcademicPeriodRepository - Error ensuring single active period: ${e.message}")
+            Result.failure(e)
         }
     }
 }

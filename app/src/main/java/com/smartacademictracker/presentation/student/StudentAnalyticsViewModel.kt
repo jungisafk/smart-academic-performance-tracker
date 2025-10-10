@@ -1,5 +1,6 @@
 package com.smartacademictracker.presentation.student
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.StudentGradeAggregate
@@ -52,15 +53,15 @@ class StudentAnalyticsViewModel @Inject constructor(
                                     failingSubjects = analytics.failingSubjects
                                 )
                                 
-                                println("DEBUG: StudentAnalyticsViewModel - Loaded ${aggregatesList.size} grade aggregates")
+                                Log.d("StudentAnalytics", "Loaded ${aggregatesList.size} grade aggregates")
                             } else {
                                 // Fallback: Load individual grades and create aggregates on-the-fly
-                                println("DEBUG: StudentAnalyticsViewModel - No aggregates found, loading individual grades")
+                                Log.d("StudentAnalytics", "No aggregates found, loading individual grades")
                                 loadAnalyticsFromIndividualGrades(user.id)
                             }
                         }.onFailure { exception ->
                             // Fallback: Load individual grades if aggregates fail
-                            println("DEBUG: StudentAnalyticsViewModel - Aggregates failed, loading individual grades: ${exception.message}")
+                            Log.d("StudentAnalytics", "Aggregates failed, loading individual grades: ${exception.message}")
                             loadAnalyticsFromIndividualGrades(user.id)
                         }
                     } else {
@@ -90,7 +91,7 @@ class StudentAnalyticsViewModel @Inject constructor(
             val gradesResult = gradeRepository.getGradesByStudent(studentId)
             gradesResult.onSuccess { gradesList ->
                 if (gradesList.isNotEmpty()) {
-                    println("DEBUG: StudentAnalyticsViewModel - Loaded ${gradesList.size} individual grades")
+                    Log.d("StudentAnalytics", "Loaded ${gradesList.size} individual grades")
                     
                     // Group grades by subject and create aggregates on-the-fly
                     val subjectGroups = gradesList.groupBy { it.subjectId }
@@ -117,7 +118,7 @@ class StudentAnalyticsViewModel @Inject constructor(
                         failingSubjects = analytics.failingSubjects
                     )
                     
-                    println("DEBUG: StudentAnalyticsViewModel - Created ${aggregates.size} aggregates from individual grades")
+                    Log.d("StudentAnalytics", "Created ${aggregates.size} aggregates from individual grades")
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

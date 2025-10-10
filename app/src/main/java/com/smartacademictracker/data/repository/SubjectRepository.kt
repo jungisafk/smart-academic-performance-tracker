@@ -122,7 +122,8 @@ class SubjectRepository @Inject constructor(
         academicYear: String,
         courseId: String,
         yearLevelId: String,
-        numberOfSections: Int = 1
+        numberOfSections: Int = 1,
+        subjectType: com.smartacademictracker.data.model.SubjectType = com.smartacademictracker.data.model.SubjectType.MAJOR
     ): Result<Subject> {
         return try {
             val sections = generateSections(code, numberOfSections)
@@ -136,7 +137,8 @@ class SubjectRepository @Inject constructor(
                 courseId = courseId,
                 yearLevelId = yearLevelId,
                 numberOfSections = numberOfSections,
-                sections = sections
+                sections = sections,
+                subjectType = subjectType
             )
             // Use the createSubject method which includes academic period filtering
             createSubject(subject)

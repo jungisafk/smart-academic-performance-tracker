@@ -15,10 +15,13 @@ data class User(
     val active: Boolean = true, // Use 'active' directly to match Firestore
     val yearLevelId: String? = null, // For students: Reference to YearLevel document ID
     val courseId: String? = null, // For students: Reference to Course document ID
+    val departmentCourseId: String? = null, // For teachers: Reference to Course document ID (department they teach in)
     // Computed fields for display (populated by repository)
     val yearLevelName: String? = null,
     val courseName: String? = null,
-    val courseCode: String? = null
+    val courseCode: String? = null,
+    val departmentCourseName: String? = null, // For teachers: Department name
+    val departmentCourseCode: String? = null // For teachers: Department code
 )
 
 enum class UserRole {

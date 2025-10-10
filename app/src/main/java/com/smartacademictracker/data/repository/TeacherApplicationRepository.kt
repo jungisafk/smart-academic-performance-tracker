@@ -191,6 +191,33 @@ class TeacherApplicationRepository @Inject constructor(
         }
     }
 
+    /**
+     * Check if teacher has an active application (PENDING or APPROVED) for a subject.
+     * Returns false if only REJECTED applications exist, allowing reapplication.
+     */
+    suspend fun hasTeacherActiveApplication(teacherId: String, subjectId: String): Result<Boolean> {
+        return try {
+            val snapshot = applicationsCollection
+                .whereEqualTo("teacherId", teacherId)
+                .whereEqualTo("subjectId", subjectId)
+                .get()
+                .await()
+            
+            if (snapshot.isEmpty) {
+                Result.success(false)
+            } else {
+                // Check if there's any PENDING or APPROVED application
+                val hasActive = snapshot.documents.any { doc ->
+                    val status = doc.getString("status") ?: ""
+                    status == ApplicationStatus.PENDING.name || status == ApplicationStatus.APPROVED.name
+                }
+                Result.success(hasActive)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getDuplicateApplications(): Result<List<TeacherApplication>> {
         return try {
             val snapshot = applicationsCollection.get().await()

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,8 @@ fun AddSubjectScreen(
     var description by remember { mutableStateOf("") }
     var credits by remember { mutableStateOf("3") }
     var numberOfSections by remember { mutableStateOf("1") }
+    var subjectType by remember { mutableStateOf(com.smartacademictracker.data.model.SubjectType.MAJOR) }
+    var expandedSubjectType by remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsState()
 
@@ -142,7 +145,12 @@ fun AddSubjectScreen(
                 // Number of Sections
                 OutlinedTextField(
                     value = numberOfSections,
-                    onValueChange = { numberOfSections = it },
+                    onValueChange = { newValue ->
+                        // Only allow numeric input
+                        if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+                            numberOfSections = newValue
+                        }
+                    },
                     label = { Text("Number of Sections *") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
@@ -155,9 +163,53 @@ fun AddSubjectScreen(
                                 "${code}${('A' + i)}"
                             }
                             sections.joinToString(", ")
-                        } else "Enter subject code and number of sections"}")
+                        } else "Enter subject code and number of sections"}") 
                     }
                 )
+
+                // Subject Type
+                ExposedDropdownMenuBox(
+                    expanded = expandedSubjectType,
+                    onExpandedChange = { expandedSubjectType = !expandedSubjectType },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = subjectType.displayName,
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Subject Type *") },
+                        trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        supportingText = {
+                            Text(
+                                text = when (subjectType) {
+                                    com.smartacademictracker.data.model.SubjectType.MAJOR -> 
+                                        "Only teachers of this course can see and apply"
+                                    com.smartacademictracker.data.model.SubjectType.MINOR -> 
+                                        "All teachers can see and apply"
+                                }
+                            )
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedSubjectType,
+                        onDismissRequest = { expandedSubjectType = false }
+                    ) {
+                        com.smartacademictracker.data.model.SubjectType.values().forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type.displayName) },
+                                onClick = {
+                                    subjectType = type
+                                    expandedSubjectType = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 // Current Academic Period Info
                 CurrentAcademicPeriodCard()
@@ -190,7 +242,8 @@ fun AddSubjectScreen(
                             code = code.trim(),
                             description = description.trim(),
                             credits = credits.toIntOrNull() ?: 3,
-                            numberOfSections = numberOfSections.toIntOrNull() ?: 1
+                            numberOfSections = numberOfSections.toIntOrNull() ?: 1,
+                            subjectType = subjectType
                         )
                     },
                     enabled = !uiState.isLoading && isFormValid && !uiState.isSuccess,

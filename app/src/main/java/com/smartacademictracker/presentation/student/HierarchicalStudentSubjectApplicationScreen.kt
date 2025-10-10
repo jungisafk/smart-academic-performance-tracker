@@ -1,14 +1,19 @@
 package com.smartacademictracker.presentation.student
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,7 @@ fun HierarchicalStudentSubjectApplicationScreen(
     val yearLevels by viewModel.yearLevels.collectAsState()
     val subjects by viewModel.subjects.collectAsState()
     val myApplications by viewModel.myApplications.collectAsState()
+    val sectionAssignments by viewModel.sectionAssignments.collectAsState()
     val selectedCourseId by viewModel.selectedCourseId.collectAsState()
     val selectedYearLevelId by viewModel.selectedYearLevelId.collectAsState()
     
@@ -56,67 +62,166 @@ fun HierarchicalStudentSubjectApplicationScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color.White)
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        // Enhanced Header Section
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2))
         ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                text = "Apply for Subjects",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = { 
-                    viewModel.refreshData()
-                },
-                enabled = !uiState.isLoading
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Back Button
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Column {
+                        Text(
+                            text = "Apply for Subjects",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Browse and apply for academic subjects",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
+                }
+                
+                // Refresh Button
+                IconButton(
+                    onClick = { 
+                        viewModel.refreshData()
+                    },
+                    enabled = !uiState.isLoading,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f))
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+        
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .padding(top = 100.dp)
+        ) {
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Enhanced Tab Row
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+        ) {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = Color.Transparent,
+                contentColor = Color(0xFF1976D2)
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { 
+                        Text(
+                            "Browse Subjects",
+                            fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selectedTab == 0) Color(0xFF1976D2) else Color(0xFF666666)
+                        ) 
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { 
+                        selectedTab = 1
+                        // Force refresh applications when switching to Applied tab
+                        viewModel.loadMyApplications()
+                    },
+                    text = { 
+                        Text(
+                            "My Applications (${myApplications.size})",
+                            fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selectedTab == 1) Color(0xFF1976D2) else Color(0xFF666666)
+                        ) 
+                    }
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Tab Row
-        TabRow(
-            selectedTabIndex = selectedTab,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Browse Subjects") }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { 
-                    selectedTab = 1
-                    // Force refresh applications when switching to Applied tab
-                    viewModel.loadMyApplications()
-                },
-                text = { Text("My Applications (${myApplications.size})") }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Loading State
+        // Enhanced Loading State
         if (uiState.isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF1976D2),
+                            modifier = Modifier.size(40.dp),
+                            strokeWidth = 4.dp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Loading subjects...",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF1976D2),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         } else {
             when (selectedTab) {
@@ -128,6 +233,7 @@ fun HierarchicalStudentSubjectApplicationScreen(
                         subjects = subjects,
                         selectedCourseId = selectedCourseId,
                         selectedYearLevelId = selectedYearLevelId,
+                        sectionAssignments = sectionAssignments,
                         onCourseSelected = { courseId ->
                             viewModel.selectCourse(courseId)
                         },
@@ -142,33 +248,50 @@ fun HierarchicalStudentSubjectApplicationScreen(
                 1 -> {
                     // Applied Subjects Tab
                     if (myApplications.isEmpty()) {
-                        // Empty State
+                        // Enhanced Empty State
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            Card(
+                                shape = RoundedCornerShape(20.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
                             ) {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "No applications yet",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Apply for subjects to see them here",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
+                                Column(
+                                    modifier = Modifier.padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFE3F2FD)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Assignment,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(40.dp),
+                                            tint = Color(0xFF1976D2)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    Text(
+                                        text = "No Applications Yet",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1976D2)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Browse subjects and apply to see your applications here",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF1976D2),
+                                        textAlign = TextAlign.Center,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -187,21 +310,34 @@ fun HierarchicalStudentSubjectApplicationScreen(
             }
         }
 
-        // Error Message
+        // Enhanced Error Message
         uiState.error?.let { error ->
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
             ) {
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Error,
+                        contentDescription = "Error",
+                        tint = Color(0xFFE65100),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = error,
+                        color = Color(0xFFE65100),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
         
@@ -209,9 +345,14 @@ fun HierarchicalStudentSubjectApplicationScreen(
         if (showSuccessSnackbar) {
             Snackbar(
                 modifier = Modifier.padding(16.dp),
+                containerColor = Color(0xFFE8F5E8),
+                contentColor = Color(0xFF2E7D32),
                 action = {
-                    TextButton(onClick = { showSuccessSnackbar = false }) {
-                        Text("Dismiss")
+                    TextButton(
+                        onClick = { showSuccessSnackbar = false },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF2E7D32))
+                    ) {
+                        Text("Dismiss", fontWeight = FontWeight.Bold)
                     }
                 }
             ) {
@@ -221,13 +362,19 @@ fun HierarchicalStudentSubjectApplicationScreen(
                     Icon(
                         Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = Color(0xFF2E7D32),
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Application submitted successfully!")
+                    Text(
+                        "Application submitted successfully!",
+                        color = Color(0xFF2E7D32),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
+    }
     }
 }
 

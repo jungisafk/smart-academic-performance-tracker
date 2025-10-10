@@ -51,6 +51,9 @@ fun SignUpScreen(
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
     var selectedYearLevel by remember { mutableStateOf<YearLevel?>(null) }
     
+    // Department course selection for teachers
+    var selectedTeacherDepartment by remember { mutableStateOf<Course?>(null) }
+    
     val uiState by viewModel.uiState.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     
@@ -59,15 +62,16 @@ fun SignUpScreen(
         viewModel.clearSignUpSuccess()
     }
     
-    // Load courses only when student role is selected
+    // Load courses when student or teacher role is selected
     LaunchedEffect(selectedRole) {
-        if (selectedRole == UserRole.STUDENT) {
+        if (selectedRole == UserRole.STUDENT || selectedRole == UserRole.TEACHER) {
             viewModel.loadCourses()
         } else {
-            // Clear course data when switching away from student role
+            // Clear course data when switching away from student/teacher role
             viewModel.clearCourseData()
             selectedCourse = null
             selectedYearLevel = null
+            selectedTeacherDepartment = null
         }
     }
     
@@ -87,7 +91,8 @@ fun SignUpScreen(
                      password == confirmPassword &&
                      password.length >= 6 &&
                      !uiState.isSignUpSuccess &&
-                     (selectedRole != UserRole.STUDENT || (selectedCourse != null && selectedYearLevel != null))
+                     (selectedRole != UserRole.STUDENT || (selectedCourse != null && selectedYearLevel != null)) &&
+                     (selectedRole != UserRole.TEACHER || selectedTeacherDepartment != null)
 
     Box(
         modifier = Modifier
@@ -618,6 +623,117 @@ fun SignUpScreen(
                         }
                     }
 
+                    // Teaching Department Selection for Teachers
+                    if (selectedRole == UserRole.TEACHER) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Department Selection
+                        Text(
+                            text = "Select Teaching Department",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF333333),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                        )
+                        
+                        Text(
+                            text = "Choose the department/course you will be teaching. This determines which MAJOR subjects you can see and apply for.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        )
+                        
+                        if (uiState.isLoadingCourses) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFF2196F3)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Loading departments...",
+                                    color = Color(0xFF666666)
+                                )
+                            }
+                        } else {
+                            var teacherDepartmentDropdownExpanded by remember { mutableStateOf(false) }
+                            
+                            ExposedDropdownMenuBox(
+                                expanded = teacherDepartmentDropdownExpanded,
+                                onExpandedChange = { teacherDepartmentDropdownExpanded = !teacherDepartmentDropdownExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedTeacherDepartment?.let { "${it.code} - ${it.name}" } ?: "",
+                                    onValueChange = { },
+                                    readOnly = true,
+                                    label = { 
+                                        Text(
+                                            "Select Teaching Department",
+                                            color = Color(0xFF666666)
+                                        ) 
+                                    },
+                                    placeholder = { 
+                                        Text(
+                                            "Select Teaching Department",
+                                            color = Color(0xFF999999)
+                                        ) 
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.School, 
+                                            contentDescription = null,
+                                            tint = Color(0xFF2196F3)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = teacherDepartmentDropdownExpanded)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor()
+                                        .padding(bottom = 24.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFF2196F3),
+                                        unfocusedBorderColor = Color(0xFFE0E0E0)
+                                    )
+                                )
+                                
+                                ExposedDropdownMenu(
+                                    expanded = teacherDepartmentDropdownExpanded,
+                                    onDismissRequest = { teacherDepartmentDropdownExpanded = false }
+                                ) {
+                                    if (uiState.courses.isEmpty()) {
+                                        DropdownMenuItem(
+                                            text = { Text("No departments available") },
+                                            onClick = { teacherDepartmentDropdownExpanded = false }
+                                        )
+                                    } else {
+                                        uiState.courses.forEach { course ->
+                                            DropdownMenuItem(
+                                                text = { Text("${course.code} - ${course.name}") },
+                                                onClick = {
+                                                    selectedTeacherDepartment = course
+                                                    teacherDepartmentDropdownExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Success Message
                     if (uiState.isSignUpSuccess) {
                         Text(
@@ -647,8 +763,9 @@ fun SignUpScreen(
                                 firstName = firstName.trim(),
                                 lastName = lastName.trim(),
                                 role = selectedRole,
-                                courseId = selectedCourse?.id,
-                                yearLevelId = selectedYearLevel?.id
+                                courseId = if (selectedRole == UserRole.STUDENT) selectedCourse?.id else null,
+                                yearLevelId = if (selectedRole == UserRole.STUDENT) selectedYearLevel?.id else null,
+                                departmentCourseId = if (selectedRole == UserRole.TEACHER) selectedTeacherDepartment?.id else null
                             )
                         },
                         enabled = !uiState.isLoading && isFormValid && !uiState.isSignUpSuccess,

@@ -149,9 +149,6 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToAnalytics = {
                     navController.navigate(Screen.StudentAnalytics.route)
                 },
-                onNavigateToPerformanceTracking = {
-                    navController.navigate(Screen.StudentPerformanceTracking.route)
-                },
                 onNavigateToGradeHistory = {
                     navController.navigate(Screen.StudentGradeHistory.route)
                 },
@@ -254,14 +251,6 @@ fun SmartAcademicTrackerNavigation(
         
         composable(Screen.StudentAnalytics.route) {
             StudentAnalyticsScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
-        
-        composable(Screen.StudentPerformanceTracking.route) {
-            StudentPerformanceTrackingScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

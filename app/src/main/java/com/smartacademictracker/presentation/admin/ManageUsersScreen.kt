@@ -3,6 +3,7 @@ package com.smartacademictracker.presentation.admin
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.User
 import com.smartacademictracker.data.model.UserRole
+import com.smartacademictracker.presentation.common.LoadingStateCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,9 +31,12 @@ fun ManageUsersScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val users by viewModel.users.collectAsState()
+    val teacherAssignments by viewModel.teacherAssignments.collectAsState()
+    val studentEnrollments by viewModel.studentEnrollments.collectAsState()
     var selectedRole by remember { mutableStateOf<UserRole?>(null) }
     var searchQuery by remember { mutableStateOf("") }
 
+    // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
         viewModel.loadUsers()
     }
@@ -41,9 +46,16 @@ fun ManageUsersScreen(
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        // Show loading state with label
+        if (uiState.isLoading && users.isEmpty()) {
+            LoadingStateCard(
+                title = "Loading Users",
+                message = "Please wait while we load user accounts and their information"
+            )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
             // Enhanced Header Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -163,37 +175,46 @@ fun ManageUsersScreen(
                             color = Color(0xFF333333)
                         )
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp)
                         ) {
-                            EnhancedFilterChip(
-                                onClick = { selectedRole = null },
-                                label = "All",
-                                selected = selectedRole == null,
-                                icon = Icons.Default.People,
-                                color = Color(0xFF4CAF50)
-                            )
-                            EnhancedFilterChip(
-                                onClick = { selectedRole = UserRole.STUDENT },
-                                label = "Students",
-                                selected = selectedRole == UserRole.STUDENT,
-                                icon = Icons.Default.School,
-                                color = Color(0xFF2196F3)
-                            )
-                            EnhancedFilterChip(
-                                onClick = { selectedRole = UserRole.TEACHER },
-                                label = "Teachers",
-                                selected = selectedRole == UserRole.TEACHER,
-                                icon = Icons.Default.Work,
-                                color = Color(0xFFFF9800)
-                            )
-                            EnhancedFilterChip(
-                                onClick = { selectedRole = UserRole.ADMIN },
-                                label = "Admins",
-                                selected = selectedRole == UserRole.ADMIN,
-                                icon = Icons.Default.AdminPanelSettings,
-                                color = Color(0xFF9C27B0)
-                            )
+                            item {
+                                EnhancedFilterChip(
+                                    onClick = { selectedRole = null },
+                                    label = "All",
+                                    selected = selectedRole == null,
+                                    icon = Icons.Default.People,
+                                    color = Color(0xFF4CAF50)
+                                )
+                            }
+                            item {
+                                EnhancedFilterChip(
+                                    onClick = { selectedRole = UserRole.STUDENT },
+                                    label = "Students",
+                                    selected = selectedRole == UserRole.STUDENT,
+                                    icon = Icons.Default.School,
+                                    color = Color(0xFF2196F3)
+                                )
+                            }
+                            item {
+                                EnhancedFilterChip(
+                                    onClick = { selectedRole = UserRole.TEACHER },
+                                    label = "Teachers",
+                                    selected = selectedRole == UserRole.TEACHER,
+                                    icon = Icons.Default.Work,
+                                    color = Color(0xFFFF9800)
+                                )
+                            }
+                            item {
+                                EnhancedFilterChip(
+                                    onClick = { selectedRole = UserRole.ADMIN },
+                                    label = "Admins",
+                                    selected = selectedRole == UserRole.ADMIN,
+                                    icon = Icons.Default.Security,
+                                    color = Color(0xFF9C27B0)
+                                )
+                            }
                         }
                     }
                 }
@@ -202,32 +223,10 @@ fun ManageUsersScreen(
 
                 // Enhanced Loading State
                 if (uiState.isLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                CircularProgressIndicator(
-                                    color = Color(0xFF2196F3),
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Loading users...",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color(0xFF333333)
-                                )
-                            }
-                        }
-                    }
+                    LoadingStateCard(
+                        title = "Loading Users",
+                        message = "Please wait while we load user accounts and their information"
+                    )
                 } else {
                     // Users List
                     val filteredUsers = users.filter { user ->
@@ -302,10 +301,39 @@ fun ManageUsersScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(filteredUsers) { user ->
+                                var showEditDialog by remember { mutableStateOf(false) }
+                                
                                 EnhancedUserCard(
                                     user = user,
-                                    onEdit = { /* TODO: Implement edit user */ }
+                                    teacherAssignments = if (user.role == "TEACHER") {
+                                        teacherAssignments[user.id] ?: emptyList()
+                                    } else {
+                                        emptyList()
+                                    },
+                                    studentEnrollments = if (user.role == "STUDENT") {
+                                        studentEnrollments[user.id] ?: emptyList()
+                                    } else {
+                                        emptyList()
+                                    },
+                                    onEdit = { 
+                                        if (user.role == "TEACHER") {
+                                            showEditDialog = true
+                                        }
+                                    }
                                 )
+                                
+                                if (showEditDialog && user.role == "TEACHER") {
+                                    EditTeacherDepartmentDialog(
+                                        user = user,
+                                        courses = viewModel.courses.collectAsState().value,
+                                        onDismiss = { showEditDialog = false },
+                                        onSave = { departmentCourseId ->
+                                            viewModel.updateTeacherDepartment(user.id, departmentCourseId)
+                                            showEditDialog = false
+                                        },
+                                        isProcessing = user.id in viewModel.uiState.collectAsState().value.processingUsers
+                                    )
+                                }
                             }
                         }
                     }
@@ -343,6 +371,7 @@ fun ManageUsersScreen(
                     }
                 }
             }
+            }
         }
     }
 }
@@ -360,7 +389,8 @@ fun EnhancedFilterChip(
         label = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 4.dp)
             ) {
                 Icon(
                     imageVector = icon,
@@ -371,7 +401,10 @@ fun EnhancedFilterChip(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = if (selected) Color.White else color,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
         },
@@ -382,15 +415,20 @@ fun EnhancedFilterChip(
             containerColor = color.copy(alpha = 0.1f),
             labelColor = color
         ),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.height(40.dp)
     )
 }
 
 @Composable
 fun EnhancedUserCard(
     user: User,
+    teacherAssignments: List<TeacherAssignmentInfo> = emptyList(),
+    studentEnrollments: List<StudentEnrollmentInfo> = emptyList(),
     onEdit: () -> Unit
 ) {
+    var showAssignments by remember { mutableStateOf(false) }
+    var showEnrollments by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -459,10 +497,12 @@ fun EnhancedUserCard(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = user.role,
+                                    text = user.role.uppercase(),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = getRoleColor(user.role)
+                                    color = getRoleColor(user.role),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -487,35 +527,314 @@ fun EnhancedUserCard(
             }
 
             // Additional Info
-            if (user.courseName != null || user.yearLevelName != null) {
+            if (user.courseName != null || user.yearLevelName != null || user.departmentCourseName != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color(0xFF666666)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = buildString {
-                                user.courseName?.let { append("Course: $it") }
-                                if (user.courseName != null && user.yearLevelName != null) append(" • ")
-                                user.yearLevelName?.let { append("Year: $it") }
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666),
-                            fontWeight = FontWeight.Medium
-                        )
+                        if (user.courseName != null || user.yearLevelName != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = "Info",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF666666)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = buildString {
+                                        user.courseName?.let { append("Course: $it") }
+                                        if (user.courseName != null && user.yearLevelName != null) append(" • ")
+                                        user.yearLevelName?.let { append("Year: $it") }
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        // Show department for teachers
+                        if (user.role == "TEACHER" && user.departmentCourseName != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Work,
+                                    contentDescription = "Department",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFFFF9800)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Department: ${user.departmentCourseName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFFF9800),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (user.role == "TEACHER" && user.departmentCourseName == null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = "No Department",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFFFF9800)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "No department assigned - Click Edit to assign",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFFF9800),
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                )
+                            }
+                        }
                     }
+                }
+            }
+
+            // Show assigned subjects/sections for teachers
+            if (user.role == "TEACHER" && teacherAssignments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Assignment,
+                                    contentDescription = "Assignments",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF4CAF50)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Assigned Subjects/Sections (${teacherAssignments.size})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            IconButton(
+                                onClick = { showAssignments = !showAssignments },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (showAssignments) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (showAssignments) "Collapse" else "Expand",
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        
+                        if (showAssignments) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            teacherAssignments.forEach { assignment ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = Color(0xFF2196F3)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = assignment.subjectName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF333333)
+                                            )
+                                            Text(
+                                                text = "${assignment.subjectCode} - ${assignment.sectionName}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF666666)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (user.role == "TEACHER" && teacherAssignments.isEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "No Assignments",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF666666)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "No subject/section assignments",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF666666),
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                }
+            }
+
+            // Show enrollments for students (only if enrolled)
+            if (user.role == "STUDENT" && studentEnrollments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.School,
+                                    contentDescription = "Enrollments",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF2196F3)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Enrolled Courses/Sections (${studentEnrollments.size})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF2196F3),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            IconButton(
+                                onClick = { showEnrollments = !showEnrollments },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (showEnrollments) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (showEnrollments) "Collapse" else "Expand",
+                                    tint = Color(0xFF2196F3),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        
+                        if (showEnrollments) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            studentEnrollments.forEach { enrollment ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.MenuBook,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = Color(0xFF2196F3)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = enrollment.subjectName,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF333333)
+                                                )
+                                                Text(
+                                                    text = "${enrollment.subjectCode} - ${enrollment.sectionName}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color(0xFF666666)
+                                                )
+                                            }
+                                        }
+                                        
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Info,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = Color(0xFF666666)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Course: ${enrollment.courseName}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF666666)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (user.role == "STUDENT" && studentEnrollments.isEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "No Enrollments",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF666666)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Not enrolled in any courses",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF666666),
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
                 }
             }
 
@@ -555,7 +874,118 @@ private fun getRoleIcon(role: String): androidx.compose.ui.graphics.vector.Image
     return when (role.uppercase()) {
         "STUDENT" -> Icons.Default.School
         "TEACHER" -> Icons.Default.Work
-        "ADMIN" -> Icons.Default.AdminPanelSettings
+        "ADMIN" -> Icons.Default.Security
         else -> Icons.Default.Person
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditTeacherDepartmentDialog(
+    user: User,
+    courses: List<com.smartacademictracker.data.model.Course>,
+    onDismiss: () -> Unit,
+    onSave: (String?) -> Unit,
+    isProcessing: Boolean
+) {
+    var selectedCourseId by remember { mutableStateOf(user.departmentCourseId ?: "") }
+    var expandedCourse by remember { mutableStateOf(false) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Edit Teacher Department",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Teacher: ${user.firstName} ${user.lastName}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                
+                Text(
+                    text = "Select the department/course this teacher belongs to. This determines which MAJOR subjects they can see and apply for.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF666666)
+                )
+                
+                ExposedDropdownMenuBox(
+                    expanded = expandedCourse,
+                    onExpandedChange = { expandedCourse = !expandedCourse },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = courses.find { it.id == selectedCourseId }?.name ?: "Select Department",
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Department/Course *") },
+                        trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        supportingText = {
+                            Text(
+                                text = if (selectedCourseId.isEmpty()) 
+                                    "Required: Teachers need a department to see MAJOR subjects"
+                                else
+                                    "MINOR subjects are visible to all teachers regardless of department"
+                            )
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedCourse,
+                        onDismissRequest = { expandedCourse = false }
+                    ) {
+                        // Option to clear department
+                        DropdownMenuItem(
+                            text = { Text("None (Not Recommended)") },
+                            onClick = {
+                                selectedCourseId = ""
+                                expandedCourse = false
+                            }
+                        )
+                        Divider()
+                        courses.forEach { course ->
+                            DropdownMenuItem(
+                                text = { Text("${course.name} (${course.code})") },
+                                onClick = {
+                                    selectedCourseId = course.id
+                                    expandedCourse = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(if (selectedCourseId.isEmpty()) null else selectedCourseId) },
+                enabled = !isProcessing
+            ) {
+                if (isProcessing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Save")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isProcessing
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }

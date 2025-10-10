@@ -31,6 +31,8 @@ secrets.properties
 .env
 .env.local
 .env.production
+serviceAccountKey.json
+serviceAccountKey.json.json
 
 # Personal Documentation
 *_TODO.md
@@ -50,7 +52,7 @@ package.json
 
 # JavaScript files
 *.js
-*.kt
+# Note: *.kt is NOT excluded - Kotlin source files should be committed
 
 # Release files
 app/release/

@@ -1,5 +1,6 @@
 package com.smartacademictracker.presentation.teacher
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.TeacherApplication
@@ -26,7 +27,7 @@ class TeacherApplicationsViewModel @Inject constructor(
 
     fun loadApplications() {
         viewModelScope.launch {
-            println("DEBUG: TeacherApplicationsViewModel - Loading applications...")
+            Log.d("TeacherApplications", "Loading applications...")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
@@ -34,39 +35,39 @@ class TeacherApplicationsViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        println("DEBUG: TeacherApplicationsViewModel - User found: ${user.email}")
+                        Log.d("TeacherApplications", "User found: ${user.email}")
                         // Load teacher's applications
                         val applicationsResult = teacherApplicationRepository.getApplicationsByTeacher(user.id)
                         applicationsResult.onSuccess { applicationsList ->
-                            println("DEBUG: TeacherApplicationsViewModel - Applications loaded: ${applicationsList.size}")
+                            Log.d("TeacherApplications", "Applications loaded: ${applicationsList.size}")
                             applicationsList.forEach { app ->
-                                println("DEBUG: TeacherApplicationsViewModel - Application: ${app.subjectName} - ${app.status}")
+                                Log.d("TeacherApplications", "Application: ${app.subjectName} - ${app.status}")
                             }
                             _applications.value = applicationsList
                             _uiState.value = _uiState.value.copy(isLoading = false)
                         }.onFailure { exception ->
-                            println("DEBUG: TeacherApplicationsViewModel - Failed to load applications: ${exception.message}")
+                            Log.e("TeacherApplications", "Failed to load applications: ${exception.message}")
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 error = exception.message ?: "Failed to load applications"
                             )
                         }
                     } else {
-                        println("DEBUG: TeacherApplicationsViewModel - User not found")
+                        Log.w("TeacherApplications", "User not found")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = "User not found"
                         )
                     }
                 }.onFailure { exception ->
-                    println("DEBUG: TeacherApplicationsViewModel - Failed to get user: ${exception.message}")
+                    Log.e("TeacherApplications", "Failed to get user: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to load user data"
                     )
                 }
             } catch (e: Exception) {
-                println("DEBUG: TeacherApplicationsViewModel - Exception: ${e.message}")
+                Log.e("TeacherApplications", "Exception: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load applications"
@@ -81,23 +82,23 @@ class TeacherApplicationsViewModel @Inject constructor(
 
     fun cancelApplication(applicationId: String) {
         viewModelScope.launch {
-            println("DEBUG: TeacherApplicationsViewModel - Cancelling application: $applicationId")
+            Log.d("TeacherApplications", "Cancelling application: $applicationId")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
                 teacherApplicationRepository.cancelApplication(applicationId).onSuccess {
-                    println("DEBUG: TeacherApplicationsViewModel - Application cancelled successfully")
+                    Log.d("TeacherApplications", "Application cancelled successfully")
                     // Reload applications to reflect the change
                     loadApplications()
                 }.onFailure { exception ->
-                    println("DEBUG: TeacherApplicationsViewModel - Failed to cancel application: ${exception.message}")
+                    Log.e("TeacherApplications", "Failed to cancel application: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to cancel application"
                     )
                 }
             } catch (e: Exception) {
-                println("DEBUG: TeacherApplicationsViewModel - Exception cancelling application: ${e.message}")
+                Log.e("TeacherApplications", "Exception cancelling application: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to cancel application"

@@ -310,58 +310,26 @@ fun GradeCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = grade.subjectName,
+                        text = grade.gradePeriod.displayName,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = grade.description.ifBlank { grade.gradePeriod.displayName },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 
                 // Grade Badge
                 Surface(
-                    color = when {
-                        grade.percentage >= 90 -> MaterialTheme.colorScheme.primaryContainer
-                        grade.percentage >= 80 -> MaterialTheme.colorScheme.secondaryContainer
-                        grade.percentage >= 70 -> MaterialTheme.colorScheme.tertiaryContainer
-                        else -> MaterialTheme.colorScheme.errorContainer
-                    },
+                    color = getGradeBadgeColor(grade.letterGrade),
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text(
                         text = grade.letterGrade,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = when {
-                            grade.percentage >= 90 -> MaterialTheme.colorScheme.onPrimaryContainer
-                            grade.percentage >= 80 -> MaterialTheme.colorScheme.onSecondaryContainer
-                            grade.percentage >= 70 -> MaterialTheme.colorScheme.onTertiaryContainer
-                            else -> MaterialTheme.colorScheme.onErrorContainer
-                        },
+                        color = getGradeTextColor(grade.letterGrade),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Score: ${grade.score.toInt()}/${grade.maxScore.toInt()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Percentage: ${String.format("%.1f", grade.percentage)}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -497,7 +465,7 @@ fun SubjectGradeCard(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = GradeCalculationEngine.formatGrade(gradeAggregate.finalAverage),
+                            text = GradeCalculationEngine.calculateLetterGrade(gradeAggregate.finalAverage),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = when (gradeAggregate.status) {
@@ -683,7 +651,7 @@ fun ExpandableSubjectGradeCard(
                         shape = MaterialTheme.shapes.medium
                     ) {
                         Text(
-                            text = String.format("%.1f", gradeAggregate.finalAverage),
+                            text = GradeCalculationEngine.calculateLetterGrade(gradeAggregate.finalAverage),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = when (gradeAggregate.status) {
@@ -807,7 +775,7 @@ fun ExpandableSubjectSummaryCard(
                         shape = MaterialTheme.shapes.medium
                     ) {
                         Text(
-                            text = String.format("%.1f", averageGrade),
+                            text = GradeCalculationEngine.calculateLetterGrade(averageGrade),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = when (status) {
@@ -915,7 +883,7 @@ fun EnhancedExpandableSubjectGradeCard(
                         )
                     ) {
                         Text(
-                            text = String.format("%.1f", gradeAggregate.finalAverage),
+                            text = GradeCalculationEngine.calculateLetterGrade(gradeAggregate.finalAverage),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = when (gradeAggregate.status) {
@@ -1045,7 +1013,7 @@ fun EnhancedExpandableSubjectSummaryCard(
                         )
                     ) {
                         Text(
-                            text = String.format("%.1f", averageGrade),
+                            text = GradeCalculationEngine.calculateLetterGrade(averageGrade),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = when (status) {
@@ -1115,15 +1083,10 @@ fun EnhancedGradeCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = grade.subjectName,
+                        text = grade.gradePeriod.displayName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333333)
-                    )
-                    Text(
-                        text = grade.description.ifBlank { grade.gradePeriod.displayName },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666)
                     )
                 }
                 
@@ -1131,45 +1094,17 @@ fun EnhancedGradeCard(
                 Card(
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            grade.percentage >= 90 -> Color(0xFFE8F5E8)
-                            grade.percentage >= 80 -> Color(0xFFE3F2FD)
-                            grade.percentage >= 70 -> Color(0xFFFFF3E0)
-                            else -> Color(0xFFFFEBEE)
-                        }
+                        containerColor = getGradeBadgeColor(grade.letterGrade)
                     )
                 ) {
                     Text(
                         text = grade.letterGrade,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = when {
-                            grade.percentage >= 90 -> Color(0xFF4CAF50)
-                            grade.percentage >= 80 -> Color(0xFF2196F3)
-                            grade.percentage >= 70 -> Color(0xFFFF9800)
-                            else -> Color(0xFFD32F2F)
-                        },
+                        color = getGradeTextColor(grade.letterGrade),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Score: ${grade.score.toInt()}/${grade.maxScore.toInt()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF666666)
-                )
-                Text(
-                    text = "Percentage: ${String.format("%.1f", grade.percentage)}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF666666)
-                )
             }
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -1256,5 +1191,37 @@ fun EnhancedGradePeriodCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * Helper function to get badge color based on numeric grade (1.0-5.0 scale)
+ */
+@Composable
+fun getGradeBadgeColor(grade: String): Color {
+    return when {
+        grade == "INC" -> Color(0xFF9E9E9E)
+        grade.toDoubleOrNull()?.let { it <= 1.5 } == true -> Color(0xFF4CAF50) // Excellent (1.0-1.5)
+        grade.toDoubleOrNull()?.let { it <= 2.0 } == true -> Color(0xFF8BC34A) // Very Good (1.6-2.0)
+        grade.toDoubleOrNull()?.let { it <= 2.5 } == true -> Color(0xFFCDDC39) // Good (2.1-2.5)
+        grade.toDoubleOrNull()?.let { it <= 3.0 } == true -> Color(0xFFFFC107) // Satisfactory (2.6-3.0)
+        grade.toDoubleOrNull()?.let { it <= 3.5 } == true -> Color(0xFFFF9800) // Fair (3.1-3.5)
+        else -> Color(0xFFF44336) // Unsatisfactory (5.0)
+    }
+}
+
+/**
+ * Helper function to get text color based on numeric grade (1.0-5.0 scale)
+ */
+@Composable
+fun getGradeTextColor(grade: String): Color {
+    return when {
+        grade == "INC" -> Color(0xFF757575)
+        grade.toDoubleOrNull()?.let { it <= 1.5 } == true -> Color.White // Excellent
+        grade.toDoubleOrNull()?.let { it <= 2.0 } == true -> Color.White // Very Good
+        grade.toDoubleOrNull()?.let { it <= 2.5 } == true -> Color.Black // Good
+        grade.toDoubleOrNull()?.let { it <= 3.0 } == true -> Color.Black // Satisfactory
+        grade.toDoubleOrNull()?.let { it <= 3.5 } == true -> Color.White // Fair
+        else -> Color.White // Unsatisfactory
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartacademictracker.data.model.Course
@@ -25,6 +26,7 @@ fun HierarchicalSubjectSelector(
     onCourseSelected: (String?) -> Unit,
     onYearLevelSelected: (String?) -> Unit,
     onSubjectSelected: (Subject) -> Unit,
+    myApplications: List<com.smartacademictracker.data.model.TeacherApplication> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -173,8 +175,10 @@ fun HierarchicalSubjectSelector(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(courseSubjects) { subject ->
+                        val applicationStatus = myApplications.find { it.subjectId == subject.id }?.status
                         SubjectSelectionCard(
                             subject = subject,
+                            applicationStatus = applicationStatus,
                             onClick = { onSubjectSelected(subject) }
                         )
                     }
@@ -301,13 +305,19 @@ private fun YearLevelSelectionCard(
 @Composable
 private fun SubjectSelectionCard(
     subject: Subject,
+    applicationStatus: com.smartacademictracker.data.model.ApplicationStatus?,
     onClick: () -> Unit
 ) {
+    val handleClick: () -> Unit = if (applicationStatus == null) onClick else { -> }
+    
     Card(
-        onClick = onClick,
+        onClick = handleClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (applicationStatus != null) 
+                MaterialTheme.colorScheme.surfaceVariant 
+            else 
+                MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -338,11 +348,87 @@ private fun SubjectSelectionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    Icons.Default.ArrowForward,
-                    contentDescription = "Select",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                when (applicationStatus) {
+                    com.smartacademictracker.data.model.ApplicationStatus.PENDING -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.HourglassEmpty,
+                                contentDescription = "Pending",
+                                tint = Color(0xFFFF9800)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Applied",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFFF9800),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    com.smartacademictracker.data.model.ApplicationStatus.APPROVED -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = "Approved",
+                                tint = Color(0xFF4CAF50)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Approved",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    com.smartacademictracker.data.model.ApplicationStatus.REJECTED -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Rejected",
+                                tint = Color(0xFFF44336)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Rejected",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFF44336),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    com.smartacademictracker.data.model.ApplicationStatus.WITHDRAWN -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowBack,
+                                contentDescription = "Withdrawn",
+                                tint = Color(0xFF9E9E9E)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Withdrawn",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFF9E9E9E),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    null -> {
+                        Icon(
+                            Icons.Default.ArrowForward,
+                            contentDescription = "Select",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
             
             if (subject.description.isNotBlank()) {

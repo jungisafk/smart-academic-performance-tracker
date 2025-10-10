@@ -5,17 +5,21 @@ import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.repository.OfflineGradeRepository
 import com.smartacademictracker.data.sync.SyncResult
 import com.smartacademictracker.data.sync.ConflictResolution
+import com.smartacademictracker.data.sync.GradeSyncManager
+import com.smartacademictracker.data.local.entity.SyncStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class OfflineStatusViewModel @Inject constructor(
-    private val offlineGradeRepository: OfflineGradeRepository
+    private val offlineGradeRepository: OfflineGradeRepository,
+    private val gradeSyncManager: GradeSyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OfflineStatusUiState())
@@ -28,16 +32,11 @@ class OfflineStatusViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
-                // Load conflict grades - temporarily disabled
-                // offlineGradeRepository.getGradesWithConflicts().collect { conflictGrades ->
-                //     _uiState.value = _uiState.value.copy(
-                //         isLoading = false,
-                //         conflictGrades = conflictGrades
-                //     )
-                // }
+                // Load conflict grades from offline repository (get first emission)
+                val conflictGrades = offlineGradeRepository.getConflictGrades().first()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    conflictGrades = emptyList()
+                    conflictGrades = conflictGrades
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -95,14 +94,31 @@ class OfflineStatusViewModel @Inject constructor(
             )
             
             try {
-                // TODO: Implement conflict resolution
-                // This would call the sync manager's resolveConflicts method
-                _uiState.value = _uiState.value.copy(
-                    isResolvingConflicts = false,
-                    lastSyncMessage = "Conflict resolved"
-                )
+                // Call sync manager's resolveConflicts method
+                val result = gradeSyncManager.resolveConflicts(listOf(resolution))
                 
-                // Refresh the status
+                when (result) {
+                    is SyncResult.SUCCESS -> {
+                        _uiState.value = _uiState.value.copy(
+                            isResolvingConflicts = false,
+                            lastSyncMessage = result.message ?: "Conflict resolved successfully"
+                        )
+                    }
+                    is SyncResult.FAILED -> {
+                        _uiState.value = _uiState.value.copy(
+                            isResolvingConflicts = false,
+                            error = result.message ?: "Failed to resolve conflict"
+                        )
+                    }
+                    is SyncResult.PARTIAL_SUCCESS -> {
+                        _uiState.value = _uiState.value.copy(
+                            isResolvingConflicts = false,
+                            lastSyncMessage = result.message ?: "Conflict resolution completed with some issues"
+                        )
+                    }
+                }
+                
+                // Refresh the status to update conflict list
                 loadSyncStatus()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

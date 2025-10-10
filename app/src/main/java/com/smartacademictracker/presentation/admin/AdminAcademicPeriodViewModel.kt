@@ -34,6 +34,9 @@ class AdminAcademicPeriodViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
+                // First, ensure only one active period exists (cleanup any inconsistencies)
+                academicPeriodRepository.ensureSingleActivePeriod()
+                
                 // Load all academic periods
                 academicPeriodRepository.getAllAcademicPeriods().onSuccess { periods ->
                     _academicPeriods.value = periods

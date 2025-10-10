@@ -28,18 +28,33 @@ data class Grade(
     fun calculateLetterGrade(): String {
         val percent = calculatePercentage()
         return when {
-            percent >= 97 -> "A+"
-            percent >= 93 -> "A"
-            percent >= 90 -> "A-"
-            percent >= 87 -> "B+"
-            percent >= 83 -> "B"
-            percent >= 80 -> "B-"
-            percent >= 77 -> "C+"
-            percent >= 73 -> "C"
-            percent >= 70 -> "C-"
-            percent >= 67 -> "D+"
-            percent >= 65 -> "D"
-            else -> "F"
+            percent >= 100 -> "1.0"
+            percent >= 99 -> "1.1"
+            percent >= 98 -> "1.2"
+            percent >= 97 -> "1.3"
+            percent >= 96 -> "1.4"
+            percent >= 95 -> "1.5"
+            percent >= 94 -> "1.6"
+            percent >= 93 -> "1.7"
+            percent >= 92 -> "1.8"
+            percent >= 91 -> "1.9"
+            percent >= 90 -> "2.0"
+            percent >= 89 -> "2.1"
+            percent >= 88 -> "2.2"
+            percent >= 87 -> "2.3"
+            percent >= 86 -> "2.4"
+            percent >= 85 -> "2.5"
+            percent >= 84 -> "2.6"
+            percent >= 83 -> "2.7"
+            percent >= 82 -> "2.8"
+            percent >= 81 -> "2.9"
+            percent >= 80 -> "3.0"
+            percent >= 79 -> "3.1"
+            percent >= 78 -> "3.2"
+            percent >= 77 -> "3.3"
+            percent >= 76 -> "3.4"
+            percent >= 75 -> "3.5"
+            else -> "5.0"
         }
     }
 }
@@ -112,23 +127,38 @@ data class StudentGradeAggregate(
     }
     
     /**
-     * Calculate letter grade based on final average
+     * Calculate numeric grade based on final average (1.0-5.0 scale)
      */
     fun calculateLetterGrade(): String {
         val average = calculateFinalAverage() ?: return "INC"
         return when {
-            average >= 97 -> "A+"
-            average >= 93 -> "A"
-            average >= 90 -> "A-"
-            average >= 87 -> "B+"
-            average >= 83 -> "B"
-            average >= 80 -> "B-"
-            average >= 77 -> "C+"
-            average >= 73 -> "C"
-            average >= 70 -> "C-"
-            average >= 67 -> "D+"
-            average >= 65 -> "D"
-            else -> "F"
+            average >= 100 -> "1.0"
+            average >= 99 -> "1.1"
+            average >= 98 -> "1.2"
+            average >= 97 -> "1.3"
+            average >= 96 -> "1.4"
+            average >= 95 -> "1.5"
+            average >= 94 -> "1.6"
+            average >= 93 -> "1.7"
+            average >= 92 -> "1.8"
+            average >= 91 -> "1.9"
+            average >= 90 -> "2.0"
+            average >= 89 -> "2.1"
+            average >= 88 -> "2.2"
+            average >= 87 -> "2.3"
+            average >= 86 -> "2.4"
+            average >= 85 -> "2.5"
+            average >= 84 -> "2.6"
+            average >= 83 -> "2.7"
+            average >= 82 -> "2.8"
+            average >= 81 -> "2.9"
+            average >= 80 -> "3.0"
+            average >= 79 -> "3.1"
+            average >= 78 -> "3.2"
+            average >= 77 -> "3.3"
+            average >= 76 -> "3.4"
+            average >= 75 -> "3.5"
+            else -> "5.0"
         }
     }
     

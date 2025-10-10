@@ -22,7 +22,8 @@ class UserRepository @Inject constructor(
         lastName: String,
         role: UserRole,
         courseId: String? = null,
-        yearLevelId: String? = null
+        yearLevelId: String? = null,
+        departmentCourseId: String? = null
     ): Result<User> {
         return try {
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
@@ -35,7 +36,8 @@ class UserRepository @Inject constructor(
                 lastName = lastName,
                 role = role.value,
                 courseId = courseId,
-                yearLevelId = yearLevelId
+                yearLevelId = yearLevelId,
+                departmentCourseId = departmentCourseId
             )
             
             usersCollection.document(userId).set(user).await()
@@ -133,6 +135,18 @@ class UserRepository @Inject constructor(
     suspend fun updateUserRole(userId: String, newRole: String): Result<Unit> {
         return try {
             usersCollection.document(userId).update("role", newRole).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateTeacherDepartment(userId: String, departmentCourseId: String?): Result<Unit> {
+        return try {
+            val updates = hashMapOf<String, Any?>(
+                "departmentCourseId" to departmentCourseId
+            )
+            usersCollection.document(userId).update(updates).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

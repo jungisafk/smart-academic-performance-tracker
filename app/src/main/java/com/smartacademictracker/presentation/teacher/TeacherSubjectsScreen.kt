@@ -52,14 +52,9 @@ fun TeacherSubjectsScreen(
         println("DEBUG: TeacherSubjectsScreen - UI State changed: isLoading=${uiState.isLoading}, error=${uiState.error}, successMessage=${uiState.successMessage}, applyingSubjects=${uiState.applyingSubjects}")
     }
 
+    // Load subjects only once when screen is first composed
     LaunchedEffect(Unit) {
         viewModel.loadSubjects()
-    }
-
-    // Refresh subjects when screen is composed (e.g., when navigating back)
-    DisposableEffect(Unit) {
-        viewModel.refreshSubjects()
-        onDispose { }
     }
 
     // Clear success message after 3 seconds

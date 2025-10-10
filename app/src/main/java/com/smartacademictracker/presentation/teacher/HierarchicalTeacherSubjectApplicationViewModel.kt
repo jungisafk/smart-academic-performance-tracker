@@ -78,10 +78,33 @@ class HierarchicalTeacherSubjectApplicationViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Load subjects
+                // Load subjects and filter based on teacher's department
                 val subjectsResult = subjectRepository.getAllSubjects()
                 subjectsResult.onSuccess { subjectsList ->
-                    _subjects.value = subjectsList
+                    // Get current user to filter by department
+                    val currentUserResult = userRepository.getCurrentUser()
+                    currentUserResult.onSuccess { currentUser ->
+                        if (currentUser != null) {
+                            // Filter subjects based on department and subject type
+                            val filteredSubjects = subjectsList.filter { subject ->
+                                when (subject.subjectType) {
+                                    com.smartacademictracker.data.model.SubjectType.MAJOR -> {
+                                        // MAJOR subjects: only visible to teachers of the same course/department
+                                        currentUser.departmentCourseId != null && subject.courseId == currentUser.departmentCourseId
+                                    }
+                                    com.smartacademictracker.data.model.SubjectType.MINOR -> {
+                                        // MINOR subjects: visible to all teachers
+                                        true
+                                    }
+                                }
+                            }
+                            _subjects.value = filteredSubjects
+                        } else {
+                            _subjects.value = subjectsList
+                        }
+                    }.onFailure {
+                        _subjects.value = subjectsList
+                    }
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -136,7 +159,46 @@ class HierarchicalTeacherSubjectApplicationViewModel @Inject constructor(
                     if (subject == null) {
                         _uiState.value = _uiState.value.copy(
                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
-                            error = "Subject not found"
+                            error = "Subject not found or you don't have permission to apply for this subject"
+                        )
+                        return@onSuccess
+                    }
+                    
+                    // Validate that teacher can apply for this subject based on department and type
+                    val canApply = when (subject.subjectType) {
+                        com.smartacademictracker.data.model.SubjectType.MAJOR -> {
+                            // MAJOR subjects: only teachers of the same course/department can apply
+                            currentUser.departmentCourseId != null && subject.courseId == currentUser.departmentCourseId
+                        }
+                        com.smartacademictracker.data.model.SubjectType.MINOR -> {
+                            // MINOR subjects: any teacher can apply
+                            true
+                        }
+                    }
+                    
+                    if (!canApply) {
+                        _uiState.value = _uiState.value.copy(
+                            applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                            error = "You don't have permission to apply for this subject. MAJOR subjects are only available to teachers in the same department."
+                        )
+                        return@onSuccess
+                    }
+                    
+                    // Check if teacher has an active application (PENDING or APPROVED) for this subject
+                    // Allow reapplication if previous application was REJECTED
+                    val hasActiveResult = teacherApplicationRepository.hasTeacherActiveApplication(currentUser.id, subjectId)
+                    hasActiveResult.onSuccess { hasActive ->
+                        if (hasActive) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "You have already applied for this subject. Please check your applications."
+                            )
+                            return@onSuccess
+                        }
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                            error = exception.message ?: "Failed to check application status"
                         )
                         return@onSuccess
                     }
@@ -160,8 +222,10 @@ class HierarchicalTeacherSubjectApplicationViewModel @Inject constructor(
                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                             isApplicationSuccess = true
                         )
-                        // Reload applications to show the new one
-                        loadMyApplications()
+                        // Reload applications to show the new one (non-blocking)
+                        viewModelScope.launch {
+                            loadMyApplications()
+                        }
                     }.onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,

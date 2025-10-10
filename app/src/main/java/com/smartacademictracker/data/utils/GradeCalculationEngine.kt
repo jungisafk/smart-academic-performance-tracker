@@ -45,25 +45,40 @@ object GradeCalculationEngine {
     }
     
     /**
-     * Calculate letter grade based on final average
+     * Calculate numeric grade based on final average (1.0-5.0 scale)
      * @param finalAverage Calculated final average
-     * @return Letter grade string
+     * @return Numeric grade string (1.0-5.0 scale)
      */
     fun calculateLetterGrade(finalAverage: Double?): String {
         val average = finalAverage ?: return "INC"
         return when {
-            average >= 97 -> "A+"
-            average >= 93 -> "A"
-            average >= 90 -> "A-"
-            average >= 87 -> "B+"
-            average >= 83 -> "B"
-            average >= 80 -> "B-"
-            average >= 77 -> "C+"
-            average >= 73 -> "C"
-            average >= 70 -> "C-"
-            average >= 67 -> "D+"
-            average >= 65 -> "D"
-            else -> "F"
+            average >= 100 -> "1.0"
+            average >= 99 -> "1.1"
+            average >= 98 -> "1.2"
+            average >= 97 -> "1.3"
+            average >= 96 -> "1.4"
+            average >= 95 -> "1.5"
+            average >= 94 -> "1.6"
+            average >= 93 -> "1.7"
+            average >= 92 -> "1.8"
+            average >= 91 -> "1.9"
+            average >= 90 -> "2.0"
+            average >= 89 -> "2.1"
+            average >= 88 -> "2.2"
+            average >= 87 -> "2.3"
+            average >= 86 -> "2.4"
+            average >= 85 -> "2.5"
+            average >= 84 -> "2.6"
+            average >= 83 -> "2.7"
+            average >= 82 -> "2.8"
+            average >= 81 -> "2.9"
+            average >= 80 -> "3.0"
+            average >= 79 -> "3.1"
+            average >= 78 -> "3.2"
+            average >= 77 -> "3.3"
+            average >= 76 -> "3.4"
+            average >= 75 -> "3.5"
+            else -> "5.0"
         }
     }
     

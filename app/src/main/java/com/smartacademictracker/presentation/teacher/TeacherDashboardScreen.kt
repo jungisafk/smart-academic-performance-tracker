@@ -21,6 +21,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.presentation.auth.AuthViewModel
+import com.smartacademictracker.presentation.common.NotificationIconWithBadge
+import com.smartacademictracker.presentation.notification.NotificationViewModel
 
 data class QuickActionData(
     val title: String,
@@ -47,13 +49,16 @@ fun TeacherDashboardScreen(
     onNavigateToStudentManagement: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
-    dashboardViewModel: TeacherDashboardViewModel = hiltViewModel()
+    dashboardViewModel: TeacherDashboardViewModel = hiltViewModel(),
+    notificationViewModel: NotificationViewModel = hiltViewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     val dashboardState by dashboardViewModel.uiState.collectAsState()
+    val unreadCount by notificationViewModel.unreadCount.collectAsState()
 
     LaunchedEffect(Unit) {
         dashboardViewModel.loadDashboardData()
+        notificationViewModel.loadNotifications()
     }
 
     // Refresh data when screen is composed
@@ -74,15 +79,26 @@ fun TeacherDashboardScreen(
                 .height(56.dp)
                 .background(Color(0xFF333333))
         ) {
-            Text(
-                text = "Teacher Dashboard",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
+            Row(
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 16.dp)
-            )
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Teacher Dashboard",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                
+                NotificationIconWithBadge(
+                    unreadCount = unreadCount,
+                    onClick = onNavigateToNotifications,
+                    iconTint = Color.White
+                )
+            }
         }
         
         LazyColumn(

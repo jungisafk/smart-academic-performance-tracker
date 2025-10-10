@@ -19,7 +19,8 @@ import javax.inject.Inject
 class StudentSubjectApplicationViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val subjectRepository: SubjectRepository,
-    private val studentApplicationRepository: StudentApplicationRepository
+    private val studentApplicationRepository: StudentApplicationRepository,
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StudentSubjectApplicationUiState())
@@ -163,6 +164,9 @@ class StudentSubjectApplicationViewModel @Inject constructor(
 
                                     val createResult = studentApplicationRepository.createApplication(application)
                                     createResult.onSuccess { createdApplication ->
+                                        // Notify teacher about the new student application
+                                        notifyTeacherOfStudentApplication(createdApplication, subject)
+                                        
                                         _uiState.value = _uiState.value.copy(
                                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                             isApplicationSuccess = true
@@ -256,6 +260,29 @@ class StudentSubjectApplicationViewModel @Inject constructor(
     fun refreshData() {
         loadAvailableSubjects()
         loadMyApplications()
+    }
+    
+    /**
+     * Notify teacher when a student applies for their subject
+     */
+    private suspend fun notifyTeacherOfStudentApplication(application: StudentApplication, subject: Subject) {
+        try {
+            val teacherId = subject.teacherId
+            if (teacherId != null && teacherId.isNotEmpty()) {
+                notificationSenderService.sendNotification(
+                    userId = teacherId,
+                    type = com.smartacademictracker.data.model.NotificationType.STUDENT_APPLICATION_SUBMITTED,
+                    variables = mapOf(
+                        "studentName" to application.studentName,
+                        "subjectName" to application.subjectName,
+                        "applicationId" to application.id
+                    ),
+                    priority = com.smartacademictracker.data.model.NotificationPriority.NORMAL
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("StudentApplication", "Failed to notify teacher of student application: ${e.message}")
+        }
     }
 }
 

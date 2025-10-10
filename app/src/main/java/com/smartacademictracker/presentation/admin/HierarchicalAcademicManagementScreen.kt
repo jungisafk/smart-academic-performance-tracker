@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Course
@@ -40,22 +41,11 @@ fun HierarchicalAcademicManagementScreen(
     val yearLevels by viewModel.yearLevels.collectAsState()
     val subjects by viewModel.subjects.collectAsState()
 
+    // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
         viewModel.loadAllData()
         // Clean up orphaned year levels (those with empty courseId)
         viewModel.cleanupOrphanedYearLevels()
-    }
-    
-    // Refresh data when screen comes back into focus
-    LaunchedEffect(Unit) {
-        viewModel.refreshData()
-    }
-    
-    // Refresh data when returning from other screens
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.refreshData()
-        }
     }
 
     Box(
@@ -194,47 +184,103 @@ fun HierarchicalAcademicManagementScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Check for error state (no active academic period)
-                val error = uiState.error
-                if (error != null && error.contains("No active academic period")) {
-                    NoActiveAcademicPeriodCard(
-                        onCreateAcademicPeriod = onNavigateToAcademicPeriods
-                    )
-                } else if (courses.isEmpty()) {
-                    EnhancedEmptyCoursesState()
+                // Show loading state
+                if (uiState.isLoading) {
+                    LoadingAcademicStructureState()
                 } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(courses) { course ->
-                            val filteredYearLevels = yearLevels.filter { it.courseId == course.id }
-                            println("DEBUG: Course ${course.name} (${course.id}) has ${filteredYearLevels.size} year levels")
-                            filteredYearLevels.forEach { yearLevel ->
-                                println("DEBUG: Year Level for ${course.name}: ${yearLevel.name} (${yearLevel.id})")
+                    // Check for error state (no active academic period)
+                    val error = uiState.error
+                    if (error != null && error.contains("No active academic period")) {
+                        NoActiveAcademicPeriodCard(
+                            onCreateAcademicPeriod = onNavigateToAcademicPeriods
+                        )
+                    } else if (courses.isEmpty()) {
+                        EnhancedEmptyCoursesState()
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(courses) { course ->
+                                val filteredYearLevels = yearLevels.filter { it.courseId == course.id }
+                                println("DEBUG: Course ${course.name} (${course.id}) has ${filteredYearLevels.size} year levels")
+                                filteredYearLevels.forEach { yearLevel ->
+                                    println("DEBUG: Year Level for ${course.name}: ${yearLevel.name} (${yearLevel.id})")
+                                }
+                                EnhancedCourseHierarchyCard(
+                                    course = course,
+                                    yearLevels = filteredYearLevels,
+                                    subjects = subjects,
+                                    onEditCourse = { onNavigateToEditCourse(course.id) },
+                                    onDeleteCourse = { viewModel.deleteCourse(course.id) },
+                                    onAddYearLevel = { 
+                                        println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add year level for course: '${course.id}'")
+                                        onNavigateToAddYearLevel(course.id) 
+                                    },
+                                    onEditYearLevel = onNavigateToEditYearLevel,
+                                    onDeleteYearLevel = { viewModel.deleteYearLevel(it) },
+                                    onAddSubject = { yearLevelId -> 
+                                        println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add subject for course: '${course.id}', yearLevel: '$yearLevelId'")
+                                        onNavigateToAddSubject(course.id, yearLevelId) 
+                                    },
+                                    onEditSubject = onNavigateToEditSubject,
+                                    onDeleteSubject = { viewModel.deleteSubject(it) }
+                                )
                             }
-                            EnhancedCourseHierarchyCard(
-                                course = course,
-                                yearLevels = filteredYearLevels,
-                                subjects = subjects,
-                                onEditCourse = { onNavigateToEditCourse(course.id) },
-                                onDeleteCourse = { viewModel.deleteCourse(course.id) },
-                                onAddYearLevel = { 
-                                    println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add year level for course: '${course.id}'")
-                                    onNavigateToAddYearLevel(course.id) 
-                                },
-                                onEditYearLevel = onNavigateToEditYearLevel,
-                                onDeleteYearLevel = { viewModel.deleteYearLevel(it) },
-                                onAddSubject = { yearLevelId -> 
-                                    println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add subject for course: '${course.id}', yearLevel: '$yearLevelId'")
-                                    onNavigateToAddSubject(course.id, yearLevelId) 
-                                },
-                                onEditSubject = onNavigateToEditSubject,
-                                onDeleteSubject = { viewModel.deleteSubject(it) }
-                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun LoadingAcademicStructureState() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Loading indicator with background
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF2196F3).copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(40.dp),
+                    color = Color(0xFF2196F3),
+                    strokeWidth = 3.dp
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            Text(
+                text = "Loading Academic Structure",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF333333)
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Please wait while we load your courses, year levels, and subjects",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFF666666),
+                modifier = Modifier.padding(horizontal = 16.dp),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

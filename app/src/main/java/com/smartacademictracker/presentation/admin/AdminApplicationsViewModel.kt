@@ -16,7 +16,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AdminApplicationsViewModel @Inject constructor(
     private val teacherApplicationRepository: TeacherApplicationRepository,
-    private val subjectRepository: SubjectRepository
+    private val subjectRepository: SubjectRepository,
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminApplicationsUiState())
@@ -68,6 +69,15 @@ class AdminApplicationsViewModel @Inject constructor(
                         )
                         assignResult.onSuccess {
                             println("DEBUG: AdminApplicationsViewModel - Teacher assigned to subject successfully")
+                            
+                            // Notify teacher that their application was approved
+                            notificationSenderService.sendApplicationStatusNotification(
+                                userId = application.teacherId,
+                                applicationType = "Teacher Application",
+                                status = "approved",
+                                subjectName = application.subjectName
+                            )
+                            
                             // Reload applications after status update
                             loadApplications()
                         }.onFailure { exception ->
@@ -104,14 +114,32 @@ class AdminApplicationsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
-                val result = teacherApplicationRepository.updateApplicationStatus(applicationId, ApplicationStatus.REJECTED.name)
-                result.onSuccess {
-                    // Reload applications after status update
-                    loadApplications()
+                // Get application details first to notify teacher
+                val applicationResult = teacherApplicationRepository.getApplicationById(applicationId)
+                applicationResult.onSuccess { application ->
+                    val result = teacherApplicationRepository.updateApplicationStatus(applicationId, ApplicationStatus.REJECTED.name)
+                    result.onSuccess {
+                        // Notify teacher that their application was rejected
+                        notificationSenderService.sendApplicationStatusNotification(
+                            userId = application.teacherId,
+                            applicationType = "Teacher Application",
+                            status = "rejected",
+                            subjectName = application.subjectName,
+                            reason = application.adminComments
+                        )
+                        
+                        // Reload applications after status update
+                        loadApplications()
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "Failed to reject application"
+                        )
+                    }
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = exception.message ?: "Failed to reject application"
+                        error = exception.message ?: "Failed to get application details"
                     )
                 }
             } catch (e: Exception) {

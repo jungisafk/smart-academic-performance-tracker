@@ -1,5 +1,6 @@
 package com.smartacademictracker.presentation.teacher
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.StudentGradeAggregate
@@ -47,7 +48,7 @@ class TeacherAnalyticsViewModel @Inject constructor(
                         }.onFailure { exception ->
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                error = exception.message ?: "Failed to load subjects"
+                                error = sanitizeFirebaseError(exception.message ?: "Failed to load subjects")
                             )
                         }
                     } else {
@@ -59,13 +60,13 @@ class TeacherAnalyticsViewModel @Inject constructor(
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = exception.message ?: "Failed to load user data"
+                        error = sanitizeFirebaseError(exception.message ?: "Failed to load user data")
                     )
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Failed to load analytics data"
+                    error = sanitizeFirebaseError(e.message ?: "Failed to load analytics data")
                 )
             }
         }
@@ -77,6 +78,8 @@ class TeacherAnalyticsViewModel @Inject constructor(
         var totalPassingStudents = 0
         var totalAtRiskStudents = 0
         val allGrades = mutableListOf<Double>()
+        var hasError = false
+        var errorMessage: String? = null
 
         for (subject in subjects) {
             // Try to get existing aggregates first
@@ -127,7 +130,13 @@ class TeacherAnalyticsViewModel @Inject constructor(
                     }
                 }
             }.onFailure { exception ->
-                println("DEBUG: Failed to get aggregates for subject ${subject.name}: ${exception.message}")
+                Log.d("TeacherAnalytics", "Failed to get aggregates for subject ${subject.name}: ${exception.message}")
+                val sanitizedError = sanitizeFirebaseError(exception.message)
+                if (!sanitizedError.contains("Unable to load") && !sanitizedError.contains("permission")) {
+                    // Only set error if it's not a composite index or permission error (those are handled globally)
+                    hasError = true
+                    errorMessage = sanitizedError
+                }
                 // Try individual grades as fallback
                 val gradesResult = gradeRepository.getGradesBySubject(subject.id)
                 gradesResult.onSuccess { grades ->
@@ -155,6 +164,13 @@ class TeacherAnalyticsViewModel @Inject constructor(
                             }
                         }
                     }
+                }.onFailure { fallbackException ->
+                    // If fallback also fails, log but don't block the entire operation
+                    Log.d("TeacherAnalytics", "Failed to get grades for subject ${subject.name}: ${fallbackException.message}")
+                    if (!hasError) {
+                        hasError = true
+                        errorMessage = sanitizeFirebaseError(fallbackException.message)
+                    }
                 }
             }
         }
@@ -168,10 +184,11 @@ class TeacherAnalyticsViewModel @Inject constructor(
             totalStudents = totalStudents,
             classAverage = classAverage,
             passingStudents = totalPassingStudents,
-            atRiskStudents = totalAtRiskStudents
+            atRiskStudents = totalAtRiskStudents,
+            error = if (hasError && subjectPerformanceList.isEmpty()) errorMessage else null
         )
         
-        println("DEBUG: TeacherAnalyticsViewModel - Loaded performance data for ${subjects.size} subjects")
+        Log.d("TeacherAnalytics", "Loaded performance data for ${subjects.size} subjects")
     }
 
 
@@ -313,6 +330,36 @@ class TeacherAnalyticsViewModel @Inject constructor(
             availableSubjects = subjectNames,
             availableSections = sections
         )
+    }
+
+    /**
+     * Sanitizes Firebase error messages to provide user-friendly error messages.
+     * Removes Firebase console URLs and technical details that are not helpful to users.
+     */
+    private fun sanitizeFirebaseError(errorMessage: String?): String {
+        if (errorMessage == null) return "An error occurred"
+        
+        // Check if error contains Firebase console URL (composite index error)
+        if (errorMessage.contains("console.firebase.google.com") || 
+            errorMessage.contains("create_composite") ||
+            errorMessage.contains("indexes?create_composite")) {
+            return "Unable to load analytics data. Please try again later."
+        }
+        
+        // Check for permission denied errors
+        if (errorMessage.contains("PERMISSION_DENIED", ignoreCase = true) ||
+            errorMessage.contains("permission denied", ignoreCase = true)) {
+            return "You don't have permission to access this data."
+        }
+        
+        // Check for network errors
+        if (errorMessage.contains("network", ignoreCase = true) ||
+            errorMessage.contains("unavailable", ignoreCase = true)) {
+            return "Network error. Please check your connection and try again."
+        }
+        
+        // Return original message if it's already user-friendly
+        return errorMessage
     }
 }
 

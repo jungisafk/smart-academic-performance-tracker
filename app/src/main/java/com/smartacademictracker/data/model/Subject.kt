@@ -22,8 +22,19 @@ data class Subject(
     val maxStudents: Int = 30, // Maximum number of students that can enroll
     val numberOfSections: Int = 1, // Number of sections for this subject
     val sections: List<String> = emptyList(), // Generated section names (e.g., ["IT101A", "IT101B"])
+    val subjectType: SubjectType = SubjectType.MAJOR, // MAJOR: only teachers of that course can see/apply, MINOR: any teacher can apply
     // Computed fields for display (populated by repository)
     val yearLevelName: String = "",
     val courseName: String = "",
     val courseCode: String = ""
 )
+
+/**
+ * Subject type determines visibility and application rules for teachers
+ * - MAJOR: Only teachers of the same course/department can see and apply
+ * - MINOR: Any teacher can see and apply (e.g., general education subjects)
+ */
+enum class SubjectType(val displayName: String) {
+    MAJOR("Major Subject"),
+    MINOR("Minor Subject")
+}

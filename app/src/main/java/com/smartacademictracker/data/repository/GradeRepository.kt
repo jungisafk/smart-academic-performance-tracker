@@ -200,11 +200,12 @@ class GradeRepository @Inject constructor(
             
             val snapshot = gradesCollection
                 .whereEqualTo("academicPeriodId", academicContext.periodId)
-                .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
-            Result.success(grades)
+            // Sort in memory to avoid composite index requirement
+            val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+            Result.success(sortedGrades)
         } catch (e: Exception) {
             Result.failure(e)
         }

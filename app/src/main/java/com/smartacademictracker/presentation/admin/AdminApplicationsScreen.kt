@@ -30,6 +30,7 @@ fun AdminApplicationsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val applications by viewModel.applications.collectAsState()
 
+    // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
         viewModel.loadApplications()
     }
@@ -39,36 +40,45 @@ fun AdminApplicationsScreen(
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Enhanced Header Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
+        // Show loading only if no data exists yet
+        if (uiState.isLoading && applications.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
+                CircularProgressIndicator(color = Color(0xFF2196F3))
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Enhanced Header Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(20.dp)
                     ) {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Default.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
-                            )
-                        }
+                            IconButton(
+                                onClick = onNavigateBack,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.2f))
+                            ) {
+                                Icon(
+                                    Icons.Default.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color.White
+                                )
+                            }
                         
                         Spacer(modifier = Modifier.width(16.dp))
                         
@@ -104,31 +114,30 @@ fun AdminApplicationsScreen(
                             )
                         }
                     }
+                    }
                 }
-            }
             
-            // Content Section
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp)
-            ) {
-
-                // Enhanced Loading State
-                if (uiState.isLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                // Content Section
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp)
+                ) {
+                    // Enhanced Loading State
+                    if (uiState.isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                modifier = Modifier.padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White)
                             ) {
+                                Column(
+                                    modifier = Modifier.padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
                                 CircularProgressIndicator(
                                     color = Color(0xFF2196F3),
                                     modifier = Modifier.size(40.dp)
@@ -139,71 +148,72 @@ fun AdminApplicationsScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     color = Color(0xFF333333)
                                 )
-                            }
-                        }
-                    }
-                } else {
-                    // Applications List
-                    if (applications.isEmpty()) {
-                        // Enhanced Empty State
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8))
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                // Icon with background
-                                Box(
-                                    modifier = Modifier
-                                        .size(80.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF4CAF50).copy(alpha = 0.1f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Assignment,
-                                        contentDescription = "No Applications",
-                                        modifier = Modifier.size(40.dp),
-                                        tint = Color(0xFF4CAF50)
-                                    )
                                 }
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                Text(
-                                    text = "No applications found",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF333333)
-                                )
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                Text(
-                                    text = "Teacher applications will appear here once they apply for subjects",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color(0xFF666666),
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
                             }
                         }
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(applications) { application ->
-                                EnhancedApplicationCard(
-                                    application = application,
-                                    onApprove = { viewModel.approveApplication(application.id) },
-                                    onReject = { viewModel.rejectApplication(application.id) }
-                                )
+                        // Applications List
+                        if (applications.isEmpty()) {
+                            // Enhanced Empty State
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    // Icon with background
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4CAF50).copy(alpha = 0.1f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Assignment,
+                                            contentDescription = "No Applications",
+                                            modifier = Modifier.size(40.dp),
+                                            tint = Color(0xFF4CAF50)
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    
+                                    Text(
+                                        text = "No applications found",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333333)
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    Text(
+                                        text = "Teacher applications will appear here once they apply for subjects",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color(0xFF666666),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(applications) { application ->
+                                    EnhancedApplicationCard(
+                                        application = application,
+                                        onApprove = { viewModel.approveApplication(application.id) },
+                                        onReject = { viewModel.rejectApplication(application.id) }
+                                    )
+                                }
                             }
                         }
                     }

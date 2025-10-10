@@ -38,7 +38,8 @@ class AddSubjectViewModel @Inject constructor(
         code: String,
         description: String,
         credits: Int,
-        numberOfSections: Int = 1
+        numberOfSections: Int = 1,
+        subjectType: com.smartacademictracker.data.model.SubjectType = com.smartacademictracker.data.model.SubjectType.MAJOR
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -65,7 +66,8 @@ class AddSubjectViewModel @Inject constructor(
                     academicYear = academicContext.academicYear,
                     courseId = _courseId,
                     yearLevelId = _yearLevelId,
-                    numberOfSections = numberOfSections
+                    numberOfSections = numberOfSections,
+                    subjectType = subjectType
                 )
                 result.onSuccess {
                     _uiState.value = _uiState.value.copy(

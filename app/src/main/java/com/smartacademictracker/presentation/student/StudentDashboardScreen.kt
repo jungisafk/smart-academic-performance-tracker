@@ -25,6 +25,9 @@ import com.smartacademictracker.presentation.auth.AuthViewModel
 import com.smartacademictracker.data.model.Grade
 import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.model.GradeStatus
+import com.smartacademictracker.data.utils.GradeCalculationEngine
+import com.smartacademictracker.presentation.common.NotificationIconWithBadge
+import com.smartacademictracker.presentation.notification.NotificationViewModel
 
 data class QuickActionData(
     val title: String,
@@ -34,13 +37,11 @@ data class QuickActionData(
 )
 
 data class RecentGradeData(
-    val subjectName: String,
     val gradePeriod: String,
-    val percentage: String,
-    val score: String,
+    val grade: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val iconColor: Color,
-    val scoreColor: Color
+    val gradeColor: Color
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,7 +52,6 @@ fun StudentDashboardScreen(
     onNavigateToSubjectApplication: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToAnalytics: () -> Unit,
-    onNavigateToPerformanceTracking: () -> Unit,
     onNavigateToGradeHistory: () -> Unit,
     onNavigateToGradeComparison: () -> Unit,
     onNavigateToEnrollments: () -> Unit,
@@ -59,14 +59,17 @@ fun StudentDashboardScreen(
     onNavigateToNotifications: () -> Unit,
     onSignOut: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
-    dashboardViewModel: StudentDashboardViewModel = hiltViewModel()
+    dashboardViewModel: StudentDashboardViewModel = hiltViewModel(),
+    notificationViewModel: NotificationViewModel = hiltViewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     val dashboardState by dashboardViewModel.uiState.collectAsState()
+    val unreadCount by notificationViewModel.unreadCount.collectAsState()
 
     // Load dashboard data when screen is composed
     LaunchedEffect(Unit) {
         dashboardViewModel.loadDashboardData()
+        notificationViewModel.loadNotifications()
     }
     
     Box(
@@ -96,14 +99,24 @@ fun StudentDashboardScreen(
                         color = Color(0xFF333333)
                     )
                     
-                    IconButton(
-                        onClick = { dashboardViewModel.refreshData() }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
+                        NotificationIconWithBadge(
+                            unreadCount = unreadCount,
+                            onClick = onNavigateToNotifications
                         )
+                        
+                        IconButton(
+                            onClick = { dashboardViewModel.refreshData() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color(0xFF666666)
+                            )
+                        }
                     }
                 }
             }
@@ -189,7 +202,7 @@ fun StudentDashboardScreen(
                         columns = GridCells.Fixed(2),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.height(320.dp)
+                        modifier = Modifier.height(280.dp)
                     ) {
                         items(listOf(
                             QuickActionData("View Grades", onNavigateToGrades, Icons.Default.Star, true),
@@ -197,21 +210,14 @@ fun StudentDashboardScreen(
                             QuickActionData("Apply for Subjects", onNavigateToSubjectApplication, Icons.Default.Description, false),
                             QuickActionData("My Enrollments", onNavigateToEnrollments, Icons.Default.MenuBook, true),
                             QuickActionData("Analytics", onNavigateToAnalytics, Icons.Default.BarChart, false),
-                            QuickActionData("Performance", onNavigateToPerformanceTracking, Icons.Default.TrendingUp, true),
-                            QuickActionData("Profile", onNavigateToProfile, Icons.Default.Person, false),
-                            QuickActionData("", { }, Icons.Default.Add, false) // Empty slot
+                            QuickActionData("Profile", onNavigateToProfile, Icons.Default.Person, false)
                         )) { actionData ->
-                            if (actionData.title.isNotEmpty()) {
-                                QuickActionCard(
-                                    title = actionData.title,
-                                    onClick = actionData.onClick,
-                                    icon = actionData.icon,
-                                    isYellow = actionData.isYellow
-                                )
-                            } else {
-                                // Empty slot - just a placeholder
-                                Spacer(modifier = Modifier.height(100.dp))
-                            }
+                            QuickActionCard(
+                                title = actionData.title,
+                                onClick = actionData.onClick,
+                                icon = actionData.icon,
+                                isYellow = actionData.isYellow
+                            )
                         }
                     }
                 }
@@ -352,7 +358,7 @@ fun StudentDashboardScreen(
                                     color = Color(0xFF666666)
                                 )
                                 Text(
-                                    text = if (dashboardState.isLoading) "Loading..." else String.format("%.1f", dashboardState.averageGrade),
+                                    text = if (dashboardState.isLoading) "Loading..." else GradeCalculationEngine.calculateLetterGrade(dashboardState.averageGrade),
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFFC107)
@@ -394,28 +400,22 @@ fun StudentDashboardScreen(
                         // Sample Recent Grades
                         val recentGrades = listOf(
                             RecentGradeData(
-                                "TECHNO",
-                                "Final - 89.0%",
-                                "89.0/100.0",
-                                "89.0/100.0",
+                                "Final",
+                                GradeCalculationEngine.calculateLetterGrade(89.0),
                                 Icons.Default.CheckCircle,
                                 Color(0xFFFFC107),
                                 Color(0xFFFF9800)
                             ),
                             RecentGradeData(
-                                "TECHNO",
-                                "Midterm - 81.0%",
-                                "81.0/100.0",
-                                "81.0/100.0",
+                                "Midterm",
+                                GradeCalculationEngine.calculateLetterGrade(81.0),
                                 Icons.Default.Star,
                                 Color(0xFF2196F3),
                                 Color(0xFF2196F3)
                             ),
                             RecentGradeData(
-                                "TECHNO",
-                                "Preliminary - 80.0%",
-                                "80.0/100.0",
-                                "80.0/100.0",
+                                "Preliminary",
+                                GradeCalculationEngine.calculateLetterGrade(80.0),
                                 Icons.Default.Star,
                                 Color(0xFF2196F3),
                                 Color(0xFF2196F3)
@@ -448,22 +448,17 @@ fun StudentDashboardScreen(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text(
-                                            text = gradeData.subjectName,
+                                            text = gradeData.gradePeriod,
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF333333)
                                         )
-                                        Text(
-                                            text = gradeData.gradePeriod,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color(0xFF666666)
-                                        )
                                     }
                                     Text(
-                                        text = gradeData.score,
+                                        text = gradeData.grade,
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = gradeData.scoreColor
+                                        color = gradeData.gradeColor
                                     )
                                 }
                             }
@@ -610,7 +605,7 @@ fun QuickActionCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.height(100.dp),
+        modifier = modifier.height(120.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
@@ -639,14 +634,15 @@ fun QuickActionCard(
                     tint = Color.White
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF333333),
                 textAlign = TextAlign.Center,
-                maxLines = 2
+                maxLines = 2,
+                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
             )
         }
     }
@@ -662,7 +658,7 @@ fun AdvancedFeatureCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.height(100.dp),
+        modifier = modifier.height(120.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
@@ -691,14 +687,15 @@ fun AdvancedFeatureCard(
                     tint = Color.White
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF333333),
                 textAlign = TextAlign.Center,
-                maxLines = 2
+                maxLines = 2,
+                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
             )
         }
     }

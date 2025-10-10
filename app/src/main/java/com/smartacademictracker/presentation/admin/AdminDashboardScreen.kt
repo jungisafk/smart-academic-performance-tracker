@@ -20,10 +20,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.smartacademictracker.presentation.teacher.TeacherDashboardScreen
 import com.smartacademictracker.presentation.common.NoActiveAcademicPeriodCard
+import com.smartacademictracker.presentation.common.NotificationIconWithBadge
+import com.smartacademictracker.presentation.notification.NotificationViewModel
 
 data class QuickActionData(
     val title: String,
@@ -44,12 +47,16 @@ fun AdminDashboardScreen(
     onNavigateToTeacherSectionAssignment: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
-    viewModel: AdminDashboardViewModel = hiltViewModel()
+    viewModel: AdminDashboardViewModel = hiltViewModel(),
+    notificationViewModel: NotificationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val unreadCount by notificationViewModel.unreadCount.collectAsState()
     
+    // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
         viewModel.loadDashboardData()
+        notificationViewModel.loadNotifications()
     }
     
     Box(
@@ -57,16 +64,8 @@ fun AdminDashboardScreen(
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    color = Color(0xFF2196F3)
-                )
-            }
-        } else if (uiState.error != null) {
+        // Show error if present, but don't block UI
+        if (uiState.error != null && !uiState.isLoading) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -95,20 +94,33 @@ fun AdminDashboardScreen(
             ) {
                 // Header Section
                 item {
-                    Column(
-                        modifier = Modifier.padding(vertical = 8.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Admin Dashboard",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-                        Text(
-                            text = "Welcome back! Here's your system overview",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFF666666),
-                            modifier = Modifier.padding(top = 4.dp)
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Admin Dashboard",
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF333333)
+                            )
+                            Text(
+                                text = "Welcome back! Here's your system overview",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color(0xFF666666),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        
+                        NotificationIconWithBadge(
+                            unreadCount = unreadCount,
+                            onClick = onNavigateToNotifications
                         )
                     }
                 }
@@ -135,11 +147,19 @@ fun AdminDashboardScreen(
                             )
                         }
                         
+                        // Calculate responsive height for System Overview grid
+                        val systemOverviewCardCount = 6
+                        val systemOverviewColumns = 2
+                        val systemOverviewRows = (systemOverviewCardCount + systemOverviewColumns - 1) / systemOverviewColumns
+                        val systemOverviewCardHeight = 100.dp // Height of each SystemOverviewCard
+                        val systemOverviewVerticalSpacing = 12.dp * (systemOverviewRows - 1)
+                        val systemOverviewGridHeight = (systemOverviewCardHeight * systemOverviewRows) + systemOverviewVerticalSpacing
+                        
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(2),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.height(300.dp)
+                            modifier = Modifier.height(systemOverviewGridHeight)
                         ) {
                             items(listOf(
                                 Triple("Total Subjects", uiState.totalSubjects.toString(), Icons.Default.MenuBook),
@@ -191,11 +211,25 @@ fun AdminDashboardScreen(
                             )
                         }
                         
+                        // Calculate responsive height for the grid
+                        val configuration = LocalConfiguration.current
+                        val screenWidth = configuration.screenWidthDp.dp
+                        val buttonCount = 8 // Number of buttons in the grid
+                        val columns = 2
+                        val rows = (buttonCount + columns - 1) / columns // Ceiling division
+                        val horizontalPadding = 16.dp * 2 // Left and right padding
+                        val horizontalSpacing = 12.dp * (columns - 1) // Spacing between columns
+                        val buttonWidth = (screenWidth - horizontalPadding - horizontalSpacing) / columns
+                        val buttonHeight = buttonWidth / 1.5f // Aspect ratio 1.5:1 (more compact)
+                        val verticalSpacing = 12.dp * (rows - 1) // Spacing between rows
+                        val gridHeight = (buttonHeight * rows) + verticalSpacing
+                        
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(2),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.height(400.dp)
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.height(gridHeight)
                         ) {
                             items(listOf(
                                 QuickActionData("Teacher Applications", onNavigateToApplications, Icons.Default.PersonAdd, true),
@@ -205,18 +239,25 @@ fun AdminDashboardScreen(
                                 QuickActionData("Academic Periods", onNavigateToAcademicPeriods, Icons.Default.CalendarToday, false),
                                 QuickActionData("Teacher Assignments", onNavigateToTeacherSectionAssignment, Icons.Default.Assignment, false),
                                 QuickActionData("Period Data Viewer", onNavigateToAcademicPeriodData, Icons.Default.Description, false),
-                                QuickActionData("Profile", onNavigateToProfile, Icons.Default.Person, false)
+                                QuickActionData("Notifications", onNavigateToNotifications, Icons.Default.Notifications, false)
                             )) { actionData ->
+                                val badgeCount = when (actionData.title) {
+                                    "Teacher Applications" -> uiState.pendingTeacherApplications
+                                    "Notifications" -> unreadCount
+                                    else -> 0
+                                }
                                 QuickActionButton(
                                     title = actionData.title,
                                     onClick = actionData.onClick,
                                     icon = actionData.icon,
-                                    isYellow = actionData.isYellow
+                                    isYellow = actionData.isYellow,
+                                    badgeCount = badgeCount,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
                         
-                        // Bottom row with Notifications and Refresh Data
+                        // Bottom row with Profile and Refresh Data
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -224,18 +265,20 @@ fun AdminDashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             QuickActionButton(
-                                title = "Notifications",
-                                onClick = onNavigateToNotifications,
-                                icon = Icons.Default.Notifications,
+                                title = "Profile",
+                                onClick = onNavigateToProfile,
+                                icon = Icons.Default.Person,
                                 isYellow = false,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
                             )
                             QuickActionButton(
                                 title = "Refresh Data",
                                 onClick = { viewModel.refreshData() },
                                 icon = Icons.Default.Refresh,
                                 isYellow = false,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
                             )
                         }
                     }
@@ -339,6 +382,11 @@ fun CurrentAcademicPeriodCard(
     onCreateAcademicPeriod: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp
+    val isSmallScreen = screenWidth < 360 // Small phones
+    val isMediumScreen = screenWidth < 600 // Medium phones/small tablets
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -346,83 +394,86 @@ fun CurrentAcademicPeriodCard(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(
+                horizontal = if (isSmallScreen) 12.dp else 20.dp,
+                vertical = if (isSmallScreen) 16.dp else 20.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
                     imageVector = Icons.Default.CalendarToday,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(if (isSmallScreen) 18.dp else 20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Current Academic Period",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = if (isSmallScreen) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
             }
             
             if (activePeriod.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "Academic Year",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f)
+                // Use responsive layout: stack vertically on small screens, horizontal on larger
+                if (isSmallScreen) {
+                    // Stack vertically on very small screens
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        InfoItem(
+                            label = "Academic Year",
+                            value = currentAcademicYear,
+                            isSmallScreen = isSmallScreen,
+                            isMediumScreen = isMediumScreen
                         )
-                        Text(
-                            text = currentAcademicYear,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                        InfoItem(
+                            label = "Semester",
+                            value = currentSemester,
+                            isSmallScreen = isSmallScreen,
+                            isMediumScreen = isMediumScreen
                         )
+                        StatusItem(isSmallScreen = isSmallScreen)
                     }
-                    
-                    Column {
-                        Text(
-                            text = "Semester",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f)
+                } else {
+                    // Use horizontal layout with proper spacing on larger screens
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        InfoItem(
+                            label = "Academic Year",
+                            value = currentAcademicYear,
+                            isSmallScreen = isSmallScreen,
+                            isMediumScreen = isMediumScreen,
+                            modifier = Modifier.weight(1f)
                         )
-                        Text(
-                            text = currentSemester,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                        
+                        Spacer(modifier = Modifier.width(if (isMediumScreen) 8.dp else 16.dp))
+                        
+                        InfoItem(
+                            label = "Semester",
+                            value = currentSemester,
+                            isSmallScreen = isSmallScreen,
+                            isMediumScreen = isMediumScreen,
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                    
-                    Column {
-                        Text(
-                            text = "Status",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f)
+                        
+                        Spacer(modifier = Modifier.width(if (isMediumScreen) 8.dp else 16.dp))
+                        
+                        StatusItem(
+                            isSmallScreen = isSmallScreen,
+                            modifier = Modifier.weight(1f)
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF4CAF50))
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Active",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White
-                            )
-                        }
                     }
                 }
             } else {
@@ -435,39 +486,147 @@ fun CurrentAcademicPeriodCard(
 }
 
 @Composable
+private fun InfoItem(
+    label: String,
+    value: String,
+    isSmallScreen: Boolean,
+    isMediumScreen: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = label,
+            style = if (isSmallScreen) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.8f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = if (isSmallScreen) {
+                MaterialTheme.typography.titleMedium
+            } else if (isMediumScreen) {
+                MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
+            } else {
+                MaterialTheme.typography.headlineSmall
+            },
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            softWrap = false,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun StatusItem(
+    isSmallScreen: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = "Status",
+            style = if (isSmallScreen) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.8f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF4CAF50))
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "Active",
+                style = if (isSmallScreen) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 fun QuickActionButton(
     title: String,
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isYellow: Boolean = false,
+    badgeCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(80.dp),
+        modifier = modifier
+            .then(if (modifier == Modifier) Modifier.fillMaxWidth() else Modifier)
+            .aspectRatio(1.5f), // More compact aspect ratio
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isYellow) Color(0xFFFFC107) else Color(0xFF2196F3)
-        )
+        ),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
     ) {
         Column(
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isYellow) Color(0xFF333333) else Color.White,
-                modifier = Modifier.size(24.dp)
-            )
+            Box(
+                modifier = Modifier.size(22.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isYellow) Color(0xFF333333) else Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+                
+                // Badge showing count
+                if (badgeCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 5.dp, y = (-3).dp)
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF44336)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (badgeCount > 99) "99+" else badgeCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                 fontWeight = FontWeight.Medium,
                 color = if (isYellow) Color(0xFF333333) else Color.White,
                 textAlign = TextAlign.Center,
-                maxLines = 2
+                maxLines = 2,
+                lineHeight = 13.sp,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
     }

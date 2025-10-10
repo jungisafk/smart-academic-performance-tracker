@@ -1,6 +1,7 @@
 package com.smartacademictracker.presentation.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.AcademicPeriod
@@ -43,6 +45,7 @@ fun AdminAcademicPeriodScreen(
     val activePeriod by viewModel.activePeriod.collectAsState()
     val summary by viewModel.summary.collectAsState()
 
+    // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
         viewModel.loadAcademicPeriods()
     }
@@ -225,8 +228,10 @@ fun AdminAcademicPeriodScreen(
                     }
                 } else {
                     items(academicPeriods) { period ->
+                        // Only show as active if it matches the active period from repository
+                        val isActive = activePeriod?.id == period.id
                         EnhancedAcademicPeriodCard(
-                            period = period,
+                            period = period.copy(isActive = isActive),
                             onEdit = { /* TODO: Implement edit functionality */ },
                             onDelete = { viewModel.deleteAcademicPeriod(period.id) },
                             onSetActive = { viewModel.setActivePeriod(period.id) }
@@ -623,49 +628,80 @@ fun EnhancedAcademicPeriodCard(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Action Buttons
+            // Action Buttons - Consistent outlined style with responsive sizing
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (!period.isActive) {
-                    Button(
+                    OutlinedButton(
                         onClick = onSetActive,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF4CAF50)
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFF4CAF50)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
                     ) {
                         Text(
                             "Set Active",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Visible
                         )
                     }
                 }
                 
                 OutlinedButton(
                     onClick = onEdit,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2196F3))
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF2196F3)
+                    ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFF2196F3)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
                 ) {
                     Text(
                         "Edit",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                 }
                 
                 OutlinedButton(
                     onClick = onDelete,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F))
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFFD32F2F)
+                    ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFD32F2F)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
                 ) {
                     Text(
                         "Delete",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                 }
             }

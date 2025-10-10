@@ -13,6 +13,7 @@ import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.SubjectApplicationRepository
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.StudentEnrollmentRepository
+import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.model.EnrollmentStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +29,9 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val subjectApplicationRepository: SubjectApplicationRepository,
     private val userRepository: UserRepository,
-    private val studentEnrollmentRepository: StudentEnrollmentRepository
+    private val studentEnrollmentRepository: StudentEnrollmentRepository,
+    private val sectionAssignmentRepository: SectionAssignmentRepository,
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HierarchicalStudentSubjectApplicationUiState())
@@ -45,6 +48,9 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
 
     private val _myApplications = MutableStateFlow<List<SubjectApplication>>(emptyList())
     val myApplications: StateFlow<List<SubjectApplication>> = _myApplications.asStateFlow()
+
+    private val _sectionAssignments = MutableStateFlow<List<com.smartacademictracker.data.model.SectionAssignment>>(emptyList())
+    val sectionAssignments: StateFlow<List<com.smartacademictracker.data.model.SectionAssignment>> = _sectionAssignments.asStateFlow()
 
     private val _selectedCourseId = MutableStateFlow<String?>(null)
     val selectedCourseId: StateFlow<String?> = _selectedCourseId.asStateFlow()
@@ -155,6 +161,9 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         return@onSuccess
                     }
 
+                    // Load section assignments
+                    loadSectionAssignments()
+
                     // Load my applications
                     loadMyApplications()
 
@@ -254,6 +263,9 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                     
                     val result = subjectApplicationRepository.createApplication(application)
                     result.onSuccess {
+                        // Notify teacher about the new student application
+                        notifyTeacherOfStudentApplication(application)
+                        
                         _uiState.value = _uiState.value.copy(
                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                             isApplicationSuccess = true
@@ -330,8 +342,51 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
+    private fun loadSectionAssignments() {
+        viewModelScope.launch {
+            try {
+                val result = sectionAssignmentRepository.getAllSectionAssignments()
+                result.onSuccess { assignments ->
+                    _sectionAssignments.value = assignments
+                }.onFailure { exception ->
+                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load section assignments: ${exception.message}")
+                }
+            } catch (e: Exception) {
+                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Error loading section assignments: ${e.message}")
+            }
+        }
+    }
+
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+    
+    /**
+     * Notify teacher when a student applies for their subject/section
+     */
+    private suspend fun notifyTeacherOfStudentApplication(application: SubjectApplication) {
+        try {
+            // Get subject to find the teacher
+            val subjectResult = subjectRepository.getSubjectById(application.subjectId)
+            subjectResult.onSuccess { subject ->
+                val teacherId = subject.teacherId
+                if (teacherId != null && teacherId.isNotEmpty()) {
+                    notificationSenderService.sendNotification(
+                        userId = teacherId,
+                        type = com.smartacademictracker.data.model.NotificationType.STUDENT_APPLICATION_SUBMITTED,
+                        variables = mapOf(
+                            "studentName" to application.studentName,
+                            "subjectName" to application.subjectName,
+                            "sectionName" to application.sectionName,
+                            "applicationId" to application.id
+                        ),
+                        priority = com.smartacademictracker.data.model.NotificationPriority.NORMAL
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("StudentApplication", "Failed to notify teacher of student application: ${e.message}")
+        }
     }
 }
 
