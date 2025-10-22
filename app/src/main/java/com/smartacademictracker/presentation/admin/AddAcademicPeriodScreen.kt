@@ -19,10 +19,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Semester
 import com.smartacademictracker.presentation.utils.*
@@ -37,6 +39,11 @@ fun AddAcademicPeriodScreen(
     viewModel: AddAcademicPeriodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Date picker state
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
@@ -214,15 +221,110 @@ fun AddAcademicPeriodScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // Date Range Section
-                EnhancedDateRangeSection(
-                    startDate = uiState.startDate,
-                    endDate = uiState.endDate,
-                    onStartDateChanged = viewModel::setStartDate,
-                    onEndDateChanged = viewModel::setEndDate,
-                    startDateError = uiState.startDateError,
-                    endDateError = uiState.endDateError,
-                    selectedSemester = uiState.selectedSemester
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Date Range",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = if (uiState.startDate > 0) formatDateLocal(uiState.startDate) else "",
+                                onValueChange = { },
+                                label = { Text("Start Date *") },
+                                modifier = Modifier.weight(1f),
+                                isError = uiState.startDateError != null,
+                                supportingText = uiState.startDateError?.let { { Text(it) } },
+                                readOnly = true,
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { showStartDatePicker = true }
+                                    ) {
+                                        Icon(Icons.Default.CalendarToday, contentDescription = "Select Start Date")
+                                    }
+                                }
+                            )
+                            
+                            OutlinedTextField(
+                                value = if (uiState.endDate > 0) formatDateLocal(uiState.endDate) else "",
+                                onValueChange = { },
+                                label = { Text("End Date *") },
+                                modifier = Modifier.weight(1f),
+                                isError = uiState.endDateError != null,
+                                supportingText = uiState.endDateError?.let { { Text(it) } },
+                                readOnly = true,
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { showEndDatePicker = true }
+                                    ) {
+                                        Icon(Icons.Default.CalendarToday, contentDescription = "Select End Date")
+                                    }
+                                }
+                            )
+                        }
+                        
+                        // Quick Date Set Buttons
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val currentDate = System.currentTimeMillis()
+                                    viewModel.setStartDate(currentDate)
+                                    // Set end date to 5 months from current date
+                                    val endDate = currentDate + (150L * 24 * 60 * 60 * 1000) // 150 days = ~5 months
+                                    viewModel.setEndDate(endDate)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50)
+                                )
+                            ) {
+                                Text("Set to Current + 5 Months", fontSize = 12.sp)
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    val currentDate = System.currentTimeMillis()
+                                    viewModel.setStartDate(currentDate)
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2196F3)
+                                )
+                            ) {
+                                Text("Set Start to Today", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -371,145 +473,41 @@ fun AddAcademicPeriodScreen(
             onDismiss = { viewModel.clearError() }
         )
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SemesterDropdown(
-    selectedSemester: Semester,
-    onSemesterSelected: (Semester) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val semesterOptions = listOf(
-        Semester.FIRST_SEMESTER,
-        Semester.SECOND_SEMESTER,
-        Semester.SUMMER_CLASS
-    )
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedTextField(
-            value = selectedSemester.displayName,
-            onValueChange = { },
-            readOnly = true,
-            label = { Text("Semester *") },
-            trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            semesterOptions.forEach { semester ->
-                DropdownMenuItem(
-                    text = { Text(semester.displayName) },
-                    onClick = {
-                        onSemesterSelected(semester)
-                        expanded = false
-                    }
-                )
-            }
+    
+    // Date Picker Dialogs
+    if (showStartDatePicker) {
+        val calendar = Calendar.getInstance()
+        if (uiState.startDate > 0) {
+            calendar.timeInMillis = uiState.startDate
         }
+        
+        DatePickerDialog(
+            context = context,
+            onDateSelected = { selectedDate ->
+                viewModel.setStartDate(selectedDate)
+                showStartDatePicker = false
+            },
+            initialDateMillis = calendar.timeInMillis
+        )
     }
-}
-
-@Composable
-fun DateRangeSection(
-    startDate: Long,
-    endDate: Long,
-    onStartDateChanged: (Long) -> Unit,
-    onEndDateChanged: (Long) -> Unit,
-    startDateError: String?,
-    endDateError: String?,
-    selectedSemester: Semester
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.CalendarToday,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Date Range",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                OutlinedTextField(
-                    value = if (startDate > 0) formatDateLocal(startDate) else "",
-                    onValueChange = { },
-                    label = { Text("Start Date *") },
-                    modifier = Modifier.weight(1f),
-                    isError = startDateError != null,
-                    supportingText = startDateError?.let { { Text(it) } },
-                    readOnly = true,
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                // Set start date to current date
-                                onStartDateChanged(System.currentTimeMillis())
-                            }
-                        ) {
-                            Icon(Icons.Default.CalendarToday, contentDescription = "Select Date")
-                        }
-                    }
-                )
-                
-                OutlinedTextField(
-                    value = if (endDate > 0) formatDateLocal(endDate) else "",
-                    onValueChange = { },
-                    label = { Text("End Date *") },
-                    modifier = Modifier.weight(1f),
-                    isError = endDateError != null,
-                    supportingText = endDateError?.let { { Text(it) } },
-                    readOnly = true,
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                // Set end date based on semester type
-                                val startDate = if (startDate > 0) startDate else System.currentTimeMillis()
-                                val endDate = when {
-                                    // First/Second Semester: ~4 months
-                                    selectedSemester == Semester.FIRST_SEMESTER || selectedSemester == Semester.SECOND_SEMESTER -> 
-                                        startDate + (120L * 24 * 60 * 60 * 1000) // 120 days
-                                    // Summer Class: ~1 month
-                                    selectedSemester == Semester.SUMMER_CLASS -> 
-                                        startDate + (30L * 24 * 60 * 60 * 1000) // 30 days
-                                    else -> startDate + (30L * 24 * 60 * 60 * 1000) // Default 30 days
-                                }
-                                onEndDateChanged(endDate)
-                            }
-                        ) {
-                            Icon(Icons.Default.CalendarToday, contentDescription = "Select Date")
-                        }
-                    }
-                )
-            }
+    
+    if (showEndDatePicker) {
+        val calendar = Calendar.getInstance()
+        if (uiState.endDate > 0) {
+            calendar.timeInMillis = uiState.endDate
+        } else if (uiState.startDate > 0) {
+            // If no end date is set but start date exists, set initial to start date + 5 months
+            calendar.timeInMillis = uiState.startDate + (150L * 24 * 60 * 60 * 1000)
         }
+        
+        DatePickerDialog(
+            context = context,
+            onDateSelected = { selectedDate ->
+                viewModel.setEndDate(selectedDate)
+                showEndDatePicker = false
+            },
+            initialDateMillis = calendar.timeInMillis
+        )
     }
 }
 
@@ -564,113 +562,28 @@ fun EnhancedSemesterDropdown(
 }
 
 @Composable
-fun EnhancedDateRangeSection(
-    startDate: Long,
-    endDate: Long,
-    onStartDateChanged: (Long) -> Unit,
-    onEndDateChanged: (Long) -> Unit,
-    startDateError: String?,
-    endDateError: String?,
-    selectedSemester: Semester
+fun DatePickerDialog(
+    context: android.content.Context,
+    onDateSelected: (Long) -> Unit,
+    initialDateMillis: Long
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFE3F2FD)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.CalendarToday,
-                        contentDescription = null,
-                        tint = Color(0xFF2196F3),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Date Range",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF333333)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                OutlinedTextField(
-                    value = if (startDate > 0) formatDateLocal(startDate) else "",
-                    onValueChange = { },
-                    label = { Text("Start Date *") },
-                    modifier = Modifier.weight(1f),
-                    isError = startDateError != null,
-                    supportingText = startDateError?.let { { Text(it) } },
-                    readOnly = true,
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                onStartDateChanged(System.currentTimeMillis())
-                            }
-                        ) {
-                            Icon(Icons.Default.CalendarToday, contentDescription = "Select Date")
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF2196F3),
-                        unfocusedBorderColor = Color(0xFFE0E0E0)
-                    )
-                )
-                
-                OutlinedTextField(
-                    value = if (endDate > 0) formatDateLocal(endDate) else "",
-                    onValueChange = { },
-                    label = { Text("End Date *") },
-                    modifier = Modifier.weight(1f),
-                    isError = endDateError != null,
-                    supportingText = endDateError?.let { { Text(it) } },
-                    readOnly = true,
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                val startDate = if (startDate > 0) startDate else System.currentTimeMillis()
-                                val endDate = when {
-                                    selectedSemester == Semester.FIRST_SEMESTER || selectedSemester == Semester.SECOND_SEMESTER -> 
-                                        startDate + (120L * 24 * 60 * 60 * 1000)
-                                    selectedSemester == Semester.SUMMER_CLASS -> 
-                                        startDate + (30L * 24 * 60 * 60 * 1000)
-                                    else -> startDate + (30L * 24 * 60 * 60 * 1000)
-                                }
-                                onEndDateChanged(endDate)
-                            }
-                        ) {
-                            Icon(Icons.Default.CalendarToday, contentDescription = "Select Date")
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF2196F3),
-                        unfocusedBorderColor = Color(0xFFE0E0E0)
-                    )
-                )
-            }
-        }
+    val calendar = Calendar.getInstance()
+    calendar.timeInMillis = initialDateMillis
+    
+    val datePickerDialog = android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            val selectedCalendar = Calendar.getInstance()
+            selectedCalendar.set(year, month, dayOfMonth)
+            onDateSelected(selectedCalendar.timeInMillis)
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH)
+    )
+    
+    LaunchedEffect(Unit) {
+        datePickerDialog.show()
     }
 }
 
