@@ -18,6 +18,7 @@ import com.smartacademictracker.presentation.auth.AuthViewModel
 fun ProfileScreen(
     onNavigateBack: () -> Unit,
     onSignOut: () -> Unit,
+    onNavigateToNotificationTest: () -> Unit = {},
     authViewModel: AuthViewModel = hiltViewModel(),
     profileViewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -165,6 +166,15 @@ fun ProfileScreen(
                     description = "Get help and contact support",
                     icon = Icons.Default.Help,
                     onClick = { /* TODO: Navigate to help */ }
+                )
+            }
+            
+            item {
+                ProfileActionCard(
+                    title = "Notification Testing",
+                    description = "Test notification system functionality",
+                    icon = Icons.Default.Notifications,
+                    onClick = onNavigateToNotificationTest
                 )
             }
             

@@ -78,13 +78,15 @@ class AuthViewModel @Inject constructor(
         password: String,
         firstName: String,
         lastName: String,
-        role: UserRole
+        role: UserRole,
+        courseId: String? = null,
+        yearLevelId: String? = null
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
-                val result = userRepository.createUser(email, password, firstName, lastName, role)
+                val result = userRepository.createUser(email, password, firstName, lastName, role, courseId, yearLevelId)
                 result.onSuccess { user ->
                     _currentUser.value = user
                     _uiState.value = AuthUiState(isLoading = false, isSignUpSuccess = true)

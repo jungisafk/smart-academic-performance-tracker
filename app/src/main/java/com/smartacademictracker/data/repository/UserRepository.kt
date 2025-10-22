@@ -20,7 +20,9 @@ class UserRepository @Inject constructor(
         password: String,
         firstName: String,
         lastName: String,
-        role: UserRole
+        role: UserRole,
+        courseId: String? = null,
+        yearLevelId: String? = null
     ): Result<User> {
         return try {
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
@@ -31,7 +33,9 @@ class UserRepository @Inject constructor(
                 email = email,
                 firstName = firstName,
                 lastName = lastName,
-                role = role.value
+                role = role.value,
+                courseId = courseId,
+                yearLevelId = yearLevelId
             )
             
             usersCollection.document(userId).set(user).await()

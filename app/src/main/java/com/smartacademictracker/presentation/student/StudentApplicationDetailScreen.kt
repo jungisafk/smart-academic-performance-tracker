@@ -90,8 +90,7 @@ fun StudentApplicationDetailScreen(
                         item {
                             ApplicationActionsCard(
                                 application = application,
-                                onWithdraw = { viewModel.withdrawApplication(applicationId) },
-                                onEdit = { /* TODO: Implement edit functionality */ }
+                                onWithdraw = { viewModel.withdrawApplication(applicationId) }
                             )
                         }
                     }
@@ -224,8 +223,7 @@ fun ApplicationTimelineCard(application: SubjectApplication) {
 @Composable
 fun ApplicationActionsCard(
     application: SubjectApplication,
-    onWithdraw: () -> Unit,
-    onEdit: () -> Unit
+    onWithdraw: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -241,23 +239,11 @@ fun ApplicationActionsCard(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            OutlinedButton(
+                onClick = onWithdraw,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Button(
-                    onClick = onEdit,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Edit Application")
-                }
-                
-                OutlinedButton(
-                    onClick = onWithdraw,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Withdraw")
-                }
+                Text("Withdraw Application")
             }
         }
     }

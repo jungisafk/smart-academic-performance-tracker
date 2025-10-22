@@ -47,6 +47,7 @@ sealed class Screen(val route: String) {
     // Admin Screens
     object AdminDashboard : Screen("admin_dashboard")
     object AdminApplications : Screen("admin_applications")
+    object AdminStudentApplications : Screen("admin_student_applications")
     object AdminCourseManagement : Screen("admin_course_management")
     object AdminYearLevelManagement : Screen("admin_year_level_management")
     object HierarchicalAcademicManagement : Screen("hierarchical_academic_management")
@@ -61,8 +62,18 @@ sealed class Screen(val route: String) {
         fun createRoute(courseId: String) = "add_year_level?courseId=$courseId"
     }
     object AddAcademicPeriod : Screen("add_academic_period")
+    object AcademicPeriodData : Screen("academic_period_data")
     object ManageUsers : Screen("manage_users")
+    object StudentEnrollment : Screen("student_enrollment")
+    object TeacherStudentManagement : Screen("teacher_student_management")
+    object TeacherSectionAssignment : Screen("teacher_section_assignment")
     
     // Common Screens
     object Profile : Screen("profile")
+    
+    // Notification Screens
+    object NotificationTest : Screen("notification_test")
+    object NotificationCenter : Screen("notification_center")
+    object NotificationPreferences : Screen("notification_preferences")
+    object Notifications : Screen("notifications")
 }

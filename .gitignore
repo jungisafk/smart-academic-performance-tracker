@@ -40,6 +40,21 @@ secrets.properties
 *_FIX.md
 *_SETUP.md
 firebase-setup-instructions.md
+grade_tracker_todo_checklist.md
+CLEAR_FIRESTORE_INSTRUCTIONS.md
+CONCEPTUAL_FRAMEWORK_DIAGRAM.md
+
+# Node.js dependencies
+node_modules/
+package-lock.json
+package.json
+
+# JavaScript files
+*.js
+*.kt
+
+# Release files
+app/release/
 
 # Logs
 *.log

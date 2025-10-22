@@ -1,6 +1,7 @@
 package com.smartacademictracker.data.model
 
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
 
 data class AcademicPeriod(
     @DocumentId
@@ -10,6 +11,7 @@ data class AcademicPeriod(
     val semester: Semester = Semester.FIRST_SEMESTER,
     val startDate: Long = System.currentTimeMillis(),
     val endDate: Long = System.currentTimeMillis(),
+    @PropertyName("active")
     val isActive: Boolean = false, // Only one period can be active at a time
     val description: String = "",
     val createdAt: Long = System.currentTimeMillis(),
@@ -17,7 +19,7 @@ data class AcademicPeriod(
     val createdByName: String = "" // Name of the user who created this period
 )
 
-data class AcademicPeriodSummary(
+data class AcademicPeriodOverview(
     val totalPeriods: Int = 0,
     val activePeriod: AcademicPeriod? = null,
     val currentSemester: String = "",

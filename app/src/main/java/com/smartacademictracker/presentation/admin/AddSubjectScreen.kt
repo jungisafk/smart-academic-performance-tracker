@@ -29,8 +29,7 @@ fun AddSubjectScreen(
     var code by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var credits by remember { mutableStateOf("3") }
-    var semester by remember { mutableStateOf("") }
-    var academicYear by remember { mutableStateOf("") }
+    var numberOfSections by remember { mutableStateOf("1") }
 
     val uiState by viewModel.uiState.collectAsState()
 
@@ -47,8 +46,7 @@ fun AddSubjectScreen(
     val isFormValid = name.isNotBlank() && 
                      code.isNotBlank() && 
                      credits.isNotBlank() && 
-                     semester.isNotBlank() && 
-                     academicYear.isNotBlank()
+                     numberOfSections.isNotBlank()
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
@@ -141,54 +139,28 @@ fun AddSubjectScreen(
                     singleLine = true
                 )
 
-                // Semester Dropdown
-                var expandedSemester by remember { mutableStateOf(false) }
-                val semesterOptions = listOf("1st Semester", "2nd Semester", "Summer Class")
-                
-                ExposedDropdownMenuBox(
-                    expanded = expandedSemester,
-                    onExpandedChange = { expandedSemester = !expandedSemester },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    OutlinedTextField(
-                        value = semester,
-                        onValueChange = { },
-                        readOnly = true,
-                        label = { Text("Semester *") },
-                        trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        singleLine = true
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expandedSemester,
-                        onDismissRequest = { expandedSemester = false }
-                    ) {
-                        semesterOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    semester = option
-                                    expandedSemester = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Academic Year
+                // Number of Sections
                 OutlinedTextField(
-                    value = academicYear,
-                    onValueChange = { academicYear = it },
-                    label = { Text("Academic Year *") },
+                    value = numberOfSections,
+                    onValueChange = { numberOfSections = it },
+                    label = { Text("Number of Sections *") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp),
-                    singleLine = true
+                    singleLine = true,
+                    supportingText = { 
+                        Text("Will create sections: ${if (code.isNotBlank() && numberOfSections.isNotBlank()) {
+                            val sections = (0 until (numberOfSections.toIntOrNull() ?: 1)).map { i ->
+                                "${code}${('A' + i)}"
+                            }
+                            sections.joinToString(", ")
+                        } else "Enter subject code and number of sections"}")
+                    }
                 )
+
+                // Current Academic Period Info
+                CurrentAcademicPeriodCard()
 
                 // Success Message
                 if (uiState.isSuccess) {
@@ -218,8 +190,7 @@ fun AddSubjectScreen(
                             code = code.trim(),
                             description = description.trim(),
                             credits = credits.toIntOrNull() ?: 3,
-                            semester = semester.trim(),
-                            academicYear = academicYear.trim()
+                            numberOfSections = numberOfSections.toIntOrNull() ?: 1
                         )
                     },
                     enabled = !uiState.isLoading && isFormValid && !uiState.isSuccess,
@@ -239,6 +210,37 @@ fun AddSubjectScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun CurrentAcademicPeriodCard(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Current Academic Period",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = "This subject will be automatically assigned to the current active academic period and semester.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         }
     }
 }

@@ -8,6 +8,7 @@ data class GradeExport(
     val academicYear: String = "",
     val semester: String = "",
     val exportDate: Long = System.currentTimeMillis(),
+    val academicPeriodId: String = "", // Reference to active academic period
     val students: List<StudentGradeExport> = emptyList()
 )
 

@@ -14,11 +14,14 @@ data class Subject(
     val credits: Int = 3,
     val semester: Semester = Semester.FIRST_SEMESTER,
     val academicYear: String = "",
+    val academicPeriodId: String = "", // Reference to active academic period
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val yearLevelId: String = "", // Reference to YearLevel document ID
     val courseId: String = "", // Reference to Course document ID
     val maxStudents: Int = 30, // Maximum number of students that can enroll
+    val numberOfSections: Int = 1, // Number of sections for this subject
+    val sections: List<String> = emptyList(), // Generated section names (e.g., ["IT101A", "IT101B"])
     // Computed fields for display (populated by repository)
     val yearLevelName: String = "",
     val courseName: String = "",

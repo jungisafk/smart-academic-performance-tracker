@@ -16,7 +16,8 @@ data class Attendance(
     val sessionType: SessionType = SessionType.REGULAR,
     val notes: String = "",
     val recordedBy: String = "",
-    val recordedAt: Long = System.currentTimeMillis()
+    val recordedAt: Long = System.currentTimeMillis(),
+    val academicPeriodId: String = "" // Reference to active academic period
 )
 
 enum class AttendanceStatus(val displayName: String, val shortName: String) {

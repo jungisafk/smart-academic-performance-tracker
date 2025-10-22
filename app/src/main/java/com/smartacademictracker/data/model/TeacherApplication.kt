@@ -11,11 +11,13 @@ data class TeacherApplication(
     val subjectId: String = "",
     val subjectName: String = "",
     val subjectCode: String = "",
+    val sectionName: String = "", // Specific section the teacher is applying for (e.g., "IT101A")
     val applicationReason: String = "",
     val status: ApplicationStatus = ApplicationStatus.PENDING,
     val appliedAt: Long = System.currentTimeMillis(),
     val reviewedAt: Long? = null,
     val reviewedBy: String? = null,
-    val adminComments: String? = null
+    val adminComments: String? = null,
+    val academicPeriodId: String = "" // Reference to active academic period
 )
 

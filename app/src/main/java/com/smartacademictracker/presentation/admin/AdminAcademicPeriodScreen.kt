@@ -144,7 +144,7 @@ fun AdminAcademicPeriodScreen(
 @Composable
 fun CurrentAcademicPeriodCard(
     activePeriod: AcademicPeriod?,
-    summary: com.smartacademictracker.data.model.AcademicPeriodSummary
+    summary: com.smartacademictracker.data.model.AcademicPeriodOverview
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),

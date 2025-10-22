@@ -3,6 +3,7 @@ package com.smartacademictracker.presentation.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.repository.SubjectRepository
+import com.smartacademictracker.data.service.AcademicPeriodFilterService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +13,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AddSubjectViewModel @Inject constructor(
-    private val subjectRepository: SubjectRepository
+    private val subjectRepository: SubjectRepository,
+    private val academicPeriodFilterService: AcademicPeriodFilterService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddSubjectUiState())
@@ -36,8 +38,7 @@ class AddSubjectViewModel @Inject constructor(
         code: String,
         description: String,
         credits: Int,
-        semester: String,
-        academicYear: String
+        numberOfSections: Int = 1
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -45,15 +46,26 @@ class AddSubjectViewModel @Inject constructor(
             println("DEBUG: AddSubjectViewModel - Adding subject with courseId: '$_courseId', yearLevelId: '$_yearLevelId'")
             
             try {
+                // Get current academic period context
+                val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+                if (!academicContext.isActive) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "No active academic period found. Please set an active academic period first."
+                    )
+                    return@launch
+                }
+                
                 val result = subjectRepository.addSubject(
                     name = name,
                     code = code,
                     description = description,
                     credits = credits,
-                    semester = semester,
-                    academicYear = academicYear,
+                    semester = academicContext.semester,
+                    academicYear = academicContext.academicYear,
                     courseId = _courseId,
-                    yearLevelId = _yearLevelId
+                    yearLevelId = _yearLevelId,
+                    numberOfSections = numberOfSections
                 )
                 result.onSuccess {
                     _uiState.value = _uiState.value.copy(

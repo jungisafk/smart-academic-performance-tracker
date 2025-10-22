@@ -1,23 +1,36 @@
 package com.smartacademictracker.presentation.teacher
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Subject
 import com.smartacademictracker.data.model.ApplicationStatus
+import com.smartacademictracker.data.model.TeacherApplication
 import com.smartacademictracker.presentation.common.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,6 +44,8 @@ fun TeacherSubjectsScreen(
     val availableSubjects by viewModel.availableSubjects.collectAsState()
     val mySubjects by viewModel.mySubjects.collectAsState()
     val appliedSubjects by viewModel.appliedSubjects.collectAsState()
+    val applications by viewModel.applications.collectAsState()
+    val approvedApplications by viewModel.approvedApplications.collectAsState()
 
     // Debug logging
     LaunchedEffect(uiState) {
@@ -55,129 +70,357 @@ fun TeacherSubjectsScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color.White)
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                text = "My Subjects",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = { viewModel.refreshSubjects() },
-                enabled = !uiState.isLoading
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        Icons.Default.ArrowBack, 
+                        contentDescription = "Back",
+                        tint = Color(0xFF666666)
+                    )
+                }
+                Text(
+                    text = "My Subjects",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333),
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { viewModel.refreshSubjects() },
+                    enabled = !uiState.isLoading
+                ) {
+                    Icon(
+                        Icons.Default.Refresh, 
+                        contentDescription = "Refresh",
+                        tint = Color(0xFF666666)
+                    )
+                }
             }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Loading State
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else {
-            // Tab Row for switching between My Subjects, Applied, and Available Subjects
-            var selectedTab by remember { mutableStateOf(0) }
             
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("My Subjects (${mySubjects.size})") }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Applied (${appliedSubjects.size})") }
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("Available (${availableSubjects.size})") }
-                )
+            // Summary Card
+            if (!uiState.isLoading && (mySubjects.isNotEmpty() || applications.isNotEmpty() || availableSubjects.isNotEmpty())) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Subject Management",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                            Text(
+                                text = "${mySubjects.size} Assigned • ${applications.size} Applied • ${availableSubjects.size} Available",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Manage your subject assignments and applications",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        
+                        // Subject Icon
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFC107)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MenuBook,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Content based on selected tab
-            when (selectedTab) {
-                0 -> {
-                    // My Subjects
-                    if (mySubjects.isEmpty()) {
-                        EmptyState(
-                            title = "No subjects assigned",
-                            message = "You haven't been assigned to any subjects yet. Apply for available subjects to get started.",
-                            icon = Icons.Default.Person
+            // Loading State
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF2196F3)
                         )
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(mySubjects) { subject ->
-                                MySubjectCard(
-                                    subject = subject,
-                                    onNavigateToGradeInput = { onNavigateToGradeInput(subject.id) },
-                                    viewModel = viewModel
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Loading subjects...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF666666)
+                        )
+                    }
+                }
+            } else {
+                // Tab Row for switching between My Subjects, Applied, and Available Subjects
+                var selectedTab by remember { mutableStateOf(0) }
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFF2196F3)
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { 
+                                Text(
+                                    "My Subjects (${mySubjects.size})",
+                                    color = if (selectedTab == 0) Color(0xFF2196F3) else Color(0xFF666666),
+                                    fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
-                        }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { 
+                                Text(
+                                    "Applied (${applications.size})",
+                                    color = if (selectedTab == 1) Color(0xFF2196F3) else Color(0xFF666666),
+                                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                        Tab(
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 },
+                            text = { 
+                                Text(
+                                    "Available (${availableSubjects.size})",
+                                    color = if (selectedTab == 2) Color(0xFF2196F3) else Color(0xFF666666),
+                                    fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
                     }
                 }
-                1 -> {
-                    // Applied Subjects
-                    if (appliedSubjects.isEmpty()) {
-                        EmptyState(
-                            title = "No applications submitted",
-                            message = "You haven't applied for any subjects yet. Browse available subjects to apply.",
-                            icon = Icons.Default.Assignment
-                        )
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(appliedSubjects) { subject ->
-                                AppliedSubjectCard(subject = subject)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Content based on selected tab
+                when (selectedTab) {
+                    0 -> {
+                        // My Subjects - Only show actually assigned subjects
+                        if (mySubjects.isEmpty()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = Color(0xFF2196F3)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No subjects assigned",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333333)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "You haven't been assigned to any subjects yet. Apply for available subjects to get started.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF666666),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(mySubjects) { subject ->
+                                    MySubjectCardWithSections(
+                                        subject = subject,
+                                        onNavigateToGradeInput = { onNavigateToGradeInput(subject.id) },
+                                        viewModel = viewModel
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                2 -> {
-                    // Available Subjects
-                    if (availableSubjects.isEmpty()) {
-                        EmptyState(
-                            title = "No available subjects",
-                            message = "There are currently no subjects available for application.",
-                            icon = Icons.Default.Assignment
-                        )
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                    1 -> {
+                        // Applied Subjects - Show all applications (pending, approved, rejected)
+                        if (applications.isEmpty()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.Assignment,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = Color(0xFF2196F3)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No applications submitted",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333333)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "You haven't applied for any subjects yet. Browse available subjects to apply.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF666666),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Show pending applications with cancel option
+                                items(applications.filter { it.status == ApplicationStatus.PENDING }) { application ->
+                                    ApplicationCardWithCancel(
+                                        application = application,
+                                        onCancel = { 
+                                            viewModel.cancelApplication(application.id) 
+                                        }
+                                    )
+                                }
+                                
+                                // Show approved applications waiting for section assignment
+                                items(approvedApplications) { application ->
+                                    ApprovedApplicationCard(application = application)
+                                }
+                                
+                                // Show rejected applications
+                                items(applications.filter { it.status == ApplicationStatus.REJECTED }) { application ->
+                                    ApplicationCardWithCancel(
+                                        application = application,
+                                        onCancel = { } // No cancel for rejected
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
+                        // Available Subjects
+                        if (availableSubjects.isEmpty()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.Assignment,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = Color(0xFF2196F3)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No available subjects",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333333)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "There are currently no subjects available for application.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF666666),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
                             items(availableSubjects) { subject ->
+                                var sectionAvailability by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+                                
+                                LaunchedEffect(subject.id) {
+                                    sectionAvailability = viewModel.getSectionAvailability(subject.id)
+                                }
+                                
                                 AvailableSubjectCard(
                                     subject = subject,
                                     onApply = { 
                                         println("DEBUG: TeacherSubjectsScreen - Apply button clicked for subject: ${subject.name}")
                                         viewModel.applyForSubject(subject.id) 
                                     },
-                                    isApplying = uiState.applyingSubjects.contains(subject.id)
+                                    isApplying = uiState.applyingSubjects.contains(subject.id),
+                                    hasApplied = appliedSubjects.any { it.id == subject.id },
+                                    sectionAvailability = sectionAvailability
                                 )
                             }
                         }
@@ -186,52 +429,82 @@ fun TeacherSubjectsScreen(
             }
         }
 
-        // Success Message
-        uiState.successMessage?.let { message ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Row(
+            // Success Message
+            uiState.successMessage?.let { message ->
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        onClick = { viewModel.clearSuccessMessage() }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Dismiss")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = message,
+                                color = Color(0xFF4CAF50),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        TextButton(
+                            onClick = { viewModel.clearSuccessMessage() }
+                        ) {
+                            Text(
+                                "Dismiss",
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Error Message
-        uiState.error?.let { error ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
+            // Error Message
+            uiState.error?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Error,
+                            contentDescription = null,
+                            tint = Color(0xFFD32F2F),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = error,
+                            color = Color(0xFFD32F2F),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
         }
     }
@@ -428,8 +701,12 @@ fun AppliedSubjectCard(
 fun AvailableSubjectCard(
     subject: Subject,
     onApply: () -> Unit,
-    isApplying: Boolean
+    isApplying: Boolean,
+    hasApplied: Boolean = false,
+    sectionAvailability: Map<String, Boolean> = emptyMap()
 ) {
+    var showSections by remember { mutableStateOf(false) }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -455,6 +732,14 @@ fun AvailableSubjectCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (subject.sections.isNotEmpty()) {
+                        Text(
+                            text = "Sections: ${subject.sections.joinToString(", ")}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                     if (subject.description.isNotBlank()) {
                         Text(
                             text = subject.description,
@@ -484,26 +769,143 @@ fun AvailableSubjectCard(
                 )
             }
             
+            // Sections expandable section
+            if (subject.sections.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Sections (${subject.sections.size}): ${subject.sections.joinToString(", ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { showSections = !showSections },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (showSections) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (showSections) "Hide sections" else "Show sections",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                
+                // Expandable sections list
+                if (showSections) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                text = "Available Sections:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                subject.sections.forEach { section ->
+                                    val isAvailable = sectionAvailability[section] ?: true
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = section,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Surface(
+                                            color = if (isAvailable) 
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            else 
+                                                MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                                            shape = MaterialTheme.shapes.small
+                                        ) {
+                                            Text(
+                                                text = if (isAvailable) "Available" else "Assigned",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isAvailable) 
+                                                    MaterialTheme.colorScheme.primary
+                                                else 
+                                                    MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Apply Button
-            Button(
-                onClick = {
-                    println("DEBUG: AvailableSubjectCard - Button clicked for subject: ${subject.name}")
-                    onApply()
-                },
-                enabled = !isApplying,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isApplying) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+            // Apply Button or Status
+            if (hasApplied) {
+                // Show applied status
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Applying...")
-                } else {
-                    Text("Apply for Subject")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Already Applied",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            } else {
+                // Show apply button
+                Button(
+                    onClick = {
+                        println("DEBUG: AvailableSubjectCard - Button clicked for subject: ${subject.name}")
+                        onApply()
+                    },
+                    enabled = !isApplying,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isApplying) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Applying...")
+                    } else {
+                        Text("Apply for Subject")
+                    }
                 }
             }
         }

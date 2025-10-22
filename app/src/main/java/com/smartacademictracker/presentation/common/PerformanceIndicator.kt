@@ -104,17 +104,10 @@ fun GradeProgressIndicator(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Current Grade: ${String.format("%.1f", currentGrade)}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            PerformanceStatusIndicator(status = status)
-        }
+        Text(
+            text = "Current Grade: ${String.format("%.1f", currentGrade)}",
+            style = MaterialTheme.typography.bodyMedium
+        )
         
         LinearProgressIndicator(
             progress = progress.toFloat(),

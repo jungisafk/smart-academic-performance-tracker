@@ -168,4 +168,88 @@ class TeacherApplicationRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun cancelApplication(applicationId: String): Result<Unit> {
+        return try {
+            applicationsCollection.document(applicationId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun hasTeacherAppliedForSubjectAnyStatus(teacherId: String, subjectId: String): Result<Boolean> {
+        return try {
+            val snapshot = applicationsCollection
+                .whereEqualTo("teacherId", teacherId)
+                .whereEqualTo("subjectId", subjectId)
+                .get()
+                .await()
+            Result.success(!snapshot.isEmpty)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getDuplicateApplications(): Result<List<TeacherApplication>> {
+        return try {
+            val snapshot = applicationsCollection.get().await()
+            val applications = snapshot.toObjects(TeacherApplication::class.java)
+            
+            // Group by teacherId and subjectId
+            val groupedApplications = applications.groupBy { "${it.teacherId}_${it.subjectId}" }
+            
+            // Find groups with more than one application
+            val duplicates = groupedApplications.values.filter { it.size > 1 }.flatten()
+            
+            Result.success(duplicates)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeDuplicateApplications(keepMostRecent: Boolean = true): Result<Int> {
+        return try {
+            val duplicatesResult = getDuplicateApplications()
+            if (duplicatesResult.isFailure) {
+                return Result.failure(duplicatesResult.exceptionOrNull() ?: Exception("Failed to get duplicates"))
+            }
+            
+            val duplicates = duplicatesResult.getOrThrow()
+            if (duplicates.isEmpty()) {
+                return Result.success(0)
+            }
+            
+            // Group duplicates by teacher-subject pair
+            val groupedDuplicates = duplicates.groupBy { "${it.teacherId}_${it.subjectId}" }
+            var deletedCount = 0
+            
+            groupedDuplicates.values.forEach { duplicateGroup ->
+                if (duplicateGroup.size > 1) {
+                    // Sort by appliedAt (most recent first if keepMostRecent is true)
+                    val sortedGroup = if (keepMostRecent) {
+                        duplicateGroup.sortedByDescending { it.appliedAt }
+                    } else {
+                        duplicateGroup.sortedBy { it.appliedAt }
+                    }
+                    
+                    // Keep the first one, delete the rest
+                    val toDelete = sortedGroup.drop(1)
+                    
+                    toDelete.forEach { application ->
+                        try {
+                            applicationsCollection.document(application.id).delete().await()
+                            deletedCount++
+                        } catch (e: Exception) {
+                            println("Error deleting application ${application.id}: ${e.message}")
+                        }
+                    }
+                }
+            }
+            
+            Result.success(deletedCount)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

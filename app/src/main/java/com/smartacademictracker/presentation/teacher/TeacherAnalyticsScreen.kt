@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,6 +56,25 @@ fun TeacherAnalyticsScreen(
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
         }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Filter Section
+        AnalyticsFilterSection(
+            selectedYearLevel = uiState.selectedYearLevel,
+            selectedCourse = uiState.selectedCourse,
+            selectedSubject = uiState.selectedSubject,
+            selectedSection = uiState.selectedSection,
+            yearLevels = uiState.availableYearLevels,
+            courses = uiState.availableCourses,
+            subjects = uiState.availableSubjects,
+            sections = uiState.availableSections,
+            onYearLevelChanged = { viewModel.updateYearLevelFilter(it) },
+            onCourseChanged = { viewModel.updateCourseFilter(it) },
+            onSubjectChanged = { viewModel.updateSubjectFilter(it) },
+            onSectionChanged = { viewModel.updateSectionFilter(it) },
+            onClearFilters = { viewModel.clearAllFilters() }
+        )
         
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -339,6 +360,252 @@ fun ClassPerformanceComparisonChart(
                 subjects = subjects,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnalyticsFilterSection(
+    selectedYearLevel: String?,
+    selectedCourse: String?,
+    selectedSubject: String?,
+    selectedSection: String?,
+    yearLevels: List<String>,
+    courses: List<String>,
+    subjects: List<String>,
+    sections: List<String>,
+    onYearLevelChanged: (String?) -> Unit,
+    onCourseChanged: (String?) -> Unit,
+    onSubjectChanged: (String?) -> Unit,
+    onSectionChanged: (String?) -> Unit,
+    onClearFilters: () -> Unit
+) {
+    var expandedYearLevel by remember { mutableStateOf(false) }
+    var expandedCourse by remember { mutableStateOf(false) }
+    var expandedSubject by remember { mutableStateOf(false) }
+    var expandedSection by remember { mutableStateOf(false) }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.FilterList,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Filter Analytics",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = onClearFilters
+                ) {
+                    Text("Clear All")
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Filter Row 1: Year Level and Course
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Year Level Filter
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Year Level",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = expandedYearLevel,
+                        onExpandedChange = { expandedYearLevel = !expandedYearLevel }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedYearLevel ?: "All Year Levels",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedYearLevel)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedYearLevel,
+                            onDismissRequest = { expandedYearLevel = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("All Year Levels") },
+                                onClick = { onYearLevelChanged(null) }
+                            )
+                            yearLevels.forEach { yearLevel ->
+                                DropdownMenuItem(
+                                    text = { Text(yearLevel) },
+                                    onClick = { onYearLevelChanged(yearLevel) }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Course Filter
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Course",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = expandedCourse,
+                        onExpandedChange = { expandedCourse = !expandedCourse }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCourse ?: "All Courses",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCourse)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedCourse,
+                            onDismissRequest = { expandedCourse = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("All Courses") },
+                                onClick = { onCourseChanged(null) }
+                            )
+                            courses.forEach { course ->
+                                DropdownMenuItem(
+                                    text = { Text(course) },
+                                    onClick = { onCourseChanged(course) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Filter Row 2: Subject and Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Subject Filter
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Subject",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = expandedSubject,
+                        onExpandedChange = { expandedSubject = !expandedSubject }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedSubject ?: "All Subjects",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedSubject)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedSubject,
+                            onDismissRequest = { expandedSubject = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("All Subjects") },
+                                onClick = { onSubjectChanged(null) }
+                            )
+                            subjects.forEach { subject ->
+                                DropdownMenuItem(
+                                    text = { Text(subject) },
+                                    onClick = { onSubjectChanged(subject) }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Section Filter
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Section",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = expandedSection,
+                        onExpandedChange = { expandedSection = !expandedSection }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedSection ?: "All Sections",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedSection)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedSection,
+                            onDismissRequest = { expandedSection = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("All Sections") },
+                                onClick = { onSectionChanged(null) }
+                            )
+                            sections.forEach { section ->
+                                DropdownMenuItem(
+                                    text = { Text(section) },
+                                    onClick = { onSectionChanged(section) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

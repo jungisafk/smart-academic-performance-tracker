@@ -13,6 +13,10 @@ import com.smartacademictracker.data.audit.SecurityAuditLogger
 import com.smartacademictracker.data.integrity.DataIntegrityChecker
 import com.smartacademictracker.data.security.SecurityConfiguration
 import com.smartacademictracker.data.migration.DatabaseMigrationService
+import com.smartacademictracker.data.notification.LocalNotificationService
+import com.smartacademictracker.data.notification.NotificationTemplateService
+import com.smartacademictracker.data.notification.NotificationSenderService
+import com.smartacademictracker.data.repository.NotificationRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -106,5 +110,33 @@ object FirebaseModule {
     @Singleton
     fun provideDatabaseMigrationService(firestore: FirebaseFirestore): DatabaseMigrationService {
         return DatabaseMigrationService(firestore)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideLocalNotificationService(@ApplicationContext context: Context): LocalNotificationService {
+        return LocalNotificationService(context)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideNotificationTemplateService(): NotificationTemplateService {
+        return NotificationTemplateService()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideNotificationRepository(firestore: FirebaseFirestore): NotificationRepository {
+        return NotificationRepository(firestore)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideNotificationSenderService(
+        notificationRepository: NotificationRepository,
+        localNotificationService: LocalNotificationService,
+        templateService: NotificationTemplateService
+    ): NotificationSenderService {
+        return NotificationSenderService(notificationRepository, localNotificationService, templateService)
     }
 }

@@ -32,11 +32,21 @@ fun HierarchicalSubjectSelector(
     ) {
         // Course Selection
         Text(
-            text = "Select Course",
+            text = if (courses.size == 1) "Your Course" else "Select Course",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
+        
+        // Add scroll indicator text for courses
+        if (courses.size > 3) {
+            Text(
+                text = "📜 Scroll to see more courses",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
         
         LazyColumn(
             modifier = Modifier
@@ -67,11 +77,21 @@ fun HierarchicalSubjectSelector(
             val courseYearLevels = yearLevels.filter { it.courseId == selectedCourseId }
             
             Text(
-                text = "Select Year Level",
+                text = if (courseYearLevels.size == 1) "Your Year Level" else "Select Year Level",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
+            
+            // Add scroll indicator text
+            if (courseYearLevels.size > 3) {
+                Text(
+                    text = "📜 Scroll to see more year levels",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
             
             LazyColumn(
                 modifier = Modifier
@@ -136,6 +156,16 @@ fun HierarchicalSubjectSelector(
                     }
                 }
             } else {
+                // Add scroll indicator text for subjects
+                if (courseSubjects.size > 4) {
+                    Text(
+                        text = "📜 Scroll to see more subjects",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+                
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()

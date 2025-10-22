@@ -10,6 +10,7 @@ data class YearLevel(
     val level: Int = 1, // Numeric level (1, 2, 3, 4)
     val description: String = "",
     val hasSummerClass: Boolean = false, // Whether this year level has summer classes (not for 4th year)
+    val academicPeriodId: String = "", // Reference to active academic period
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )

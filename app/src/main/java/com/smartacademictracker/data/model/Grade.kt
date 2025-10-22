@@ -18,7 +18,8 @@ data class Grade(
     val description: String = "",
     val dateRecorded: Long = System.currentTimeMillis(),
     val semester: String = "",
-    val academicYear: String = ""
+    val academicYear: String = "",
+    val academicPeriodId: String = "" // Reference to active academic period
 ) {
     fun calculatePercentage(): Double {
         return if (maxScore > 0) (score / maxScore) * 100 else 0.0
@@ -82,6 +83,7 @@ data class StudentGradeAggregate(
     val letterGrade: String = "",
     val semester: String = "",
     val academicYear: String = "",
+    val academicPeriodId: String = "", // Reference to active academic period
     val lastUpdated: Long = System.currentTimeMillis()
 ) {
     /**

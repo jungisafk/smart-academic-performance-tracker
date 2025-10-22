@@ -2,20 +2,32 @@ package com.smartacademictracker.data.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.smartacademictracker.data.model.YearLevel
+import com.smartacademictracker.data.service.AcademicPeriodFilterService
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class YearLevelRepository @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val academicPeriodFilterService: AcademicPeriodFilterService
 ) {
     private val yearLevelsCollection = firestore.collection("year_levels")
 
     suspend fun createYearLevel(yearLevel: YearLevel): Result<YearLevel> {
         return try {
-            val docRef = yearLevelsCollection.add(yearLevel).await()
-            val createdYearLevel = yearLevel.copy(id = docRef.id)
+            // Check if there's an active academic period
+            if (!academicPeriodFilterService.hasActiveAcademicPeriod()) {
+                return Result.failure(Exception("No active academic period found. Please create an academic period first."))
+            }
+            
+            // Get the active academic period ID
+            val activePeriodId = academicPeriodFilterService.getActiveAcademicPeriodId()
+            
+            // Create year level with active academic period
+            val yearLevelWithPeriod = yearLevel.copy(academicPeriodId = activePeriodId)
+            val docRef = yearLevelsCollection.add(yearLevelWithPeriod).await()
+            val createdYearLevel = yearLevelWithPeriod.copy(id = docRef.id)
             yearLevelsCollection.document(docRef.id).set(createdYearLevel).await()
             Result.success(createdYearLevel)
         } catch (e: Exception) {
@@ -84,6 +96,22 @@ class YearLevelRepository @Inject constructor(
                 val yearLevel = snapshot.documents.first().toObject(YearLevel::class.java)
                 Result.success(yearLevel)
             }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getYearLevelsByCourse(courseId: String): Result<List<YearLevel>> {
+        return try {
+            val snapshot = yearLevelsCollection
+                .whereEqualTo("courseId", courseId)
+                .whereEqualTo("active", true)
+                .get()
+                .await()
+            val yearLevels = snapshot.toObjects(YearLevel::class.java)
+            // Sort by level
+            val sortedYearLevels = yearLevels.sortedBy { it.level }
+            Result.success(sortedYearLevels)
         } catch (e: Exception) {
             Result.failure(e)
         }

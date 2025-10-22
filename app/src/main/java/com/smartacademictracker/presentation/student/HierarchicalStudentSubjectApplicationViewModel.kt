@@ -12,6 +12,8 @@ import com.smartacademictracker.data.repository.YearLevelRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.SubjectApplicationRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.repository.StudentEnrollmentRepository
+import com.smartacademictracker.data.model.EnrollmentStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +27,8 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
     private val yearLevelRepository: YearLevelRepository,
     private val subjectRepository: SubjectRepository,
     private val subjectApplicationRepository: SubjectApplicationRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val studentEnrollmentRepository: StudentEnrollmentRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HierarchicalStudentSubjectApplicationUiState())
@@ -54,48 +57,114 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
-                // Load courses
-                val coursesResult = courseRepository.getAllCourses()
-                coursesResult.onSuccess { coursesList ->
-                    _courses.value = coursesList
+                // Get current user to filter subjects by their course and year level
+                val currentUserResult = userRepository.getCurrentUser()
+                currentUserResult.onSuccess { currentUser ->
+                    if (currentUser == null) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "User not found"
+                        )
+                        return@onSuccess
+                    }
+
+                    // Load only the student's assigned course
+                    if (currentUser.courseId != null) {
+                        val courseResult = courseRepository.getCourseById(currentUser.courseId)
+                        courseResult.onSuccess { course ->
+                            if (course != null) {
+                                _courses.value = listOf(course)
+                                // Auto-select the student's course
+                                _selectedCourseId.value = course.id
+                            } else {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = "Your assigned course was not found"
+                                )
+                                return@onSuccess
+                            }
+                        }.onFailure { exception ->
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Failed to load your course: ${exception.message}"
+                            )
+                            return@onSuccess
+                        }
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "No course assigned to your account. Please contact your administrator."
+                        )
+                        return@onSuccess
+                    }
+
+                    // Load only the student's assigned year level
+                    if (currentUser.yearLevelId != null) {
+                        val yearLevelResult = yearLevelRepository.getYearLevelById(currentUser.yearLevelId)
+                        yearLevelResult.onSuccess { yearLevel ->
+                            if (yearLevel != null) {
+                                _yearLevels.value = listOf(yearLevel)
+                                // Auto-select the student's year level
+                                _selectedYearLevelId.value = yearLevel.id
+                            } else {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = "Your assigned year level was not found"
+                                )
+                                return@onSuccess
+                            }
+                        }.onFailure { exception ->
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Failed to load your year level: ${exception.message}"
+                            )
+                            return@onSuccess
+                        }
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "No year level assigned to your account. Please contact your administrator."
+                        )
+                        return@onSuccess
+                    }
+
+                    // Load subjects filtered by student's course and year level
+                    val subjectsResult = subjectRepository.getAllSubjects()
+                    subjectsResult.onSuccess { subjectsList ->
+                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loaded ${subjectsList.size} total subjects")
+                        
+                        // Filter subjects by student's course and year level
+                        val filteredSubjects = subjectsList.filter { subject ->
+                            subject.courseId == currentUser.courseId && 
+                            subject.yearLevelId == currentUser.yearLevelId
+                        }
+                        
+                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Filtered to ${filteredSubjects.size} subjects for course: ${currentUser.courseId}, year level: ${currentUser.yearLevelId}")
+                        _subjects.value = filteredSubjects
+                        
+                        // Update UI state with filtering info
+                        _uiState.value = _uiState.value.copy(
+                            successMessage = "Showing subjects for your course and year level (${filteredSubjects.size} subjects available)"
+                        )
+                    }.onFailure { exception ->
+                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load subjects: ${exception.message}")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Failed to load subjects: ${exception.message}"
+                        )
+                        return@onSuccess
+                    }
+
+                    // Load my applications
+                    loadMyApplications()
+
+                    _uiState.value = _uiState.value.copy(isLoading = false)
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Failed to load courses: ${exception.message}"
+                        error = "Failed to get user information: ${exception.message}"
                     )
-                    return@launch
                 }
-
-                // Load year levels
-                val yearLevelsResult = yearLevelRepository.getAllYearLevels()
-                yearLevelsResult.onSuccess { yearLevelsList ->
-                    _yearLevels.value = yearLevelsList
-                }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Failed to load year levels: ${exception.message}"
-                    )
-                    return@launch
-                }
-
-                // Load subjects
-                val subjectsResult = subjectRepository.getAllSubjects()
-                subjectsResult.onSuccess { subjectsList ->
-                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loaded ${subjectsList.size} subjects")
-                    _subjects.value = subjectsList
-                }.onFailure { exception ->
-                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load subjects: ${exception.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Failed to load subjects: ${exception.message}"
-                    )
-                    return@launch
-                }
-
-                // Load my applications
-                loadMyApplications()
-
-                _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -114,7 +183,7 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
         _selectedYearLevelId.value = yearLevelId
     }
 
-    fun applyForSubject(subjectId: String) {
+    fun applyForSubject(subjectId: String, sectionName: String = "") {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 applyingSubjects = _uiState.value.applyingSubjects + subjectId,
@@ -143,12 +212,36 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         return@onSuccess
                     }
                     
+                    // Allow re-apply if no ACTIVE enrollment exists even if there was an approved application before
+                    val existingApplication = _myApplications.value.find { 
+                        it.subjectId == subjectId && it.status == ApplicationStatus.APPROVED 
+                    }
+                    if (existingApplication != null) {
+                        // Check current enrollments in new section-based collection
+                        val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
+                        val hasActiveEnrollment = if (studentEnrollmentsResult.isSuccess) {
+                            val list = studentEnrollmentsResult.getOrNull().orEmpty()
+                            list.any { it.studentId == currentUser.id && it.status == EnrollmentStatus.ACTIVE }
+                        } else {
+                            false
+                        }
+                        if (hasActiveEnrollment) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "You are already enrolled in this subject"
+                            )
+                            return@onSuccess
+                        }
+                        // else, let them apply again
+                    }
+                    
                     // Create subject application
                     val application = SubjectApplication(
                         studentId = currentUser.id,
                         studentName = "${currentUser.firstName} ${currentUser.lastName}",
                         subjectId = subjectId,
                         subjectName = subject.name,
+                        sectionName = sectionName,
                         courseId = subject.courseId,
                         courseName = subject.courseName,
                         yearLevelId = subject.yearLevelId,
@@ -236,11 +329,16 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
+
+    fun clearSuccessMessage() {
+        _uiState.value = _uiState.value.copy(successMessage = null)
+    }
 }
 
 data class HierarchicalStudentSubjectApplicationUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
+    val successMessage: String? = null,
     val isApplicationSuccess: Boolean = false,
     val applyingSubjects: Set<String> = emptySet()
 )

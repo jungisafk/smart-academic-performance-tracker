@@ -78,6 +78,33 @@ class TeacherApplicationsViewModel @Inject constructor(
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
+
+    fun cancelApplication(applicationId: String) {
+        viewModelScope.launch {
+            println("DEBUG: TeacherApplicationsViewModel - Cancelling application: $applicationId")
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                teacherApplicationRepository.cancelApplication(applicationId).onSuccess {
+                    println("DEBUG: TeacherApplicationsViewModel - Application cancelled successfully")
+                    // Reload applications to reflect the change
+                    loadApplications()
+                }.onFailure { exception ->
+                    println("DEBUG: TeacherApplicationsViewModel - Failed to cancel application: ${exception.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = exception.message ?: "Failed to cancel application"
+                    )
+                }
+            } catch (e: Exception) {
+                println("DEBUG: TeacherApplicationsViewModel - Exception cancelling application: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to cancel application"
+                )
+            }
+        }
+    }
 }
 
 data class TeacherApplicationsUiState(

@@ -9,12 +9,14 @@ data class SubjectApplication(
     val studentName: String = "",
     val subjectId: String = "",
     val subjectName: String = "",
+    val sectionName: String = "", // Specific section the student is applying for
     val courseId: String = "",
     val courseName: String = "",
     val yearLevelId: String = "",
     val yearLevelName: String = "",
     val semester: Semester = Semester.FIRST_SEMESTER,
     val academicYear: String = "",
+    val academicPeriodId: String = "", // Reference to active academic period
     val status: ApplicationStatus = ApplicationStatus.PENDING,
     val appliedDate: Long = System.currentTimeMillis(),
     val processedDate: Long? = null,

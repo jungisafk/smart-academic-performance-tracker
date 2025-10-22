@@ -7,7 +7,9 @@ import com.smartacademictracker.data.model.StudentApplicationStatus
 import com.smartacademictracker.data.repository.StudentApplicationRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.UserRepository
-import com.smartacademictracker.data.repository.EnrollmentRepository
+import com.smartacademictracker.data.repository.StudentEnrollmentRepository
+import com.smartacademictracker.data.model.StudentEnrollment
+import com.smartacademictracker.data.model.EnrollmentStatus
 import com.smartacademictracker.data.manager.RealtimeDataManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +24,8 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
     private val studentApplicationRepository: StudentApplicationRepository,
     private val subjectApplicationRepository: com.smartacademictracker.data.repository.SubjectApplicationRepository,
     private val subjectRepository: SubjectRepository,
-    private val enrollmentRepository: EnrollmentRepository,
+    private val studentEnrollmentRepository: StudentEnrollmentRepository,
+    private val sectionAssignmentRepository: com.smartacademictracker.data.repository.SectionAssignmentRepository,
     private val realtimeDataManager: RealtimeDataManager
 ) : ViewModel() {
 
@@ -39,6 +42,7 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
 
     fun loadApplications() {
         viewModelScope.launch {
+            println("DEBUG: TeacherStudentApplicationsViewModel - loadApplications called")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
@@ -46,21 +50,32 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        // First get all subjects taught by this teacher
-                        val subjectsResult = subjectRepository.getAllSubjects()
-                        subjectsResult.onSuccess { subjectsList ->
-                            val teacherSubjects = subjectsList.filter { it.teacherId == user.id }
-                            val subjectIds = teacherSubjects.map { it.id }
+                        println("DEBUG: TeacherStudentApplicationsViewModel - Current teacher: ${user.id} (${user.firstName} ${user.lastName})")
+                        // Get subjects that this teacher actually teaches (owns)
+                        val subjectsResult = subjectRepository.getSubjectsByTeacher(user.id)
+                        subjectsResult.onSuccess { subjects ->
+                            val subjectIds = subjects.map { it.id }
                             
-                            println("DEBUG: TeacherStudentApplicationsViewModel - Found ${teacherSubjects.size} subjects for teacher ${user.id}")
-                            teacherSubjects.forEach { subject ->
+                            println("DEBUG: TeacherStudentApplicationsViewModel - Found ${subjects.size} subjects taught by teacher ${user.id}")
+                            subjects.forEach { subject ->
                                 println("DEBUG: Teacher Subject - ID: ${subject.id}, Name: ${subject.name}, TeacherId: ${subject.teacherId}")
                             }
                             println("DEBUG: TeacherStudentApplicationsViewModel - Subject IDs: $subjectIds")
                             
+                            if (subjectIds.isEmpty()) {
+                                _applications.value = emptyList()
+                                _uiState.value = _uiState.value.copy(isLoading = false)
+                                println("DEBUG: TeacherStudentApplicationsViewModel - No subjects found for teacher")
+                                return@onSuccess
+                            }
+                            
                             // Now get applications for these subjects from both legacy and current collections
+                            println("DEBUG: TeacherStudentApplicationsViewModel - Getting legacy applications for subjects: $subjectIds")
                             val legacyResult = studentApplicationRepository.getApplicationsForTeacherSubjects(user.id, subjectIds)
                             val legacyList = legacyResult.getOrElse { emptyList<com.smartacademictracker.data.model.StudentApplication>() }
+                            println("DEBUG: TeacherStudentApplicationsViewModel - Found ${legacyList.size} legacy applications")
+                            
+                            println("DEBUG: TeacherStudentApplicationsViewModel - Getting current applications for subjects: $subjectIds")
                             val currentResult = subjectApplicationRepository.getApplicationsForTeacherSubjects(subjectIds)
                             val currentList = currentResult.getOrElse { emptyList<com.smartacademictracker.data.model.SubjectApplication>() }.map { sa ->
                                 com.smartacademictracker.data.model.StudentApplication(
@@ -87,13 +102,16 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
 
                             val combined = (legacyList + currentList).sortedByDescending { it.appliedAt }
                             _applications.value = combined
-                                _uiState.value = _uiState.value.copy(isLoading = false)
-                                println("DEBUG: TeacherStudentApplicationsViewModel - Loaded ${combined.size} applications for ${subjectIds.size} subjects")
+                            _uiState.value = _uiState.value.copy(isLoading = false)
+                            println("DEBUG: TeacherStudentApplicationsViewModel - Loaded ${combined.size} applications for ${subjectIds.size} subjects")
+                            combined.forEach { app ->
+                                println("DEBUG: TeacherStudentApplicationsViewModel - Application: ${app.studentName} for ${app.subjectName} - Status: ${app.status}")
+                            }
                             
                         }.onFailure { exception ->
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                error = exception.message ?: "Failed to load subjects"
+                                error = exception.message ?: "Failed to load teacher subjects"
                             )
                         }
                     } else {
@@ -169,22 +187,7 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
                                         applicationResult.onSuccess { application ->
                                             if (application != null) {
                                                 println("DEBUG: TeacherStudentApplicationsViewModel - Application details (legacy): studentId=${application.studentId}, subjectId=${application.subjectId}")
-                                                val enrollmentResult = enrollmentRepository.enrollStudent(
-                                                    studentId = application.studentId,
-                                                    studentName = application.studentName,
-                                                    subjectId = application.subjectId,
-                                                    subjectName = application.subjectName,
-                                                    subjectCode = application.subjectCode,
-                                                    semester = "Fall 2025",
-                                                    academicYear = "2025-2026"
-                                                )
-                                                enrollmentResult.onSuccess { enrollment ->
-                                                    println("DEBUG: TeacherStudentApplicationsViewModel - Enrollment created successfully: ${enrollment.id}")
-                                                    kotlinx.coroutines.delay(1000)
-                                                    realtimeDataManager.loadAllData()
-                                                }.onFailure { enrollmentException ->
-                                                    println("DEBUG: TeacherStudentApplicationsViewModel - Failed to create enrollment: ${enrollmentException.message}")
-                                                }
+                                                createStudentEnrollment(application)
                                             }
                                         }.onFailure { appException ->
                                             println("DEBUG: TeacherStudentApplicationsViewModel - Failed to get legacy application details: ${appException.message}")
@@ -193,29 +196,8 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
                                     ApplicationSource.CURRENT_SUBJECT -> {
                                         val applicationResult = subjectApplicationRepository.getApplicationById(applicationId)
                                         applicationResult.onSuccess { sa ->
-                                            // Fetch subject to get subjectCode if needed
-                                            viewModelScope.launch {
-                                                val subjectCode = try {
-                                                    val subj = subjectRepository.getSubjectById(sa.subjectId).getOrNull()
-                                                    subj?.code ?: ""
-                                                } catch (_: Exception) { "" }
-                                                val enrollmentResult = enrollmentRepository.enrollStudent(
-                                                    studentId = sa.studentId,
-                                                    studentName = sa.studentName,
-                                                    subjectId = sa.subjectId,
-                                                    subjectName = sa.subjectName,
-                                                    subjectCode = subjectCode,
-                                                    semester = "Fall 2025",
-                                                    academicYear = "2025-2026"
-                                                )
-                                                enrollmentResult.onSuccess { enrollment ->
-                                                    println("DEBUG: TeacherStudentApplicationsViewModel - Enrollment created successfully for subject application: ${enrollment.id}")
-                                                    kotlinx.coroutines.delay(1000)
-                                                    realtimeDataManager.loadAllData()
-                                                }.onFailure { enrollmentException ->
-                                                    println("DEBUG: TeacherStudentApplicationsViewModel - Failed to create enrollment (subject application): ${enrollmentException.message}")
-                                                }
-                                            }
+                                            println("DEBUG: TeacherStudentApplicationsViewModel - Application details (current): studentId=${sa.studentId}, subjectId=${sa.subjectId}")
+                                            createStudentEnrollmentFromSubjectApplication(sa)
                                         }.onFailure { appException ->
                                             println("DEBUG: TeacherStudentApplicationsViewModel - Failed to get subject application details: ${appException.message}")
                                         }
@@ -263,6 +245,119 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
     
     fun refreshApplications() {
         loadApplications()
+    }
+
+    private suspend fun createStudentEnrollment(application: StudentApplication) {
+        try {
+            println("DEBUG: TeacherStudentApplicationsViewModel - Creating enrollment for legacy application: ${application.id}")
+            
+            // Get student information
+            val studentResult = userRepository.getUserById(application.studentId)
+            studentResult.onSuccess { student ->
+                // Get subject information
+                val subjectResult = subjectRepository.getSubjectById(application.subjectId)
+                subjectResult.onSuccess { subject ->
+                    // Create enrollment
+                    val enrollment = StudentEnrollment(
+                        studentId = application.studentId,
+                        studentName = application.studentName,
+                        subjectId = application.subjectId,
+                        subjectName = application.subjectName,
+                        sectionName = "A", // Default section for legacy applications
+                        courseId = application.courseId,
+                        courseName = application.courseName,
+                        yearLevelId = application.yearLevelId,
+                        yearLevelName = application.yearLevelName,
+                        academicPeriodId = "", // Will be populated by repository
+                        enrollmentDate = System.currentTimeMillis(),
+                        status = EnrollmentStatus.ACTIVE
+                    )
+
+                    println("DEBUG: TeacherStudentApplicationsViewModel - Calling studentEnrollmentRepository.enrollStudent")
+                    val enrollmentResult = studentEnrollmentRepository.enrollStudent(enrollment)
+                    enrollmentResult.onSuccess { enrollmentId ->
+                        println("DEBUG: TeacherStudentApplicationsViewModel - Successfully created enrollment for student ${application.studentName} with ID: $enrollmentId")
+                        realtimeDataManager.loadAllData()
+                    }.onFailure { exception ->
+                        println("DEBUG: TeacherStudentApplicationsViewModel - Error creating enrollment: ${exception.message}")
+                    }
+                }.onFailure { exception ->
+                    println("DEBUG: TeacherStudentApplicationsViewModel - Error getting subject: ${exception.message}")
+                }
+            }.onFailure { exception ->
+                println("DEBUG: TeacherStudentApplicationsViewModel - Error getting student: ${exception.message}")
+            }
+        } catch (e: Exception) {
+            println("DEBUG: TeacherStudentApplicationsViewModel - Exception creating enrollment: ${e.message}")
+        }
+    }
+
+    private suspend fun createStudentEnrollmentFromSubjectApplication(application: com.smartacademictracker.data.model.SubjectApplication) {
+        try {
+            println("DEBUG: TeacherStudentApplicationsViewModel - Creating enrollment for subject application: ${application.id}")
+            
+            // Get current teacher's section assignment for this subject
+            val currentUserResult = userRepository.getCurrentUser()
+            currentUserResult.onSuccess { teacher ->
+                if (teacher != null) {
+                    val sectionAssignmentsResult = sectionAssignmentRepository.getSectionAssignmentsByTeacher(teacher.id)
+                    sectionAssignmentsResult.onSuccess { assignments ->
+                        val teacherSection = assignments.find { it.subjectId == application.subjectId }?.sectionName
+                        if (teacherSection != null) {
+                            println("DEBUG: TeacherStudentApplicationsViewModel - Using teacher's assigned section: $teacherSection")
+                            
+                            // Get student information
+                            val studentResult = userRepository.getUserById(application.studentId)
+                            studentResult.onSuccess { student ->
+                                // Get subject information
+                                val subjectResult = subjectRepository.getSubjectById(application.subjectId)
+                                subjectResult.onSuccess { subject ->
+                                    // Create enrollment with teacher's assigned section
+                                    val enrollment = StudentEnrollment(
+                                        studentId = application.studentId,
+                                        studentName = application.studentName,
+                                        subjectId = application.subjectId,
+                                        subjectName = application.subjectName,
+                                        sectionName = teacherSection, // Use teacher's assigned section
+                                        teacherId = teacher.id,
+                                        teacherName = "${teacher.firstName} ${teacher.lastName}",
+                                        teacherEmail = teacher.email,
+                                        courseId = application.courseId,
+                                        courseName = application.courseName,
+                                        yearLevelId = application.yearLevelId,
+                                        yearLevelName = application.yearLevelName,
+                                        academicPeriodId = application.academicPeriodId,
+                                        enrollmentDate = System.currentTimeMillis(),
+                                        status = EnrollmentStatus.ACTIVE
+                                    )
+
+                                    println("DEBUG: TeacherStudentApplicationsViewModel - Calling studentEnrollmentRepository.enrollStudent")
+                                    val enrollmentResult = studentEnrollmentRepository.enrollStudent(enrollment)
+                                    enrollmentResult.onSuccess { enrollmentId ->
+                                        println("DEBUG: TeacherStudentApplicationsViewModel - Successfully created enrollment for student ${application.studentName} with ID: $enrollmentId")
+                                        realtimeDataManager.loadAllData()
+                                    }.onFailure { exception ->
+                                        println("DEBUG: TeacherStudentApplicationsViewModel - Error creating enrollment: ${exception.message}")
+                                    }
+                                }.onFailure { exception ->
+                                    println("DEBUG: TeacherStudentApplicationsViewModel - Error getting subject: ${exception.message}")
+                                }
+                            }.onFailure { exception ->
+                                println("DEBUG: TeacherStudentApplicationsViewModel - Error getting student: ${exception.message}")
+                            }
+                        } else {
+                            println("DEBUG: TeacherStudentApplicationsViewModel - No section assignment found for teacher in subject ${application.subjectId}")
+                        }
+                    }.onFailure { exception ->
+                        println("DEBUG: TeacherStudentApplicationsViewModel - Error getting section assignments: ${exception.message}")
+                    }
+                }
+            }.onFailure { exception ->
+                println("DEBUG: TeacherStudentApplicationsViewModel - Error getting current teacher: ${exception.message}")
+            }
+        } catch (e: Exception) {
+            println("DEBUG: TeacherStudentApplicationsViewModel - Exception creating enrollment: ${e.message}")
+        }
     }
 }
 

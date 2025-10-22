@@ -17,6 +17,7 @@ import com.smartacademictracker.data.model.Subject
 import com.smartacademictracker.data.model.SubjectApplication
 import com.smartacademictracker.data.model.ApplicationStatus
 import com.smartacademictracker.presentation.common.HierarchicalSubjectSelector
+import com.smartacademictracker.presentation.common.SectionBasedSubjectSelector
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +122,7 @@ fun HierarchicalStudentSubjectApplicationScreen(
             when (selectedTab) {
                 0 -> {
                     // Browse Subjects Tab
-                    HierarchicalSubjectSelector(
+                    SectionBasedSubjectSelector(
                         courses = courses,
                         yearLevels = yearLevels,
                         subjects = subjects,
@@ -133,8 +134,8 @@ fun HierarchicalStudentSubjectApplicationScreen(
                         onYearLevelSelected = { yearLevelId ->
                             viewModel.selectYearLevel(yearLevelId)
                         },
-                        onSubjectSelected = { subject ->
-                            viewModel.applyForSubject(subject.id)
+                        onSubjectWithSectionSelected = { subject, sectionName ->
+                            viewModel.applyForSubject(subject.id, sectionName)
                         }
                     )
                 }

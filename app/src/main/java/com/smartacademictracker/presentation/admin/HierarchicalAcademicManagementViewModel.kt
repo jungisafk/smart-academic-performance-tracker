@@ -9,6 +9,7 @@ import com.smartacademictracker.data.repository.CourseRepository
 import com.smartacademictracker.data.repository.YearLevelRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.migration.DatabaseMigrationService
+import com.smartacademictracker.data.service.AcademicPeriodFilterService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +22,8 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
     private val courseRepository: CourseRepository,
     private val yearLevelRepository: YearLevelRepository,
     private val subjectRepository: SubjectRepository,
-    private val migrationService: DatabaseMigrationService
+    private val migrationService: DatabaseMigrationService,
+    private val academicPeriodFilterService: AcademicPeriodFilterService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HierarchicalAcademicManagementUiState())
@@ -41,6 +43,15 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
+                // Check if there's an active academic period
+                val hasActivePeriod = academicPeriodFilterService.hasActiveAcademicPeriod()
+                if (!hasActivePeriod) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "No active academic period found. Please create an academic period first."
+                    )
+                    return@launch
+                }
                 // First, clean up corrupted subjects
                 println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaning up corrupted subjects...")
                 subjectRepository.cleanupCorruptedSubjects().onSuccess { corruptedCount ->

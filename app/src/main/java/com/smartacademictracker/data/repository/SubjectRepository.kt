@@ -3,20 +3,35 @@ package com.smartacademictracker.data.repository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.smartacademictracker.data.model.Subject
 import com.smartacademictracker.data.model.Semester
+import com.smartacademictracker.data.model.YearLevel
+import com.smartacademictracker.data.model.Course
+import com.smartacademictracker.data.service.AcademicPeriodFilterService
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SubjectRepository @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val academicPeriodFilterService: AcademicPeriodFilterService
 ) {
     private val subjectsCollection = firestore.collection("subjects")
+    private val yearLevelsCollection = firestore.collection("year_levels")
+    private val coursesCollection = firestore.collection("courses")
 
     suspend fun createSubject(subject: Subject): Result<Subject> {
         return try {
-            val docRef = subjectsCollection.add(subject).await()
-            val createdSubject = subject.copy(id = docRef.id)
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.failure(Exception("No active academic period found. Please set an active academic period first."))
+            }
+            
+            // Add academic period reference to the subject
+            val subjectWithPeriod = subject.copy(academicPeriodId = academicContext.periodId)
+            
+            val docRef = subjectsCollection.add(subjectWithPeriod).await()
+            val createdSubject = subjectWithPeriod.copy(id = docRef.id)
             subjectsCollection.document(docRef.id).set(createdSubject).await()
             Result.success(createdSubject)
         } catch (e: Exception) {
@@ -55,8 +70,15 @@ class SubjectRepository @Inject constructor(
 
     suspend fun getAllSubjects(): Result<List<Subject>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
             val snapshot = subjectsCollection
                 .whereEqualTo("active", true)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
                 .get()
                 .await()
             
@@ -75,7 +97,17 @@ class SubjectRepository @Inject constructor(
                 }
             }
             
-            Result.success(subjects)
+            // Populate computed fields (yearLevelName, courseName, courseCode)
+            val subjectsWithComputedFields = subjects.map { subject ->
+                subject.copy(
+                    yearLevelName = getYearLevelName(subject.yearLevelId),
+                    courseName = getCourseName(subject.courseId),
+                    courseCode = getCourseCode(subject.courseId)
+                )
+            }
+            
+            
+            Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -89,9 +121,11 @@ class SubjectRepository @Inject constructor(
         semester: String,
         academicYear: String,
         courseId: String,
-        yearLevelId: String
+        yearLevelId: String,
+        numberOfSections: Int = 1
     ): Result<Subject> {
         return try {
+            val sections = generateSections(code, numberOfSections)
             val subject = Subject(
                 name = name,
                 code = code,
@@ -100,15 +134,24 @@ class SubjectRepository @Inject constructor(
                 semester = convertStringToSemester(semester),
                 academicYear = academicYear,
                 courseId = courseId,
-                yearLevelId = yearLevelId
+                yearLevelId = yearLevelId,
+                numberOfSections = numberOfSections,
+                sections = sections
             )
-            val docRef = subjectsCollection.add(subject).await()
-            val createdSubject = subject.copy(id = docRef.id)
-            subjectsCollection.document(docRef.id).set(createdSubject).await()
-            Result.success(createdSubject)
+            // Use the createSubject method which includes academic period filtering
+            createSubject(subject)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+    
+    private fun generateSections(subjectCode: String, numberOfSections: Int): List<String> {
+        val sections = mutableListOf<String>()
+        for (i in 0 until numberOfSections) {
+            val sectionLetter = ('A' + i).toString()
+            sections.add("$subjectCode$sectionLetter")
+        }
+        return sections
     }
     
     private fun convertStringToSemester(semesterString: String): Semester {
@@ -128,9 +171,54 @@ class SubjectRepository @Inject constructor(
                 .get()
                 .await()
             val subjects = snapshot.toObjects(Subject::class.java)
-            Result.success(subjects)
+            
+            // Populate computed fields (yearLevelName, courseName, courseCode)
+            val subjectsWithComputedFields = subjects.map { subject ->
+                subject.copy(
+                    yearLevelName = getYearLevelName(subject.yearLevelId),
+                    courseName = getCourseName(subject.courseId),
+                    courseCode = getCourseCode(subject.courseId)
+                )
+            }
+            
+            
+            Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
+            println("DEBUG: SubjectRepository - Error getting subjects for teacher: ${e.message}")
             Result.failure(e)
+        }
+    }
+    
+    private suspend fun getYearLevelName(yearLevelId: String): String {
+        return try {
+            if (yearLevelId.isEmpty()) return ""
+            val yearLevelDoc = yearLevelsCollection.document(yearLevelId).get().await()
+            val yearLevel = yearLevelDoc.toObject(YearLevel::class.java)
+            yearLevel?.name ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+    
+    private suspend fun getCourseName(courseId: String): String {
+        return try {
+            if (courseId.isEmpty()) return ""
+            val courseDoc = coursesCollection.document(courseId).get().await()
+            val course = courseDoc.toObject(Course::class.java)
+            course?.name ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+    
+    private suspend fun getCourseCode(courseId: String): String {
+        return try {
+            if (courseId.isEmpty()) return ""
+            val courseDoc = coursesCollection.document(courseId).get().await()
+            val course = courseDoc.toObject(Course::class.java)
+            course?.code ?: ""
+        } catch (e: Exception) {
+            ""
         }
     }
 

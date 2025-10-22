@@ -3,7 +3,7 @@ package com.smartacademictracker.presentation.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.AcademicPeriod
-import com.smartacademictracker.data.model.AcademicPeriodSummary
+import com.smartacademictracker.data.model.AcademicPeriodOverview
 import com.smartacademictracker.data.repository.AcademicPeriodRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,8 +26,8 @@ class AdminAcademicPeriodViewModel @Inject constructor(
     private val _activePeriod = MutableStateFlow<AcademicPeriod?>(null)
     val activePeriod: StateFlow<AcademicPeriod?> = _activePeriod.asStateFlow()
 
-    private val _summary = MutableStateFlow(AcademicPeriodSummary())
-    val summary: StateFlow<AcademicPeriodSummary> = _summary.asStateFlow()
+    private val _summary = MutableStateFlow(AcademicPeriodOverview())
+    val summary: StateFlow<AcademicPeriodOverview> = _summary.asStateFlow()
 
     fun loadAcademicPeriods() {
         viewModelScope.launch {

@@ -2,6 +2,26 @@
 
 All notable changes to the Smart Academic Performance Tracker project will be documented in this file.
 
+**Author**: Sentillas  
+**Last Updated**: October 22, 2025
+
+## [1.1.0] - 2025-10-22
+
+### 🔒 Security & Privacy Improvements
+- **Fixed Teacher Application Privacy**: Teachers can now only see student applications for subjects they actually teach
+- **Enhanced Data Isolation**: Proper filtering based on subject ownership (teacherId) instead of section assignments
+- **Privacy Protection**: Student application data is now properly isolated by teacher ownership
+
+### 🛠️ Technical Fixes
+- **Updated TeacherStudentApplicationsViewModel**: Now uses `SubjectRepository.getSubjectsByTeacher()` for proper filtering
+- **Improved Security**: Teachers can no longer access applications for other teachers' subjects
+- **Enhanced Performance**: More efficient querying using direct subject ownership
+
+### 📚 Documentation Updates
+- **Updated README.md**: Added author information and last updated date
+- **Enhanced .gitignore**: Excluded unnecessary files (logs, builds, sensitive files, guide documents)
+- **Improved Documentation**: Better project structure and file organization
+
 ## [1.0.0] - 2024-12-07
 
 ### 🎉 Major Features Added

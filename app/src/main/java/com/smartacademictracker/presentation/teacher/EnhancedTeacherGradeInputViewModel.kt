@@ -9,8 +9,10 @@ import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.EnrollmentRepository
+import com.smartacademictracker.data.repository.StudentEnrollmentRepository
 import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.repository.OfflineGradeRepository
 import com.smartacademictracker.data.network.NetworkMonitor
 import com.smartacademictracker.data.utils.GradeCalculationEngine
@@ -26,8 +28,10 @@ import javax.inject.Inject
 class EnhancedTeacherGradeInputViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val enrollmentRepository: EnrollmentRepository,
+    private val studentEnrollmentRepository: StudentEnrollmentRepository,
     private val gradeRepository: GradeRepository,
     private val userRepository: UserRepository,
+    private val sectionAssignmentRepository: SectionAssignmentRepository,
     private val offlineGradeRepository: OfflineGradeRepository,
     private val networkMonitor: NetworkMonitor
 ) : ViewModel() {
@@ -85,16 +89,61 @@ class EnhancedTeacherGradeInputViewModel @Inject constructor(
                     return@launch
                 }
                 
-                // Load enrollments
-                val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
-                enrollmentsResult.onSuccess { enrollments ->
-                    _enrollments.value = enrollments
-                }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Failed to load enrollments"
-                    )
-                    return@launch
+                // Load enrollments (prefer section-based student_enrollments)
+                val currentUser = userRepository.getCurrentUser().getOrNull()
+                val teacherId = currentUser?.id ?: ""
+                println("DEBUG: EnhancedTeacherGradeInputViewModel - Loading students for subject: $subjectId, teacher: $teacherId")
+                
+                val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
+                if (studentEnrollmentsResult.isSuccess) {
+                    val seList = studentEnrollmentsResult.getOrNull().orEmpty()
+                    println("DEBUG: EnhancedTeacherGradeInputViewModel - Found ${seList.size} student enrollments for subject $subjectId")
+                    // Determine teacher's section
+                    var teacherSection: String? = null
+                    if (teacherId.isNotEmpty()) {
+                        sectionAssignmentRepository.getSectionAssignmentsByTeacher(teacherId).onSuccess { assignments ->
+                            teacherSection = assignments.firstOrNull { it.subjectId == subjectId }?.sectionName
+                        }
+                    }
+                    seList.forEach { se ->
+                        println("DEBUG: StudentEnrollment - Student: ${se.studentName}, TeacherId: ${se.teacherId}, Section: ${se.sectionName}, Status: ${se.status}")
+                    }
+                    
+                    val filtered = when {
+                        teacherSection != null -> seList.filter { it.sectionName == teacherSection }
+                        teacherId.isNotEmpty() -> seList.filter { it.teacherId == teacherId }
+                        else -> seList
+                    }
+                    println("DEBUG: EnhancedTeacherGradeInputViewModel - After filtering (section=$teacherSection teacher=$teacherId): ${filtered.size} students")
+                    
+                    val mapped = filtered.map { se ->
+                        Enrollment(
+                            id = se.id,
+                            studentId = se.studentId,
+                            studentName = se.studentName,
+                            subjectId = se.subjectId,
+                            subjectName = se.subjectName,
+                            subjectCode = se.subjectCode,
+                            enrolledAt = se.enrollmentDate,
+                            semester = se.semester.name,
+                            academicYear = se.academicYear,
+                            active = se.status.name == "ACTIVE"
+                        )
+                    }
+                    println("DEBUG: EnhancedTeacherGradeInputViewModel - Final mapped enrollments: ${mapped.size}")
+                    _enrollments.value = mapped
+                } else {
+                    println("DEBUG: EnhancedTeacherGradeInputViewModel - Error loading student enrollments: ${studentEnrollmentsResult.exceptionOrNull()?.message}")
+                    val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
+                    enrollmentsResult.onSuccess { enrollments ->
+                        _enrollments.value = enrollments
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "Failed to load enrollments"
+                        )
+                        return@launch
+                    }
                 }
                 
                 // Load grades

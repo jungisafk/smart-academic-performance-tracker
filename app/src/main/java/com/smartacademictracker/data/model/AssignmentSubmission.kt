@@ -24,6 +24,7 @@ data class AssignmentSubmission(
     val feedback: String? = null,
     val gradedDate: Long? = null,
     val lateSubmission: Boolean = false,
+    val academicPeriodId: String = "", // Reference to active academic period
     val createdAt: Long = System.currentTimeMillis()
 )
 

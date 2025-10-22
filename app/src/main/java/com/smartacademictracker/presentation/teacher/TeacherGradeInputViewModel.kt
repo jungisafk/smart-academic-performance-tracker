@@ -9,9 +9,12 @@ import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.EnrollmentRepository
+import com.smartacademictracker.data.repository.StudentEnrollmentRepository
 import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.utils.GradeCalculationEngine
+import com.smartacademictracker.data.notification.GradeCompletionNotificationService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,8 +26,11 @@ import javax.inject.Inject
 class TeacherGradeInputViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val enrollmentRepository: EnrollmentRepository,
+    private val studentEnrollmentRepository: StudentEnrollmentRepository,
     private val gradeRepository: GradeRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val sectionAssignmentRepository: SectionAssignmentRepository,
+    private val gradeCompletionNotificationService: GradeCompletionNotificationService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherGradeInputUiState())
@@ -56,10 +62,57 @@ class TeacherGradeInputViewModel @Inject constructor(
                     _subject.value = subject
                 }
 
-                // Load enrollments for this subject
-                val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
-                enrollmentsResult.onSuccess { enrollmentsList ->
-                    _enrollments.value = enrollmentsList
+                // Load enrollments for this subject (new section-based enrollments)
+                val currentUser = userRepository.getCurrentUser().getOrNull()
+                val teacherId = currentUser?.id ?: ""
+                println("DEBUG: TeacherGradeInputViewModel - Loading students for subject: $subjectId, teacher: $teacherId")
+                
+                val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
+                studentEnrollmentsResult.onSuccess { seList ->
+                    println("DEBUG: TeacherGradeInputViewModel - Found ${seList.size} student enrollments for subject $subjectId")
+                    // Determine teacher's section for this subject
+                    var teacherSection: String? = null
+                    if (teacherId.isNotEmpty()) {
+                        sectionAssignmentRepository.getSectionAssignmentsByTeacher(teacherId).onSuccess { assignments ->
+                            teacherSection = assignments.firstOrNull { it.subjectId == subjectId }?.sectionName
+                        }
+                    }
+                    seList.forEach { se ->
+                        println("DEBUG: StudentEnrollment - Student: ${se.studentName}, TeacherId: ${se.teacherId}, Section: ${se.sectionName}, Status: ${se.status}")
+                    }
+                    
+                    // Filter by teacher's section if available; otherwise by teacherId; else use all
+                    val filtered = when {
+                        teacherSection != null -> seList.filter { it.sectionName == teacherSection }
+                        teacherId.isNotEmpty() -> seList.filter { it.teacherId == teacherId }
+                        else -> seList
+                    }
+                    println("DEBUG: TeacherGradeInputViewModel - After filtering (section=$teacherSection teacher=$teacherId): ${filtered.size} students")
+                    
+                    val mapped = filtered.map { se ->
+                        Enrollment(
+                            id = se.id,
+                            studentId = se.studentId,
+                            studentName = se.studentName,
+                            subjectId = se.subjectId,
+                            subjectName = se.subjectName,
+                            subjectCode = se.subjectCode,
+                            enrolledAt = se.enrollmentDate,
+                            semester = se.semester.name,
+                            academicYear = se.academicYear,
+                            active = se.status.name == "ACTIVE"
+                        )
+                    }
+                    println("DEBUG: TeacherGradeInputViewModel - Final mapped enrollments: ${mapped.size}")
+                    _enrollments.value = mapped
+                }.onFailure { error ->
+                    println("DEBUG: TeacherGradeInputViewModel - Error loading student enrollments: ${error.message}")
+                    // Fallback to legacy enrollments if needed
+                    val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
+                    enrollmentsResult.onSuccess { enrollmentsList ->
+                        println("DEBUG: TeacherGradeInputViewModel - Fallback to legacy enrollments: ${enrollmentsList.size}")
+                        _enrollments.value = enrollmentsList
+                    }
                 }
 
                 // Load existing grades for this subject
@@ -157,6 +210,15 @@ class TeacherGradeInputViewModel @Inject constructor(
                         
                         // Update or create student grade aggregate
                         updateStudentGradeAggregate(studentId, studentName, subject)
+
+                        // Check if all grades are completed for this subject and period
+                        gradeCompletionNotificationService.checkAndNotifyGradeCompletion(
+                            subjectId = subject.id,
+                            subjectName = subject.name,
+                            teacherId = subject.teacherId ?: "",
+                            teacherName = "", // Should get from user repository
+                            gradePeriod = gradePeriod
+                        )
 
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,

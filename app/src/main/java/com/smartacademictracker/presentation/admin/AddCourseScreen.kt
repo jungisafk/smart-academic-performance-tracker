@@ -125,7 +125,22 @@ fun AddCourseScreen(
                     }
                 }
             }
-
+            
+            // Note about automatic year level creation
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Text(
+                    text = "ℹ️ Year levels will be automatically created based on the course duration. For example, a 4-year course will create 4 year levels (1st Year, 2nd Year, 3rd Year, 4th Year).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+            
             Spacer(modifier = Modifier.height(16.dp))
 
             // Add Course Button

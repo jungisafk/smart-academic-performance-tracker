@@ -34,28 +34,34 @@ class StudentAnalyticsViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        // Load student's grade aggregates
+                        // Try to load student's grade aggregates first
                         val aggregatesResult = gradeRepository.getStudentGradeAggregatesByStudent(user.id)
                         aggregatesResult.onSuccess { aggregatesList ->
-                            _gradeAggregates.value = aggregatesList
-                            
-                            // Calculate analytics
-                            val analytics = calculateAnalytics(aggregatesList)
-                            
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                overallAverage = analytics.overallAverage,
-                                passingSubjects = analytics.passingSubjects,
-                                atRiskSubjects = analytics.atRiskSubjects,
-                                failingSubjects = analytics.failingSubjects
-                            )
-                            
-                            println("DEBUG: StudentAnalyticsViewModel - Loaded ${aggregatesList.size} grade aggregates")
+                            if (aggregatesList.isNotEmpty()) {
+                                // Use aggregates if available
+                                _gradeAggregates.value = aggregatesList
+                                
+                                // Calculate analytics
+                                val analytics = calculateAnalytics(aggregatesList)
+                                
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    overallAverage = analytics.overallAverage,
+                                    passingSubjects = analytics.passingSubjects,
+                                    atRiskSubjects = analytics.atRiskSubjects,
+                                    failingSubjects = analytics.failingSubjects
+                                )
+                                
+                                println("DEBUG: StudentAnalyticsViewModel - Loaded ${aggregatesList.size} grade aggregates")
+                            } else {
+                                // Fallback: Load individual grades and create aggregates on-the-fly
+                                println("DEBUG: StudentAnalyticsViewModel - No aggregates found, loading individual grades")
+                                loadAnalyticsFromIndividualGrades(user.id)
+                            }
                         }.onFailure { exception ->
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = exception.message ?: "Failed to load grade data"
-                            )
+                            // Fallback: Load individual grades if aggregates fail
+                            println("DEBUG: StudentAnalyticsViewModel - Aggregates failed, loading individual grades: ${exception.message}")
+                            loadAnalyticsFromIndividualGrades(user.id)
                         }
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -76,6 +82,106 @@ class StudentAnalyticsViewModel @Inject constructor(
                 )
             }
         }
+    }
+    
+    private suspend fun loadAnalyticsFromIndividualGrades(studentId: String) {
+        try {
+            // Load individual grades
+            val gradesResult = gradeRepository.getGradesByStudent(studentId)
+            gradesResult.onSuccess { gradesList ->
+                if (gradesList.isNotEmpty()) {
+                    println("DEBUG: StudentAnalyticsViewModel - Loaded ${gradesList.size} individual grades")
+                    
+                    // Group grades by subject and create aggregates on-the-fly
+                    val subjectGroups = gradesList.groupBy { it.subjectId }
+                    val aggregates = subjectGroups.map { (subjectId, subjectGrades) ->
+                        val firstGrade = subjectGrades.first()
+                        createAggregateFromGrades(
+                            studentId = studentId,
+                            subjectId = subjectId,
+                            subjectName = firstGrade.subjectName,
+                            grades = subjectGrades
+                        )
+                    }
+                    
+                    _gradeAggregates.value = aggregates
+                    
+                    // Calculate analytics
+                    val analytics = calculateAnalytics(aggregates)
+                    
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        overallAverage = analytics.overallAverage,
+                        passingSubjects = analytics.passingSubjects,
+                        atRiskSubjects = analytics.atRiskSubjects,
+                        failingSubjects = analytics.failingSubjects
+                    )
+                    
+                    println("DEBUG: StudentAnalyticsViewModel - Created ${aggregates.size} aggregates from individual grades")
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "No grades found"
+                    )
+                }
+            }.onFailure { exception ->
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = exception.message ?: "Failed to load individual grades"
+                )
+            }
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = e.message ?: "Failed to process individual grades"
+            )
+        }
+    }
+    
+    private fun createAggregateFromGrades(
+        studentId: String,
+        subjectId: String,
+        subjectName: String,
+        grades: List<com.smartacademictracker.data.model.Grade>
+    ): StudentGradeAggregate {
+        val firstGrade = grades.first()
+        
+        // Calculate period grades
+        val prelimGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.PRELIM }
+        val midtermGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.MIDTERM }
+        val finalGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.FINAL }
+        
+        // Calculate final average
+        val validGrades = listOfNotNull(prelimGrade, midtermGrade, finalGrade)
+        val finalAverage = if (validGrades.isNotEmpty()) {
+            validGrades.map { it.percentage }.average()
+        } else null
+        
+        // Determine status
+        val status = when {
+            finalAverage == null -> com.smartacademictracker.data.model.GradeStatus.INCOMPLETE
+            finalAverage >= 90 -> com.smartacademictracker.data.model.GradeStatus.PASSING
+            finalAverage >= 80 -> com.smartacademictracker.data.model.GradeStatus.PASSING
+            finalAverage >= 70 -> com.smartacademictracker.data.model.GradeStatus.AT_RISK
+            else -> com.smartacademictracker.data.model.GradeStatus.FAILING
+        }
+        
+        return StudentGradeAggregate(
+            id = "${studentId}_${subjectId}_${firstGrade.semester}_${firstGrade.academicYear}",
+            studentId = studentId,
+            studentName = firstGrade.studentName,
+            subjectId = subjectId,
+            subjectName = subjectName,
+            teacherId = firstGrade.teacherId,
+            semester = firstGrade.semester,
+            academicYear = firstGrade.academicYear,
+            prelimGrade = prelimGrade?.percentage,
+            midtermGrade = midtermGrade?.percentage,
+            finalGrade = finalGrade?.percentage,
+            finalAverage = finalAverage,
+            status = status,
+            lastUpdated = System.currentTimeMillis()
+        )
     }
 
     fun refreshData() {

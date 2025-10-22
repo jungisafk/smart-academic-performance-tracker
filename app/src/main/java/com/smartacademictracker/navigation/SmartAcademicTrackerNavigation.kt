@@ -28,6 +28,7 @@ import com.smartacademictracker.presentation.admin.AddAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.AdminDashboardScreen
 import com.smartacademictracker.presentation.admin.AdminApplicationsScreen
+import com.smartacademictracker.presentation.admin.AdminStudentApplicationsScreen
 import com.smartacademictracker.presentation.admin.HierarchicalAcademicManagementScreen
 import com.smartacademictracker.presentation.admin.AddSubjectScreen
 import com.smartacademictracker.presentation.admin.AddCourseScreen
@@ -35,6 +36,10 @@ import com.smartacademictracker.presentation.admin.AddYearLevelScreen
 import com.smartacademictracker.presentation.admin.ManageUsersScreen
 import com.smartacademictracker.presentation.admin.AdminGradeMonitoringScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
+import com.smartacademictracker.presentation.admin.TeacherSectionAssignmentScreen
+import com.smartacademictracker.presentation.admin.AcademicPeriodDataScreen
+import com.smartacademictracker.presentation.student.StudentEnrollmentScreen
+import com.smartacademictracker.presentation.teacher.TeacherStudentManagementScreen
 import com.smartacademictracker.presentation.student.StudentAnalyticsScreen
 import com.smartacademictracker.presentation.student.StudentApplicationDetailScreen
 import com.smartacademictracker.presentation.student.StudentGradeHistoryScreen
@@ -44,6 +49,10 @@ import com.smartacademictracker.presentation.student.HierarchicalStudentSubjectA
 import com.smartacademictracker.presentation.teacher.TeacherAnalyticsScreen
 import com.smartacademictracker.presentation.teacher.HierarchicalTeacherSubjectApplicationScreen
 import com.smartacademictracker.presentation.profile.ProfileScreen
+import com.smartacademictracker.presentation.notification.NotificationTestScreen
+import com.smartacademictracker.presentation.notification.NotificationCenterScreen
+import com.smartacademictracker.presentation.notification.NotificationPreferencesScreen
+import com.smartacademictracker.presentation.notification.NotificationScreen
 
 @Composable
 fun SmartAcademicTrackerNavigation(
@@ -149,8 +158,14 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToGradeComparison = {
                     navController.navigate(Screen.StudentGradeComparison.route)
                 },
+                onNavigateToEnrollments = {
+                    navController.navigate(Screen.StudentEnrollment.route)
+                },
                 onNavigateToStudyProgress = {
                     navController.navigate(Screen.StudentStudyProgress.route)
+                },
+                onNavigateToNotifications = {
+                    navController.navigate(Screen.Notifications.route)
                 },
                 onSignOut = {
                     authViewModel.signOut()
@@ -165,9 +180,6 @@ fun SmartAcademicTrackerNavigation(
             StudentGradesScreen(
                 onNavigateBack = {
                     navController.popBackStack()
-                },
-                onNavigateToSubjectDetail = { subjectId ->
-                    navController.navigate(Screen.StudentSubjectDetail.createRoute(subjectId))
                 }
             )
         }
@@ -176,9 +188,6 @@ fun SmartAcademicTrackerNavigation(
             StudentSubjectsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
-                },
-                onNavigateToSubjectDetail = { subjectId ->
-                    navController.navigate(Screen.StudentSubjectDetail.createRoute(subjectId))
                 }
             )
         }
@@ -280,12 +289,14 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
                 },
-                onNavigateToGradeInput = {
-                    // Navigate to subjects first, then user can select a subject for grade input
-                    navController.navigate(Screen.TeacherSubjects.route)
-                },
                 onNavigateToAnalytics = {
                     navController.navigate(Screen.TeacherAnalytics.route)
+                },
+                onNavigateToStudentManagement = {
+                    navController.navigate(Screen.TeacherStudentManagement.route)
+                },
+                onNavigateToNotifications = {
+                    navController.navigate(Screen.Notifications.route)
                 }
             )
         }
@@ -353,8 +364,17 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToAcademicPeriods = {
                     navController.navigate(Screen.AdminAcademicPeriods.route)
                 },
+                onNavigateToAcademicPeriodData = {
+                    navController.navigate(Screen.AcademicPeriodData.route)
+                },
+                onNavigateToTeacherSectionAssignment = {
+                    navController.navigate(Screen.TeacherSectionAssignment.route)
+                },
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
+                },
+                onNavigateToNotifications = {
+                    navController.navigate(Screen.Notifications.route)
                 }
             )
         }
@@ -368,6 +388,21 @@ fun SmartAcademicTrackerNavigation(
             )
         }
         
+        composable(Screen.AdminStudentApplications.route) {
+            AdminStudentApplicationsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.TeacherSectionAssignment.route) {
+            TeacherSectionAssignmentScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
         
         composable(Screen.HierarchicalAcademicManagement.route) {
             HierarchicalAcademicManagementScreen(
@@ -393,6 +428,9 @@ fun SmartAcademicTrackerNavigation(
                 },
                 onNavigateToEditSubject = { subjectId ->
                     // TODO: Implement edit subject navigation
+                },
+                onNavigateToAcademicPeriods = {
+                    navController.navigate(Screen.AdminAcademicPeriods.route)
                 }
             )
         }
@@ -434,6 +472,30 @@ fun SmartAcademicTrackerNavigation(
                 }
             )
         }
+        
+    composable(Screen.AcademicPeriodData.route) {
+        AcademicPeriodDataScreen(
+            onNavigateBack = {
+                navController.popBackStack()
+            }
+        )
+    }
+    
+    composable(Screen.StudentEnrollment.route) {
+        StudentEnrollmentScreen(
+            onNavigateBack = {
+                navController.popBackStack()
+            }
+        )
+    }
+    
+    composable(Screen.TeacherStudentManagement.route) {
+        TeacherStudentManagementScreen(
+            onNavigateBack = {
+                navController.popBackStack()
+            }
+        )
+    }
         
         composable(Screen.AddSubject.route) { backStackEntry ->
             val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
@@ -487,6 +549,45 @@ fun SmartAcademicTrackerNavigation(
                     navController.navigate(Screen.SignIn.route) {
                         popUpTo(0) { inclusive = true }
                     }
+                },
+                onNavigateToNotificationTest = {
+                    navController.navigate(Screen.NotificationTest.route)
+                }
+            )
+        }
+        
+        // Notification Screens
+        composable(Screen.NotificationTest.route) {
+            NotificationTestScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.NotificationCenter.route) {
+            NotificationCenterScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToNotification = { notificationId ->
+                    // Handle notification detail navigation if needed
+                }
+            )
+        }
+        
+        composable(Screen.NotificationPreferences.route) {
+            NotificationPreferencesScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.Notifications.route) {
+            NotificationScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }

@@ -2,6 +2,9 @@
 
 A comprehensive Android application for managing academic performance, built with Kotlin, Jetpack Compose, and Firebase.
 
+**Author**: Sentillas  
+**Last Updated**: October 22, 2025
+
 ## 🎯 Project Overview
 
 The Smart Academic Performance Tracker is a modern educational management system designed to streamline academic operations for students, teachers, and administrators. The app provides a complete solution for grade management, academic period tracking, and institutional administration.

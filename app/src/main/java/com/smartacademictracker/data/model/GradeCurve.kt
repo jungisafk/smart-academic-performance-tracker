@@ -11,7 +11,8 @@ data class GradeCurve(
     val maxGrade: Double = 100.0,
     val minGrade: Double = 0.0,
     val appliedDate: Long = System.currentTimeMillis(),
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val academicPeriodId: String = "" // Reference to active academic period
 )
 
 enum class CurveType(val displayName: String, val description: String) {

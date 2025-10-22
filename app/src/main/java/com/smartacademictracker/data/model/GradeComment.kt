@@ -15,6 +15,7 @@ data class GradeComment(
     val comment: String = "",
     val commentType: CommentType = CommentType.FEEDBACK,
     val isPrivate: Boolean = false,
+    val academicPeriodId: String = "", // Reference to active academic period
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

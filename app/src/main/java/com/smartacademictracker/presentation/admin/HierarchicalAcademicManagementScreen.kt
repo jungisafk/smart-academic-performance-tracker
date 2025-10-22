@@ -15,6 +15,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Course
 import com.smartacademictracker.data.model.YearLevel
 import com.smartacademictracker.data.model.Subject
+import com.smartacademictracker.presentation.common.NoActiveAcademicPeriodCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +27,7 @@ fun HierarchicalAcademicManagementScreen(
     onNavigateToEditCourse: (String) -> Unit = {},
     onNavigateToEditYearLevel: (String) -> Unit = {},
     onNavigateToEditSubject: (String) -> Unit = {},
+    onNavigateToAcademicPeriods: () -> Unit = {},
     viewModel: HierarchicalAcademicManagementViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -106,8 +108,13 @@ fun HierarchicalAcademicManagementScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Hierarchical Structure
-        if (courses.isEmpty()) {
+        // Check for error state (no active academic period)
+        val error = uiState.error
+        if (error != null && error.contains("No active academic period")) {
+            NoActiveAcademicPeriodCard(
+                onCreateAcademicPeriod = onNavigateToAcademicPeriods
+            )
+        } else if (courses.isEmpty()) {
             EmptyCoursesState()
         } else {
             LazyColumn(
@@ -442,44 +449,117 @@ fun YearLevelHierarchyCard(
 fun SubjectHierarchyCard(
     subject: Subject,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onViewSections: () -> Unit = {}
 ) {
+    var showSections by remember { mutableStateOf(false) }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = subject.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "Code: ${subject.code} | Credits: ${subject.credits}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                subject.semester?.let { semester ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Semester: $semester",
+                        text = subject.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Code: ${subject.code} | Credits: ${subject.credits}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    subject.semester?.let { semester ->
+                        Text(
+                            text = "Semester: $semester",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (subject.sections.isNotEmpty()) {
+                        Text(
+                            text = "Sections: ${subject.sections.size} (${subject.sections.joinToString(", ")})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                Row {
+                    if (subject.sections.isNotEmpty()) {
+                        IconButton(onClick = { showSections = !showSections }) {
+                            Icon(
+                                if (showSections) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (showSections) "Hide Sections" else "Show Sections",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Subject", modifier = Modifier.size(14.dp))
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete Subject", modifier = Modifier.size(14.dp))
+                    }
                 }
             }
-            Row {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Subject", modifier = Modifier.size(14.dp))
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Subject", modifier = Modifier.size(14.dp))
+            
+            // Expandable Sections Section
+            if (showSections && subject.sections.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Subject Sections",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            subject.sections.forEach { section ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = section,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        shape = MaterialTheme.shapes.small
+                                    ) {
+                                        Text(
+                                            text = "Active",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

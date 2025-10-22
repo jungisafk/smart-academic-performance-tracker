@@ -119,7 +119,10 @@ fun AddAcademicPeriodScreen(
             ) {
                 Checkbox(
                     checked = uiState.isActive,
-                    onCheckedChange = viewModel::setAsActive
+                    onCheckedChange = { isChecked ->
+                        println("DEBUG: AddAcademicPeriodScreen - Checkbox changed to: $isChecked")
+                        viewModel.setAsActive(isChecked)
+                    }
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(

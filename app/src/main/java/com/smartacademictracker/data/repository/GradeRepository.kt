@@ -9,6 +9,7 @@ import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.utils.GradeCalculationEngine
 import com.smartacademictracker.data.validation.GradeValidationService
 import com.smartacademictracker.data.audit.SecurityAuditLogger
+import com.smartacademictracker.data.service.AcademicPeriodFilterService
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,7 +19,8 @@ class GradeRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auditTrailRepository: AuditTrailRepository,
     private val gradeValidationService: GradeValidationService,
-    private val securityAuditLogger: SecurityAuditLogger
+    private val securityAuditLogger: SecurityAuditLogger,
+    private val academicPeriodFilterService: AcademicPeriodFilterService
 ) {
     private val gradesCollection = firestore.collection("grades")
     private val gradeAggregatesCollection = firestore.collection("grade_aggregates")
@@ -29,15 +31,24 @@ class GradeRepository @Inject constructor(
     
     suspend fun createGrade(grade: Grade, userId: String, userRole: String): Result<Grade> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.failure(Exception("No active academic period found. Please set an active academic period first."))
+            }
+            
+            // Add academic period reference to the grade
+            val gradeWithPeriod = grade.copy(academicPeriodId = academicContext.periodId)
+            
             // Validate grade before creation
-            val validationResult = gradeValidationService.validateGrade(grade)
+            val validationResult = gradeValidationService.validateGrade(gradeWithPeriod)
             if (!validationResult.isValid) {
                 return Result.failure(Exception("Grade validation failed: ${validationResult.errors.joinToString(", ")}"))
             }
             
-            val gradeWithCalculatedValues = grade.copy(
-                percentage = grade.calculatePercentage(),
-                letterGrade = grade.calculateLetterGrade()
+            val gradeWithCalculatedValues = gradeWithPeriod.copy(
+                percentage = gradeWithPeriod.calculatePercentage(),
+                letterGrade = gradeWithPeriod.calculateLetterGrade()
             )
             val docRef = gradesCollection.add(gradeWithCalculatedValues).await()
             val createdGrade = gradeWithCalculatedValues.copy(id = docRef.id)
@@ -159,8 +170,15 @@ class GradeRepository @Inject constructor(
 
     suspend fun getGradesByStudent(studentId: String): Result<List<Grade>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
             val snapshot = gradesCollection
                 .whereEqualTo("studentId", studentId)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
                 .get()
                 .await()
             val grades = snapshot.toObjects(Grade::class.java)
@@ -174,7 +192,14 @@ class GradeRepository @Inject constructor(
 
     suspend fun getAllGrades(): Result<List<Grade>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
             val snapshot = gradesCollection
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
                 .orderBy("dateRecorded", Query.Direction.DESCENDING)
                 .get()
                 .await()
@@ -317,8 +342,15 @@ class GradeRepository @Inject constructor(
     
     suspend fun getStudentGradeAggregatesByStudent(studentId: String): Result<List<StudentGradeAggregate>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
             val snapshot = gradeAggregatesCollection
                 .whereEqualTo("studentId", studentId)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
                 .get()
                 .await()
             val aggregates = snapshot.toObjects(StudentGradeAggregate::class.java)
