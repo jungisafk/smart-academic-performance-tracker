@@ -1,14 +1,19 @@
 package com.smartacademictracker.presentation.admin
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -53,98 +58,181 @@ fun HierarchicalAcademicManagementScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color(0xFFF8F9FA))
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                text = "Academic Structure",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { 
-                viewModel.refreshData()
-                println("DEBUG: Manual refresh triggered")
-            }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-            }
-            IconButton(onClick = { 
-                println("DEBUG: Migration button clicked")
-                viewModel.runMigration()
-            }) {
-                Icon(Icons.Default.Settings, contentDescription = "Migrate Database")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Add Course Button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Academic Structure",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Button(onClick = onNavigateToAddCourse) {
-                Icon(Icons.Default.Add, contentDescription = "Add Course")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Course")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Check for error state (no active academic period)
-        val error = uiState.error
-        if (error != null && error.contains("No active academic period")) {
-            NoActiveAcademicPeriodCard(
-                onCreateAcademicPeriod = onNavigateToAcademicPeriods
-            )
-        } else if (courses.isEmpty()) {
-            EmptyCoursesState()
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            // Enhanced Header Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
             ) {
-                items(courses) { course ->
-                    val filteredYearLevels = yearLevels.filter { it.courseId == course.id }
-                    println("DEBUG: Course ${course.name} (${course.id}) has ${filteredYearLevels.size} year levels")
-                    filteredYearLevels.forEach { yearLevel ->
-                        println("DEBUG: Year Level for ${course.name}: ${yearLevel.name} (${yearLevel.id})")
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(16.dp))
+                        
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Academic Structure",
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Manage courses, year levels, and subjects",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                        
+                        // Action Buttons
+                        IconButton(
+                            onClick = { 
+                                viewModel.refreshData()
+                                println("DEBUG: Manual refresh triggered")
+                            },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh, 
+                                contentDescription = "Refresh",
+                                tint = Color.White
+                            )
+                        }
                     }
-                    CourseHierarchyCard(
-                        course = course,
-                        yearLevels = filteredYearLevels,
-                        subjects = subjects,
-                        onEditCourse = { onNavigateToEditCourse(course.id) },
-                        onDeleteCourse = { viewModel.deleteCourse(course.id) },
-                        onAddYearLevel = { 
-                            println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add year level for course: '${course.id}'")
-                            onNavigateToAddYearLevel(course.id) 
-                        },
-                        onEditYearLevel = onNavigateToEditYearLevel,
-                        onDeleteYearLevel = { viewModel.deleteYearLevel(it) },
-                        onAddSubject = { yearLevelId -> 
-                            println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add subject for course: '${course.id}', yearLevel: '$yearLevelId'")
-                            onNavigateToAddSubject(course.id, yearLevelId) 
-                        },
-                        onEditSubject = onNavigateToEditSubject,
-                        onDeleteSubject = { viewModel.deleteSubject(it) }
+                }
+            }
+            
+            // Content Section
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                // Add Course Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Academic Structure",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF333333)
+                            )
+                            Text(
+                                text = "Organize your academic programs and subjects",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF666666),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        
+                        Button(
+                            onClick = onNavigateToAddCourse,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add, 
+                                contentDescription = "Add Course",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Add Course",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Check for error state (no active academic period)
+                val error = uiState.error
+                if (error != null && error.contains("No active academic period")) {
+                    NoActiveAcademicPeriodCard(
+                        onCreateAcademicPeriod = onNavigateToAcademicPeriods
                     )
+                } else if (courses.isEmpty()) {
+                    EnhancedEmptyCoursesState()
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(courses) { course ->
+                            val filteredYearLevels = yearLevels.filter { it.courseId == course.id }
+                            println("DEBUG: Course ${course.name} (${course.id}) has ${filteredYearLevels.size} year levels")
+                            filteredYearLevels.forEach { yearLevel ->
+                                println("DEBUG: Year Level for ${course.name}: ${yearLevel.name} (${yearLevel.id})")
+                            }
+                            EnhancedCourseHierarchyCard(
+                                course = course,
+                                yearLevels = filteredYearLevels,
+                                subjects = subjects,
+                                onEditCourse = { onNavigateToEditCourse(course.id) },
+                                onDeleteCourse = { viewModel.deleteCourse(course.id) },
+                                onAddYearLevel = { 
+                                    println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add year level for course: '${course.id}'")
+                                    onNavigateToAddYearLevel(course.id) 
+                                },
+                                onEditYearLevel = onNavigateToEditYearLevel,
+                                onDeleteYearLevel = { viewModel.deleteYearLevel(it) },
+                                onAddSubject = { yearLevelId -> 
+                                    println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add subject for course: '${course.id}', yearLevel: '$yearLevelId'")
+                                    onNavigateToAddSubject(course.id, yearLevelId) 
+                                },
+                                onEditSubject = onNavigateToEditSubject,
+                                onDeleteSubject = { viewModel.deleteSubject(it) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -152,40 +240,77 @@ fun HierarchicalAcademicManagementScreen(
 }
 
 @Composable
-fun EmptyCoursesState() {
+fun EnhancedEmptyCoursesState() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                Icons.Default.School,
-                contentDescription = "No Courses",
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            // Icon with background
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF4CAF50).copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.School,
+                    contentDescription = "No Courses",
+                    modifier = Modifier.size(40.dp),
+                    tint = Color(0xFF4CAF50)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
+            
             Text(
                 text = "No courses found",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF333333)
             )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Text(
                 text = "Add your first course to start building the academic structure",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFF666666),
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Quick action button
+            OutlinedButton(
+                onClick = { /* Add course action */ },
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xFF4CAF50)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Add Course",
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Course")
+            }
         }
     }
 }
 
 @Composable
-fun CourseHierarchyCard(
+fun EnhancedCourseHierarchyCard(
     course: Course,
     yearLevels: List<YearLevel>,
     subjects: List<Subject>,
@@ -202,14 +327,16 @@ fun CourseHierarchyCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(20.dp)
         ) {
-            // Course Header
+            // Enhanced Course Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -219,36 +346,102 @@ fun CourseHierarchyCard(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { expanded = !expanded }) {
+                    // Course Icon
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2196F3).copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (expanded) "Collapse" else "Expand"
+                            Icons.Default.School,
+                            contentDescription = "Course",
+                            modifier = Modifier.size(24.dp),
+                            tint = Color(0xFF2196F3)
                         )
                     }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
                     Column {
                         Text(
                             text = course.name,
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333)
                         )
                         Text(
                             text = "Code: ${course.code}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color(0xFF666666)
                         )
-                        Text(
-                            text = "${yearLevels.size} year level(s)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Class,
+                                contentDescription = "Year Levels",
+                                modifier = Modifier.size(16.dp),
+                                tint = Color(0xFF4CAF50)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${yearLevels.size} year level(s)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
+                
+                // Action Buttons
                 Row {
-                    IconButton(onClick = onEditCourse) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Course")
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF5F5F5))
+                    ) {
+                        Icon(
+                            if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "Collapse" else "Expand",
+                            tint = Color(0xFF666666)
+                        )
                     }
-                    IconButton(onClick = onDeleteCourse) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete Course")
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    IconButton(
+                        onClick = onEditCourse,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE3F2FD))
+                    ) {
+                        Icon(
+                            Icons.Default.Edit, 
+                            contentDescription = "Edit Course",
+                            tint = Color(0xFF2196F3)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    IconButton(
+                        onClick = onDeleteCourse,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFFEBEE))
+                    ) {
+                        Icon(
+                            Icons.Default.Delete, 
+                            contentDescription = "Delete Course",
+                            tint = Color(0xFFF44336)
+                        )
                     }
                 }
             }
