@@ -30,10 +30,32 @@ class AddAcademicPeriodViewModel @Inject constructor(
     }
 
     fun setAcademicYear(academicYear: String) {
+        // Only allow numbers and hyphen, and limit to academic year format
+        val filteredInput = academicYear.filter { it.isDigit() || it == '-' }
+        
+        // Limit length to prevent invalid formats (e.g., "2024-2025" = 9 characters)
+        val limitedInput = if (filteredInput.length > 9) {
+            filteredInput.take(9)
+        } else {
+            filteredInput
+        }
+        
+        val error = when {
+            limitedInput.isBlank() -> "Academic year is required"
+            !isValidAcademicYearFormat(limitedInput) -> "Academic year must be in format YYYY-YYYY (e.g., 2024-2025)"
+            else -> null
+        }
+        
         _uiState.value = _uiState.value.copy(
-            academicYear = academicYear,
-            academicYearError = if (academicYear.isBlank()) "Academic year is required" else null
+            academicYear = limitedInput,
+            academicYearError = error
         )
+    }
+    
+    private fun isValidAcademicYearFormat(academicYear: String): Boolean {
+        // Check if format matches YYYY-YYYY
+        val pattern = Regex("^\\d{4}-\\d{4}$")
+        return pattern.matches(academicYear)
     }
 
     fun setSemester(semester: Semester) {
@@ -125,6 +147,7 @@ class AddAcademicPeriodViewModel @Inject constructor(
         return when {
             state.periodName.isBlank() -> "Period name is required"
             state.academicYear.isBlank() -> "Academic year is required"
+            !isValidAcademicYearFormat(state.academicYear) -> "Academic year must be in format YYYY-YYYY (e.g., 2024-2025)"
             state.startDate <= 0 -> "Start date is required"
             state.endDate <= 0 -> "End date is required"
             state.startDate >= state.endDate -> "End date must be after start date"
