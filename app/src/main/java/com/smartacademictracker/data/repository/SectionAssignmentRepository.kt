@@ -71,6 +71,21 @@ class SectionAssignmentRepository @Inject constructor(
         }
     }
 
+    suspend fun getSectionAssignmentsBySubjectAndCourse(subjectId: String, courseId: String): Result<List<SectionAssignment>> {
+        return try {
+            val snapshot = sectionAssignmentsCollection
+                .whereEqualTo("subjectId", subjectId)
+                .whereEqualTo("courseId", courseId)
+                .whereEqualTo("status", AssignmentStatus.ACTIVE.name)
+                .get()
+                .await()
+            val assignments = snapshot.toObjects(SectionAssignment::class.java)
+            Result.success(assignments)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getSectionAssignmentsByTeacher(teacherId: String): Result<List<SectionAssignment>> {
         return try {
             val snapshot = sectionAssignmentsCollection

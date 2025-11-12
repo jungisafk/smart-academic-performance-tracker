@@ -6,10 +6,12 @@ import com.smartacademictracker.data.model.Subject
 import com.smartacademictracker.data.model.SectionAssignment
 import com.smartacademictracker.data.model.TeacherApplication
 import com.smartacademictracker.data.model.ApplicationStatus
+import com.smartacademictracker.data.model.YearLevel
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.repository.TeacherApplicationRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.repository.YearLevelRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +26,8 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val sectionAssignmentRepository: SectionAssignmentRepository,
     private val teacherApplicationRepository: TeacherApplicationRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val yearLevelRepository: YearLevelRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherSectionAssignmentUiState())
@@ -38,6 +41,9 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
 
     private val _teacherApplications = MutableStateFlow<List<TeacherApplication>>(emptyList())
     val teacherApplications: StateFlow<List<TeacherApplication>> = _teacherApplications.asStateFlow()
+    
+    private val _yearLevels = MutableStateFlow<List<YearLevel>>(emptyList())
+    val yearLevels: StateFlow<List<YearLevel>> = _yearLevels.asStateFlow()
 
     fun loadData() {
         viewModelScope.launch {
@@ -49,11 +55,13 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                     val subjectsDeferred = async { subjectRepository.getAllSubjects() }
                     val assignmentsDeferred = async { sectionAssignmentRepository.getAllSectionAssignments() }
                     val applicationsDeferred = async { teacherApplicationRepository.getAllApplications() }
+                    val yearLevelsDeferred = async { yearLevelRepository.getAllYearLevels() }
                     
                     // Wait for all operations to complete
                     val subjectsResult = subjectsDeferred.await()
                     val assignmentsResult = assignmentsDeferred.await()
                     val applicationsResult = applicationsDeferred.await()
+                    val yearLevelsResult = yearLevelsDeferred.await()
                     
                     // Process results
                     subjectsResult.onSuccess { subjectsList ->
@@ -75,6 +83,13 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                         println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${applicationsList.size} teacher applications")
                     }.onFailure { exception ->
                         println("DEBUG: TeacherSectionAssignmentViewModel - Error loading teacher applications: ${exception.message}")
+                    }
+
+                    yearLevelsResult.onSuccess { yearLevelsList ->
+                        _yearLevels.value = yearLevelsList
+                        println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${yearLevelsList.size} year levels")
+                    }.onFailure { exception ->
+                        println("DEBUG: TeacherSectionAssignmentViewModel - Error loading year levels: ${exception.message}")
                     }
 
                     _uiState.value = _uiState.value.copy(isLoading = false)
@@ -120,9 +135,14 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                 // Get teacher information
                 val teacherResult = userRepository.getUserById(teacherId)
                 teacherResult.onSuccess { teacher ->
+                    // Get subject to get courseId
+                    val subject = _subjects.value.find { it.id == subjectId }
+                    val courseId = subject?.courseId ?: ""
+                    
                     // Create section assignment
                     val assignment = SectionAssignment(
                         subjectId = subjectId,
+                        courseId = courseId,
                         sectionName = sectionName,
                         teacherId = teacherId,
                         teacherName = "${teacher.firstName} ${teacher.lastName}",

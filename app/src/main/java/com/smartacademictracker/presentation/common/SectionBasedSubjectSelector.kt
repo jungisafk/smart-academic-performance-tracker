@@ -313,22 +313,14 @@ private fun SubjectWithSectionsCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 // Filter sections to only show those with assigned teachers
-                // First check sectionAssignments, then fallback to subject.teacherId
-                val sectionsWithTeachers = if (sectionAssignments.isNotEmpty()) {
-                    // Use section assignments if available
-                    subject.sections.filter { sectionName ->
-                        sectionAssignments.any { assignment ->
-                            assignment.subjectId == subject.id && 
-                            assignment.sectionName == sectionName &&
-                            assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
-                        }
+                // Only show sections that have active section assignments with teachers
+                val sectionsWithTeachers = subject.sections.filter { sectionName ->
+                    sectionAssignments.any { assignment ->
+                        assignment.subjectId == subject.id && 
+                        assignment.sectionName == sectionName &&
+                        assignment.teacherId.isNotEmpty() &&
+                        assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
                     }
-                } else if (subject.teacherId != null && subject.teacherId.isNotEmpty()) {
-                    // Fallback: If subject has a teacher assigned, show all sections
-                    subject.sections
-                } else {
-                    // No teacher assigned
-                    emptyList()
                 }
                 
                 if (sectionsWithTeachers.isEmpty()) {

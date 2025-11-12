@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.AcademicPeriod
 import com.smartacademictracker.data.model.AcademicPeriodOverview
 import com.smartacademictracker.data.repository.AcademicPeriodRepository
+import com.smartacademictracker.data.service.AcademicPeriodFilterService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +15,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AdminAcademicPeriodViewModel @Inject constructor(
-    private val academicPeriodRepository: AcademicPeriodRepository
+    private val academicPeriodRepository: AcademicPeriodRepository,
+    private val academicPeriodFilterService: AcademicPeriodFilterService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminAcademicPeriodUiState())
@@ -86,11 +88,14 @@ class AdminAcademicPeriodViewModel @Inject constructor(
             
             try {
                 academicPeriodRepository.setActivePeriod(periodId).onSuccess {
+                    // Refresh the academic period filter service to update all subject queries
+                    academicPeriodFilterService.refreshActiveAcademicPeriod()
+                    
                     // Reload data after setting active period
                     loadAcademicPeriods()
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        successMessage = "Academic period activated successfully"
+                        successMessage = "Academic period activated successfully. Subjects will now show for this semester."
                     )
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(

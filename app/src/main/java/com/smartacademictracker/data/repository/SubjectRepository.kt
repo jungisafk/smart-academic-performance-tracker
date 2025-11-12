@@ -76,9 +76,13 @@ class SubjectRepository @Inject constructor(
                 return Result.success(emptyList())
             }
             
+            // Convert semester string to Semester enum for filtering
+            val currentSemester = convertStringToSemester(academicContext.semester)
+            
             val snapshot = subjectsCollection
                 .whereEqualTo("active", true)
                 .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .whereEqualTo("semester", currentSemester)
                 .get()
                 .await()
             
@@ -106,6 +110,7 @@ class SubjectRepository @Inject constructor(
                 )
             }
             
+            println("DEBUG: SubjectRepository - Loaded ${subjectsWithComputedFields.size} subjects for ${academicContext.academicYear} ${academicContext.semester}")
             
             Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
@@ -147,6 +152,49 @@ class SubjectRepository @Inject constructor(
         }
     }
     
+    /**
+     * Add subject for a specific academic period (allows admins to create subjects for any period, not just active)
+     */
+    suspend fun addSubjectForPeriod(
+        name: String,
+        code: String,
+        description: String,
+        credits: Int,
+        semester: String,
+        academicYear: String,
+        courseId: String,
+        yearLevelId: String,
+        numberOfSections: Int = 1,
+        subjectType: com.smartacademictracker.data.model.SubjectType = com.smartacademictracker.data.model.SubjectType.MAJOR,
+        academicPeriodId: String
+    ): Result<Subject> {
+        return try {
+            val sections = generateSections(code, numberOfSections)
+            val subject = Subject(
+                name = name,
+                code = code,
+                description = description,
+                credits = credits,
+                semester = convertStringToSemester(semester),
+                academicYear = academicYear,
+                courseId = courseId,
+                yearLevelId = yearLevelId,
+                numberOfSections = numberOfSections,
+                sections = sections,
+                subjectType = subjectType,
+                academicPeriodId = academicPeriodId
+            )
+            
+            // Add subject directly with the specified academic period ID
+            val docRef = subjectsCollection.add(subject).await()
+            val createdSubject = subject.copy(id = docRef.id)
+            subjectsCollection.document(docRef.id).set(createdSubject).await()
+            Result.success(createdSubject)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
     private fun generateSections(subjectCode: String, numberOfSections: Int): List<String> {
         val sections = mutableListOf<String>()
         for (i in 0 until numberOfSections) {
@@ -167,9 +215,20 @@ class SubjectRepository @Inject constructor(
 
     suspend fun getSubjectsByTeacher(teacherId: String): Result<List<Subject>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
+            // Convert semester string to Semester enum for filtering
+            val currentSemester = convertStringToSemester(academicContext.semester)
+            
             val snapshot = subjectsCollection
                 .whereEqualTo("teacherId", teacherId)
                 .whereEqualTo("active", true)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .whereEqualTo("semester", currentSemester)
                 .get()
                 .await()
             val subjects = snapshot.toObjects(Subject::class.java)
@@ -182,7 +241,6 @@ class SubjectRepository @Inject constructor(
                     courseCode = getCourseCode(subject.courseId)
                 )
             }
-            
             
             Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
@@ -226,13 +284,34 @@ class SubjectRepository @Inject constructor(
 
     suspend fun getAvailableSubjects(): Result<List<Subject>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
+            // Convert semester string to Semester enum for filtering
+            val currentSemester = convertStringToSemester(academicContext.semester)
+            
             val snapshot = subjectsCollection
                 .whereEqualTo("teacherId", null)
                 .whereEqualTo("active", true)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .whereEqualTo("semester", currentSemester)
                 .get()
                 .await()
             val subjects = snapshot.toObjects(Subject::class.java)
-            Result.success(subjects)
+            
+            // Populate computed fields (yearLevelName, courseName, courseCode)
+            val subjectsWithComputedFields = subjects.map { subject ->
+                subject.copy(
+                    yearLevelName = getYearLevelName(subject.yearLevelId),
+                    courseName = getCourseName(subject.courseId),
+                    courseCode = getCourseCode(subject.courseId)
+                )
+            }
+            
+            Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -240,13 +319,34 @@ class SubjectRepository @Inject constructor(
 
     suspend fun getAvailableSubjectsForTeacher(teacherId: String): Result<List<Subject>> {
         return try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                return Result.success(emptyList())
+            }
+            
+            // Convert semester string to Semester enum for filtering
+            val currentSemester = convertStringToSemester(academicContext.semester)
+            
             val snapshot = subjectsCollection
                 .whereEqualTo("teacherId", null)
                 .whereEqualTo("active", true)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .whereEqualTo("semester", currentSemester)
                 .get()
                 .await()
             val subjects = snapshot.toObjects(Subject::class.java)
-            Result.success(subjects)
+            
+            // Populate computed fields (yearLevelName, courseName, courseCode)
+            val subjectsWithComputedFields = subjects.map { subject ->
+                subject.copy(
+                    yearLevelName = getYearLevelName(subject.yearLevelId),
+                    courseName = getCourseName(subject.courseId),
+                    courseCode = getCourseCode(subject.courseId)
+                )
+            }
+            
+            Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
             Result.failure(e)
         }

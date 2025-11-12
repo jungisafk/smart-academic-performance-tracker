@@ -6,6 +6,7 @@ data class SectionAssignment(
     @DocumentId
     val id: String = "",
     val subjectId: String = "", // Reference to Subject document ID
+    val courseId: String = "", // Reference to Course document ID (for security rules)
     val sectionName: String = "", // e.g., "IT101A", "IT101B"
     val teacherId: String = "", // Reference to User document ID (teacher)
     val teacherName: String = "", // Teacher's name for display

@@ -143,10 +143,12 @@ class TeacherSubjectsViewModel @Inject constructor(
                                 val canApply = when (subject.subjectType) {
                                     com.smartacademictracker.data.model.SubjectType.MAJOR -> {
                                         // MAJOR subjects: only teachers of the same course/department can apply
-                                        user.departmentCourseId != null && subject.courseId == user.departmentCourseId
+                                        user.departmentCourseId != null && 
+                                        user.departmentCourseId.isNotBlank() && 
+                                        subject.courseId == user.departmentCourseId
                                     }
                                     com.smartacademictracker.data.model.SubjectType.MINOR -> {
-                                        // MINOR subjects: any teacher can apply
+                                        // MINOR subjects: any teacher can apply (cross-departmental)
                                         true
                                     }
                                 }
@@ -417,6 +419,12 @@ class TeacherSubjectsViewModel @Inject constructor(
     private suspend fun filterAvailableSubjects(teacherId: String, teacherDepartmentCourseId: String?, subjects: List<Subject>) {
         try {
             Log.d("TeacherSubjects", "Filtering ${subjects.size} subjects for teacher $teacherId (Department: $teacherDepartmentCourseId)")
+            
+            // Warn if teacher doesn't have a department set
+            if (teacherDepartmentCourseId == null || teacherDepartmentCourseId.isBlank()) {
+                Log.w("TeacherSubjects", "WARNING: Teacher $teacherId does not have departmentCourseId set! They will only see MINOR subjects.")
+            }
+            
             subjects.forEach { subject ->
                 Log.d("TeacherSubjects", "Available Subject - ID: ${subject.id}, Name: ${subject.name}, Code: ${subject.code}, CourseId: ${subject.courseId}, Type: ${subject.subjectType}, TeacherId: ${subject.teacherId}")
             }
@@ -449,15 +457,21 @@ class TeacherSubjectsViewModel @Inject constructor(
                         val isVisible = when (subject.subjectType) {
                             com.smartacademictracker.data.model.SubjectType.MAJOR -> {
                                 // MAJOR subjects: only visible to teachers of the same course/department
-                                teacherDepartmentCourseId != null && subject.courseId == teacherDepartmentCourseId
+                                val canSee = teacherDepartmentCourseId != null && 
+                                           teacherDepartmentCourseId.isNotBlank() && 
+                                           subject.courseId == teacherDepartmentCourseId
+                                if (!canSee && teacherDepartmentCourseId != null && teacherDepartmentCourseId.isNotBlank()) {
+                                    Log.d("TeacherSubjects", "Subject ${subject.name} - MAJOR subject from different department (Teacher: $teacherDepartmentCourseId, Subject: ${subject.courseId})")
+                                }
+                                canSee
                             }
                             com.smartacademictracker.data.model.SubjectType.MINOR -> {
-                                // MINOR subjects: visible to all teachers
+                                // MINOR subjects: visible to all teachers (cross-departmental)
                                 true
                             }
                         }
                         
-                        Log.d("TeacherSubjects", "Subject ${subject.name} - Type: ${subject.subjectType}, IsVisible: $isVisible")
+                        Log.d("TeacherSubjects", "Subject ${subject.name} - Type: ${subject.subjectType}, CourseId: ${subject.courseId}, TeacherDept: $teacherDepartmentCourseId, IsVisible: $isVisible")
                         
                         if (isVisible) {
                             // Check if this subject has any available sections
@@ -490,12 +504,18 @@ class TeacherSubjectsViewModel @Inject constructor(
                 Log.d("TeacherSubjects", "Failed to load applications: ${exception.message}")
                 // If we can't load applications, filter by department/type rules only
                 val availableSubjects = subjects.filter { subject ->
-                    when (subject.subjectType) {
+                    val isVisible = when (subject.subjectType) {
                         com.smartacademictracker.data.model.SubjectType.MAJOR -> {
-                            teacherDepartmentCourseId != null && subject.courseId == teacherDepartmentCourseId
+                            teacherDepartmentCourseId != null && 
+                            teacherDepartmentCourseId.isNotBlank() && 
+                            subject.courseId == teacherDepartmentCourseId
                         }
-                        com.smartacademictracker.data.model.SubjectType.MINOR -> true
-                    } && subject.teacherId == null
+                        com.smartacademictracker.data.model.SubjectType.MINOR -> {
+                            // MINOR subjects: visible to all teachers (cross-departmental)
+                            true
+                        }
+                    }
+                    isVisible && subject.teacherId == null
                 }
                 _availableSubjects.value = availableSubjects
                 Log.d("TeacherSubjects", "Fallback: showing ${availableSubjects.size} unassigned subjects")
@@ -504,12 +524,20 @@ class TeacherSubjectsViewModel @Inject constructor(
             Log.d("TeacherSubjects", "Exception filtering subjects: ${e.message}")
             // If there's an exception, filter by department/type rules only
             val availableSubjects = subjects.filter { subject ->
-                when (subject.subjectType) {
+                val isVisible = when (subject.subjectType) {
                     com.smartacademictracker.data.model.SubjectType.MAJOR -> {
-                        teacherDepartmentCourseId != null && subject.courseId == teacherDepartmentCourseId
+                        teacherDepartmentCourseId != null && 
+                        teacherDepartmentCourseId.isNotBlank() && 
+                        subject.courseId == teacherDepartmentCourseId
                     }
-                    com.smartacademictracker.data.model.SubjectType.MINOR -> true
-                } && subject.teacherId == null
+                    com.smartacademictracker.data.model.SubjectType.MINOR -> {
+                        // MINOR subjects: also restricted to teacher's department
+                        teacherDepartmentCourseId != null && 
+                        teacherDepartmentCourseId.isNotBlank() && 
+                        subject.courseId == teacherDepartmentCourseId
+                    }
+                }
+                isVisible && subject.teacherId == null
             }
             _availableSubjects.value = availableSubjects
             Log.d("TeacherSubjects", "Exception fallback: showing ${availableSubjects.size} unassigned subjects")

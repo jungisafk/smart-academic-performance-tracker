@@ -409,6 +409,12 @@ fun SmartAcademicTrackerNavigation(
                     println("DEBUG: SmartAcademicTrackerNavigation - Navigating to AddSubject with route: '$route'")
                     navController.navigate(route)
                 },
+                onNavigateToAddMinorSubject = { yearLevelId ->
+                    // For MINOR subjects, pass empty courseId
+                    val route = Screen.AddSubject.createRoute("", yearLevelId)
+                    println("DEBUG: SmartAcademicTrackerNavigation - Navigating to AddMinorSubject with route: '$route'")
+                    navController.navigate(route)
+                },
                 onNavigateToEditCourse = { courseId ->
                     // TODO: Implement edit course navigation
                 },

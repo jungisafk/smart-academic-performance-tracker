@@ -30,6 +30,7 @@ fun HierarchicalAcademicManagementScreen(
     onNavigateToAddCourse: () -> Unit,
     onNavigateToAddYearLevel: (String) -> Unit, // courseId parameter
     onNavigateToAddSubject: (String, String) -> Unit, // courseId, yearLevelId parameters
+    onNavigateToAddMinorSubject: (String) -> Unit, // yearLevelId parameter for MINOR subjects
     onNavigateToEditCourse: (String) -> Unit = {},
     onNavigateToEditYearLevel: (String) -> Unit = {},
     onNavigateToEditSubject: (String) -> Unit = {},
@@ -200,6 +201,7 @@ fun HierarchicalAcademicManagementScreen(
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            // Courses Section (MAJOR subjects)
                             items(courses) { course ->
                                 val filteredYearLevels = yearLevels.filter { it.courseId == course.id }
                                 println("DEBUG: Course ${course.name} (${course.id}) has ${filteredYearLevels.size} year levels")
@@ -209,7 +211,10 @@ fun HierarchicalAcademicManagementScreen(
                                 EnhancedCourseHierarchyCard(
                                     course = course,
                                     yearLevels = filteredYearLevels,
-                                    subjects = subjects,
+                                    // Only show MAJOR subjects in courses (filter out MINOR subjects)
+                                    subjects = subjects.filter { 
+                                        it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR 
+                                    },
                                     onEditCourse = { onNavigateToEditCourse(course.id) },
                                     onDeleteCourse = { viewModel.deleteCourse(course.id) },
                                     onAddYearLevel = { 
@@ -225,6 +230,80 @@ fun HierarchicalAcademicManagementScreen(
                                     onEditSubject = onNavigateToEditSubject,
                                     onDeleteSubject = { viewModel.deleteSubject(it) }
                                 )
+                            }
+                            
+                            // MINOR Subjects Section (separate from courses)
+                            item {
+                                val minorSubjects = subjects.filter { 
+                                    it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR 
+                                }
+                                
+                                if (minorSubjects.isNotEmpty() || yearLevels.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    // MINOR Subjects Header
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 4.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(4.dp)
+                                                .height(20.dp)
+                                                .background(Color(0xFFFF9800), RoundedCornerShape(2.dp))
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "Minor Subjects",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF333333)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "(Cross-departmental - All teachers can apply)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF666666)
+                                        )
+                                    }
+                                    
+                                    // Group MINOR subjects by year level NUMBER (not ID) for unified view
+                                    // This ensures we show one card per year level (Year 1, Year 2, etc.) regardless of course
+                                    val minorSubjectsByYearLevelNumber = minorSubjects.groupBy { subject ->
+                                        // Find the year level for this subject to get its level number
+                                        yearLevels.find { it.id == subject.yearLevelId }?.level ?: 0
+                                    }
+                                    
+                                    // Get unique year level numbers and create a unified view
+                                    val uniqueYearLevelNumbers = yearLevels.map { it.level }.distinct().sorted()
+                                    
+                                    // Create a map of level number to a representative year level (for display)
+                                    val yearLevelByNumber = yearLevels.associateBy { it.level }
+                                    
+                                    uniqueYearLevelNumbers.forEach { levelNumber ->
+                                        val representativeYearLevel = yearLevelByNumber[levelNumber]
+                                        if (representativeYearLevel != null) {
+                                            // Get all MINOR subjects for this year level number (across all courses)
+                                            val yearLevelMinorSubjects = minorSubjectsByYearLevelNumber[levelNumber] ?: emptyList()
+                                            
+                                            // Use the first year level ID with this level number for adding subjects
+                                            val firstYearLevelWithNumber = yearLevels.firstOrNull { it.level == levelNumber }
+                                            if (firstYearLevelWithNumber != null) {
+                                                MinorSubjectYearLevelCard(
+                                                    yearLevel = representativeYearLevel,
+                                                    subjects = yearLevelMinorSubjects,
+                                                    onAddSubject = { 
+                                                        onNavigateToAddMinorSubject(firstYearLevelWithNumber.id)
+                                                    },
+                                                    onEditSubject = onNavigateToEditSubject,
+                                                    onDeleteSubject = { viewModel.deleteSubject(it) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -546,7 +625,11 @@ fun EnhancedCourseHierarchyCard(
                     yearLevels.sortedBy { it.level }.forEach { yearLevel ->
                         YearLevelHierarchyCard(
                             yearLevel = yearLevel,
-                            subjects = subjects.filter { it.yearLevelId == yearLevel.id },
+                            // Only show MAJOR subjects in courses (filter out MINOR subjects)
+                            subjects = subjects.filter { 
+                                it.yearLevelId == yearLevel.id && 
+                                it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR 
+                            },
                             onEditYearLevel = { onEditYearLevel(yearLevel.id) },
                             onDeleteYearLevel = { onDeleteYearLevel(yearLevel.id) },
                             onAddSubject = { onAddSubject(yearLevel.id) },
@@ -666,6 +749,124 @@ fun YearLevelHierarchyCard(
                                 text = "Add subjects for this year level",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    // Subjects List
+                    subjects.sortedBy { it.name }.forEach { subject ->
+                        SubjectHierarchyCard(
+                            subject = subject,
+                            onEdit = { onEditSubject(subject.id) },
+                            onDelete = { onDeleteSubject(subject.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MinorSubjectYearLevelCard(
+    yearLevel: YearLevel,
+    subjects: List<Subject>,
+    onAddSubject: () -> Unit,
+    onEditSubject: (String) -> Unit,
+    onDeleteSubject: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // Year Level Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { expanded = !expanded }) {
+                        Icon(
+                            if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "Collapse" else "Expand",
+                            tint = Color(0xFFFF9800)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Year ${yearLevel.level}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333)
+                        )
+                        Text(
+                            text = "${subjects.size} minor subject(s)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666)
+                        )
+                    }
+                }
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Add Subject Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Minor Subjects",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                    Button(
+                        onClick = onAddSubject,
+                        modifier = Modifier.height(28.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Minor Subject", modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Minor Subject", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (subjects.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0).copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No minor subjects",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666)
+                            )
+                            Text(
+                                text = "Add cross-departmental subjects for this year level",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666)
                             )
                         }
                     }

@@ -65,8 +65,7 @@ class TeacherDashboardViewModel @Inject constructor(
                         
                         // Load subjects and enrollments in parallel
                         val subjectsResult = subjectRepository.getAllSubjects()
-                        // Prefer new student_enrollments for counts
-                        val enrollmentsResult = enrollmentRepository.getAllEnrollments()
+                        // Use new student_enrollments collection for counts
                         val studentEnrollmentsResult = studentEnrollmentRepository.getActiveEnrollmentsByTeacher(user.id)
                         
                         // Process subjects
@@ -105,17 +104,9 @@ class TeacherDashboardViewModel @Inject constructor(
                             _enrollments.value = legacyMapped
                             println("DEBUG: TeacherDashboardViewModel - Loaded ${legacyMapped.size} enrollments (student_enrollments)")
                         } else {
-                            // Fallback to legacy enrollments if new system fails
-                            enrollmentsResult.onSuccess { enrollmentsList ->
-                                _enrollments.value = enrollmentsList
-                                println("DEBUG: TeacherDashboardViewModel - Fallback to legacy enrollments: ${enrollmentsList.size}")
-                            }.onFailure { exception ->
-                                println("DEBUG: TeacherDashboardViewModel - Error loading enrollments: ${exception.message}")
-                                _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
-                                    error = exception.message ?: "Failed to load enrollments"
-                                )
-                            }
+                            // If student enrollments fail to load, set empty list
+                            _enrollments.value = emptyList()
+                            println("DEBUG: TeacherDashboardViewModel - Error loading enrollments (student_enrollments): ${studentEnrollmentsResult.exceptionOrNull()?.message}")
                         }
                         
                         // Set loading to false after both operations complete

@@ -31,13 +31,42 @@ fun AddSubjectScreen(
     var description by remember { mutableStateOf("") }
     var credits by remember { mutableStateOf("3") }
     var numberOfSections by remember { mutableStateOf("1") }
-    var subjectType by remember { mutableStateOf(com.smartacademictracker.data.model.SubjectType.MAJOR) }
+    
+    // Automatically set subject type based on courseId
+    // If courseId is provided: MAJOR (subject belongs to a course)
+    // If courseId is empty: MINOR (cross-departmental subject)
+    val isMinorSubject = courseId.isEmpty()
+    var subjectType by remember { 
+        mutableStateOf(
+            if (isMinorSubject) 
+                com.smartacademictracker.data.model.SubjectType.MINOR 
+            else 
+                com.smartacademictracker.data.model.SubjectType.MAJOR
+        )
+    }
     var expandedSubjectType by remember { mutableStateOf(false) }
+    
+    // Academic Period Selection
+    var selectedAcademicPeriodId by remember { mutableStateOf<String?>(null) }
+    var expandedAcademicPeriod by remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsState()
+    val academicPeriods by viewModel.academicPeriods.collectAsState()
+    
+    // Get active academic period ID for default selection
+    val activePeriodId = remember {
+        academicPeriods.firstOrNull { it.isActive }?.id
+    }
 
     LaunchedEffect(courseId, yearLevelId) {
         println("DEBUG: AddSubjectScreen - Received courseId: '$courseId', yearLevelId: '$yearLevelId'")
+        // Automatically set subject type based on courseId
+        subjectType = if (courseId.isEmpty()) {
+            com.smartacademictracker.data.model.SubjectType.MINOR
+        } else {
+            com.smartacademictracker.data.model.SubjectType.MAJOR
+        }
+        
         if (courseId.isNotEmpty()) {
             viewModel.setCourseId(courseId)
         }
@@ -167,52 +196,103 @@ fun AddSubjectScreen(
                     }
                 )
 
-                // Subject Type
+                // Subject Type (Auto-set, read-only)
+                OutlinedTextField(
+                    value = subjectType.displayName,
+                    onValueChange = { },
+                    readOnly = true,
+                    enabled = false,
+                    label = { Text("Subject Type *") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    supportingText = {
+                        Text(
+                            text = when (subjectType) {
+                                com.smartacademictracker.data.model.SubjectType.MAJOR -> 
+                                    "Automatically set to MAJOR (subject belongs to a course)"
+                                com.smartacademictracker.data.model.SubjectType.MINOR -> 
+                                    "Automatically set to MINOR (cross-departmental subject)"
+                            }
+                        )
+                    }
+                )
+
+                // Academic Period Selection
                 ExposedDropdownMenuBox(
-                    expanded = expandedSubjectType,
-                    onExpandedChange = { expandedSubjectType = !expandedSubjectType },
+                    expanded = expandedAcademicPeriod,
+                    onExpandedChange = { expandedAcademicPeriod = !expandedAcademicPeriod },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp)
                 ) {
+                    val selectedPeriod = academicPeriods.find { it.id == selectedAcademicPeriodId }
+                    val displayText = selectedPeriod?.let { 
+                        "${it.name} (${it.semester.displayName} - ${it.academicYear})${if (it.isActive) " [Active]" else ""}"
+                    } ?: activePeriodId?.let {
+                        val activePeriod = academicPeriods.find { it.id == activePeriodId }
+                        activePeriod?.let { "${it.name} (${it.semester.displayName} - ${it.academicYear}) [Active - Default]" } ?: "Use Active Period (Default)"
+                    } ?: "Select Academic Period (Required)"
+                    
                     OutlinedTextField(
-                        value = subjectType.displayName,
+                        value = displayText,
                         onValueChange = { },
                         readOnly = true,
-                        label = { Text("Subject Type *") },
+                        label = { Text("Academic Period *") },
                         trailingIcon = { Icon(Icons.Default.ExpandMore, contentDescription = null) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor(),
                         supportingText = {
                             Text(
-                                text = when (subjectType) {
-                                    com.smartacademictracker.data.model.SubjectType.MAJOR -> 
-                                        "Only teachers of this course can see and apply"
-                                    com.smartacademictracker.data.model.SubjectType.MINOR -> 
-                                        "All teachers can see and apply"
+                                text = if (selectedAcademicPeriodId == null) {
+                                    "Leave empty to use active period, or select a specific period to setup subjects in advance"
+                                } else {
+                                    "Subject will be created for the selected academic period"
                                 }
                             )
                         }
                     )
                     ExposedDropdownMenu(
-                        expanded = expandedSubjectType,
-                        onDismissRequest = { expandedSubjectType = false }
+                        expanded = expandedAcademicPeriod,
+                        onDismissRequest = { expandedAcademicPeriod = false }
                     ) {
-                        com.smartacademictracker.data.model.SubjectType.values().forEach { type ->
+                        // Option to use active period (default)
+                        DropdownMenuItem(
+                            text = { 
+                                Text(
+                                    text = activePeriodId?.let {
+                                        val activePeriod = academicPeriods.find { period -> period.id == activePeriodId }
+                                        activePeriod?.let { "${it.name} (${it.semester.displayName} - ${it.academicYear}) [Active - Default]" } ?: "Use Active Period (Default)"
+                                    } ?: "No Active Period Available",
+                                    fontWeight = if (selectedAcademicPeriodId == null) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                selectedAcademicPeriodId = null
+                                expandedAcademicPeriod = false
+                            }
+                        )
+                        
+                        Divider()
+                        
+                        // List all academic periods
+                        academicPeriods.forEach { period ->
                             DropdownMenuItem(
-                                text = { Text(type.displayName) },
+                                text = { 
+                                    Text(
+                                        text = "${period.name} (${period.semester.displayName} - ${period.academicYear})${if (period.isActive) " [Active]" else ""}",
+                                        fontWeight = if (selectedAcademicPeriodId == period.id) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
                                 onClick = {
-                                    subjectType = type
-                                    expandedSubjectType = false
+                                    selectedAcademicPeriodId = period.id
+                                    expandedAcademicPeriod = false
                                 }
                             )
                         }
                     }
                 }
-
-                // Current Academic Period Info
-                CurrentAcademicPeriodCard()
 
                 // Success Message
                 if (uiState.isSuccess) {
@@ -243,7 +323,8 @@ fun AddSubjectScreen(
                             description = description.trim(),
                             credits = credits.toIntOrNull() ?: 3,
                             numberOfSections = numberOfSections.toIntOrNull() ?: 1,
-                            subjectType = subjectType
+                            subjectType = subjectType,
+                            selectedAcademicPeriodId = selectedAcademicPeriodId
                         )
                     },
                     enabled = !uiState.isLoading && isFormValid && !uiState.isSuccess,

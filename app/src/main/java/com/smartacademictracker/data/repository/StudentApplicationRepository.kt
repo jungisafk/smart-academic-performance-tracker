@@ -161,7 +161,13 @@ class StudentApplicationRepository @Inject constructor(
                 .whereEqualTo("subjectId", subjectId)
                 .get()
                 .await()
-            Result.success(!snapshot.isEmpty)
+            // Only return true if there's a PENDING or APPROVED application
+            // WITHDRAWN and REJECTED applications should allow reapplication
+            val applications = snapshot.toObjects(StudentApplication::class.java)
+            val hasActiveApplication = applications.any { app ->
+                app.status == StudentApplicationStatus.PENDING || app.status == StudentApplicationStatus.APPROVED
+            }
+            Result.success(hasActiveApplication)
         } catch (e: Exception) {
             Result.failure(e)
         }

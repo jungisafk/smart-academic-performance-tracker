@@ -148,6 +148,10 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Filtered to ${filteredSubjects.size} subjects for course: ${currentUser.courseId}, year level: ${currentUser.yearLevelId}")
                         _subjects.value = filteredSubjects
                         
+                        // Load section assignments AFTER subjects are loaded
+                        // This ensures we can load assignments for each subject individually
+                        loadSectionAssignments()
+                        
                         // Update UI state with filtering info
                         _uiState.value = _uiState.value.copy(
                             successMessage = "Showing subjects for your course and year level (${filteredSubjects.size} subjects available)"
@@ -160,9 +164,6 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         )
                         return@onSuccess
                     }
-
-                    // Load section assignments
-                    loadSectionAssignments()
 
                     // Load my applications
                     loadMyApplications()
@@ -221,12 +222,75 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         return@onSuccess
                     }
                     
-                    // Allow re-apply if no ACTIVE enrollment exists even if there was an approved application before
-                    val existingApplication = _myApplications.value.find { 
-                        it.subjectId == subjectId && it.status == ApplicationStatus.APPROVED 
+                    // Validate that the section has an assigned teacher
+                    // Students can only apply to sections that have active teacher assignments
+                    // Use courseId to ensure Firestore security rules can evaluate the query
+                    val studentCourseId = currentUser.courseId ?: ""
+                    if (sectionName.isNotEmpty()) {
+                        val sectionAssignmentsResult = sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subjectId, studentCourseId)
+                        var hasAssignedTeacher = false
+                        sectionAssignmentsResult.onSuccess { assignments ->
+                            hasAssignedTeacher = assignments.any { assignment ->
+                                assignment.subjectId == subjectId &&
+                                assignment.sectionName == sectionName &&
+                                assignment.teacherId.isNotEmpty() &&
+                                assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                            }
+                        }
+                        
+                        // Only allow application if the specific section has an assigned teacher
+                        if (!hasAssignedTeacher) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "This section does not have an assigned teacher yet. Please wait for a teacher to be assigned before applying."
+                            )
+                            return@onSuccess
+                        }
+                    } else {
+                        // If no section specified, check if subject has a teacher via section assignments
+                        // A subject is considered to have a teacher if at least one section has an assigned teacher
+                        val sectionAssignmentsResult = sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subjectId, studentCourseId)
+                        var hasAnyAssignedTeacher = false
+                        sectionAssignmentsResult.onSuccess { assignments ->
+                            hasAnyAssignedTeacher = assignments.any { assignment ->
+                                assignment.subjectId == subjectId &&
+                                assignment.teacherId.isNotEmpty() &&
+                                assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                            }
+                        }
+                        
+                        if (!hasAnyAssignedTeacher) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "This subject does not have any sections with assigned teachers yet. Please wait for a teacher to be assigned before applying."
+                            )
+                            return@onSuccess
+                        }
                     }
-                    if (existingApplication != null) {
-                        // Check current enrollments in new section-based collection
+                    
+                    // Check if student is already enrolled in the section
+                    // This check should happen BEFORE checking applications to prevent duplicate enrollments
+                    if (sectionName.isNotEmpty()) {
+                        // Check if student is already enrolled in this specific section
+                        val isEnrolledResult = studentEnrollmentRepository.isStudentEnrolled(
+                            currentUser.id,
+                            subjectId,
+                            sectionName
+                        )
+                        val isEnrolled = if (isEnrolledResult.isSuccess) {
+                            isEnrolledResult.getOrNull() ?: false
+                        } else {
+                            false
+                        }
+                        if (isEnrolled) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "You are already enrolled in section $sectionName of this subject"
+                            )
+                            return@onSuccess
+                        }
+                    } else {
+                        // If no section specified, check if student is enrolled in any section of this subject
                         val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
                         val hasActiveEnrollment = if (studentEnrollmentsResult.isSuccess) {
                             val list = studentEnrollmentsResult.getOrNull().orEmpty()
@@ -241,8 +305,83 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                             )
                             return@onSuccess
                         }
-                        // else, let them apply again
                     }
+                    
+                    // Check for existing applications
+                    // Block if there's a PENDING application for the same subject and section
+                    val pendingApplication = if (sectionName.isNotEmpty()) {
+                        _myApplications.value.find { 
+                            it.subjectId == subjectId && 
+                            it.sectionName == sectionName && 
+                            it.status == ApplicationStatus.PENDING 
+                        }
+                    } else {
+                        _myApplications.value.find { 
+                            it.subjectId == subjectId && 
+                            it.status == ApplicationStatus.PENDING 
+                        }
+                    }
+                    if (pendingApplication != null) {
+                        val errorMsg = if (sectionName.isNotEmpty()) {
+                            "You already have a pending application for section $sectionName of this subject"
+                        } else {
+                            "You already have a pending application for this subject"
+                        }
+                        _uiState.value = _uiState.value.copy(
+                            applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                            error = errorMsg
+                        )
+                        return@onSuccess
+                    }
+                    
+                    // Check for APPROVED application - only block if student is enrolled
+                    // (We already checked enrollment above, so this is just for consistency)
+                    val approvedApplication = if (sectionName.isNotEmpty()) {
+                        _myApplications.value.find { 
+                            it.subjectId == subjectId && 
+                            it.sectionName == sectionName && 
+                            it.status == ApplicationStatus.APPROVED 
+                        }
+                    } else {
+                        _myApplications.value.find { 
+                            it.subjectId == subjectId && 
+                            it.status == ApplicationStatus.APPROVED 
+                        }
+                    }
+                    if (approvedApplication != null) {
+                        // Double-check enrollment (in case enrollment was created after application was approved)
+                        val hasActiveEnrollment = if (sectionName.isNotEmpty()) {
+                            val isEnrolledResult = studentEnrollmentRepository.isStudentEnrolled(
+                                currentUser.id,
+                                subjectId,
+                                sectionName
+                            )
+                            isEnrolledResult.getOrNull() ?: false
+                        } else {
+                            val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
+                            if (studentEnrollmentsResult.isSuccess) {
+                                val list = studentEnrollmentsResult.getOrNull().orEmpty()
+                                list.any { it.studentId == currentUser.id && it.status == EnrollmentStatus.ACTIVE }
+                            } else {
+                                false
+                            }
+                        }
+                        if (hasActiveEnrollment) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = if (sectionName.isNotEmpty()) {
+                                    "You are already enrolled in section $sectionName of this subject"
+                                } else {
+                                    "You are already enrolled in this subject"
+                                }
+                            )
+                            return@onSuccess
+                        }
+                        // else, let them apply again (approved but not enrolled)
+                    }
+                    
+                    // Allow reapplication if previous application was WITHDRAWN or REJECTED
+                    // (No need to check - they can always reapply if not PENDING or enrolled)
                     
                     // Create subject application
                     val application = SubjectApplication(
@@ -345,11 +484,38 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
     private fun loadSectionAssignments() {
         viewModelScope.launch {
             try {
-                val result = sectionAssignmentRepository.getAllSectionAssignments()
-                result.onSuccess { assignments ->
-                    _sectionAssignments.value = assignments
+                // Get current user to get their courseId
+                val currentUserResult = userRepository.getCurrentUser()
+                currentUserResult.onSuccess { currentUser ->
+                    if (currentUser == null || currentUser.courseId == null) {
+                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - No current user or courseId, skipping section assignments")
+                        return@onSuccess
+                    }
+                    
+                    val studentCourseId = currentUser.courseId
+                    
+                    // Load section assignments for each subject individually
+                    // Query by both subjectId and courseId so Firestore security rules can evaluate the query
+                    val allAssignments = mutableListOf<com.smartacademictracker.data.model.SectionAssignment>()
+                    val subjects = _subjects.value
+                    
+                    // Load assignments for each subject
+                    subjects.forEach { subject ->
+                        // Use the method that queries by both subjectId and courseId
+                        val result = sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subject.id, studentCourseId)
+                        result.onSuccess { assignments ->
+                            allAssignments.addAll(assignments)
+                            // Update the list after each successful load
+                            _sectionAssignments.value = allAssignments.toList()
+                        }.onFailure { exception ->
+                            // Log but don't fail completely - some subjects might not have assignments
+                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load section assignments for subject ${subject.id}: ${exception.message}")
+                        }
+                    }
+                    
+                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loaded ${allAssignments.size} section assignments for ${subjects.size} subjects")
                 }.onFailure { exception ->
-                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load section assignments: ${exception.message}")
+                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to get current user: ${exception.message}")
                 }
             } catch (e: Exception) {
                 println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Error loading section assignments: ${e.message}")

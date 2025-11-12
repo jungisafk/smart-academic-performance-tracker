@@ -42,6 +42,7 @@ fun TeacherSectionAssignmentScreen(
     val subjects by viewModel.subjects.collectAsState()
     val sectionAssignments by viewModel.sectionAssignments.collectAsState()
     val teacherApplications by viewModel.teacherApplications.collectAsState()
+    val yearLevels by viewModel.yearLevels.collectAsState()
 
     // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
@@ -63,7 +64,7 @@ fun TeacherSectionAssignmentScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Enhanced Header Section
+                // Enhanced Header Sectionteacher
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
@@ -226,16 +227,22 @@ fun TeacherSectionAssignmentScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Group subjects by course first, then by year level
-                        // Filter out subjects with null or empty courseId to avoid grouping issues
-                        val validSubjects = subjects.filter { 
+                        // Separate MAJOR and MINOR subjects
+                        val majorSubjects = subjects.filter { 
+                            it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR &&
                             it.courseId.isNotBlank() && it.courseName.isNotBlank()
                         }
-                        val groupedByCourse = validSubjects.groupBy { it.courseId }
+                        val minorSubjects = subjects.filter { 
+                            it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                        }
+                        
+                        val groupedByCourse = majorSubjects.groupBy { it.courseId }
                         
                         // Also handle subjects with null/empty courseId separately if needed
+                        // Exclude MINOR subjects from this check as they don't need courseId
                         val subjectsWithoutCourse = subjects.filter { 
-                            it.courseId.isBlank() || it.courseName.isBlank()
+                            (it.courseId.isBlank() || it.courseName.isBlank()) &&
+                            it.subjectType != com.smartacademictracker.data.model.SubjectType.MINOR
                         }
                         
                         groupedByCourse.forEach { (courseId, courseSubjects) ->
@@ -255,15 +262,31 @@ fun TeacherSectionAssignmentScreen(
                                         courseName = courseName,
                                         courseId = courseId,
                                         yearLevelGroups = groupedByYearLevel.map { (yearLevelId, yearSubjects) ->
+                                            // Get year level level number for numerical display
+                                            val yearLevel = if (yearLevelId != "NO_YEAR_LEVEL" && yearLevelId.isNotBlank()) {
+                                                yearLevels.find { it.id == yearLevelId }
+                                            } else null
+                                            
                                             YearLevelGroup(
                                                 yearLevelId = if (yearLevelId == "NO_YEAR_LEVEL") "" else yearLevelId,
                                                 yearLevelName = if (yearLevelId == "NO_YEAR_LEVEL") {
                                                     "No Year Level"
                                                 } else {
-                                                    yearSubjects.firstOrNull()?.yearLevelName ?: "Unknown Year"
+                                                    // Use numerical format: "Year 1", "Year 2", etc.
+                                                    yearLevel?.let { "Year ${it.level}" } ?: (yearSubjects.firstOrNull()?.yearLevelName ?: "Unknown Year")
                                                 },
                                                 subjects = yearSubjects
                                             )
+                                        }.sortedBy { group ->
+                                            // Sort by year level number (1, 2, 3, 4)
+                                            // "No Year Level" goes last
+                                            if (group.yearLevelId.isEmpty()) {
+                                                999 // Put "No Year Level" at the end
+                                            } else {
+                                                // Extract the year level number from the name
+                                                val yearLevel = yearLevels.find { it.id == group.yearLevelId }
+                                                yearLevel?.level ?: 999
+                                            }
                                         },
                                         sectionAssignments = sectionAssignments,
                                         teacherApplications = teacherApplications,
@@ -274,6 +297,76 @@ fun TeacherSectionAssignmentScreen(
                                             viewModel.removeSectionAssignment(assignmentId)
                                         }
                                     )
+                                }
+                            }
+                        }
+                        
+                        // MINOR Subjects Section (separate from courses)
+                        if (minorSubjects.isNotEmpty()) {
+                            // MINOR Subjects Header
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(4.dp)
+                                            .height(20.dp)
+                                            .background(Color(0xFFFF9800), RoundedCornerShape(2.dp))
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "Minor Subjects",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333333)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "(Cross-departmental - All teachers can apply)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF666666)
+                                    )
+                                }
+                            }
+                            
+                            // Group MINOR subjects by year level NUMBER (not ID) for unified view
+                            val uniqueYearLevelNumbers = minorSubjects
+                                .mapNotNull { subject ->
+                                    if (subject.yearLevelId.isNotBlank()) {
+                                        yearLevels.find { it.id == subject.yearLevelId }?.level
+                                    } else null
+                                }
+                                .distinct()
+                                .sorted()
+                            
+                            uniqueYearLevelNumbers.forEach { yearLevelNumber ->
+                                val yearLevel = yearLevels.find { it.level == yearLevelNumber }
+                                val yearLevelMinorSubjects = minorSubjects.filter { subject ->
+                                    if (subject.yearLevelId.isNotBlank()) {
+                                        yearLevels.find { it.id == subject.yearLevelId }?.level == yearLevelNumber
+                                    } else false
+                                }
+                                
+                                if (yearLevelMinorSubjects.isNotEmpty() && yearLevel != null) {
+                                    item {
+                                        CollapsibleYearLevelCard(
+                                            yearLevelName = "Year ${yearLevel.level}",
+                                            yearLevelId = yearLevel.id,
+                                            subjects = yearLevelMinorSubjects,
+                                            sectionAssignments = sectionAssignments,
+                                            teacherApplications = teacherApplications,
+                                            onAssignTeacher = { subjectId: String, sectionName: String, teacherId: String ->
+                                                viewModel.assignTeacherToSection(subjectId, sectionName, teacherId)
+                                            },
+                                            onRemoveAssignment = { assignmentId: String ->
+                                                viewModel.removeSectionAssignment(assignmentId)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -616,40 +709,67 @@ fun EnhancedTeacherApplicationCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Teacher Avatar
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFFF9800).copy(alpha = 0.1f)),
+                            .background(Color(0xFFFF9800).copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.Person,
                             contentDescription = "Teacher",
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(24.dp),
                             tint = Color(0xFFFF9800)
                         )
                     }
                     
                     Spacer(modifier = Modifier.width(12.dp))
                     
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 0.dp)
+                    ) {
                         Text(
                             text = application.teacherName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
+                            color = Color(0xFF333333),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            softWrap = false
                         )
-                        Text(
-                            text = application.teacherEmail,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666)
-                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                Icons.Default.Email,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = Color(0xFF666666)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = application.teacherEmail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                softWrap = false,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
                     }
                 }
+                
+                Spacer(modifier = Modifier.width(8.dp))
                 
                 // Enhanced Status Chip
                 EnhancedApplicationStatusChip(status = application.status)
@@ -659,11 +779,12 @@ fun EnhancedTeacherApplicationCard(
             if (application.applicationReason.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+                    shape = RoundedCornerShape(8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(14.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically
@@ -671,18 +792,18 @@ fun EnhancedTeacherApplicationCard(
                             Icon(
                                 Icons.Default.Info,
                                 contentDescription = "Reason",
-                                modifier = Modifier.size(16.dp),
-                                tint = Color(0xFF666666)
+                                modifier = Modifier.size(18.dp),
+                                tint = Color(0xFF2196F3)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Reason:",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "Application Reason",
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF666666)
+                                color = Color(0xFF333333)
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = application.applicationReason,
                             style = MaterialTheme.typography.bodyMedium,

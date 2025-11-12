@@ -145,6 +145,15 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                                 // Get subject details
                                 val subjectResult = subjectRepository.getSubjectById(subjectId)
                                 subjectResult.onSuccess { subject ->
+                                    // Validate that the subject has an assigned teacher
+                                    if (subject.teacherId == null || subject.teacherId.isEmpty()) {
+                                        _uiState.value = _uiState.value.copy(
+                                            applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                            error = "This subject does not have an assigned teacher yet. Please wait for a teacher to be assigned before applying."
+                                        )
+                                        return@onSuccess
+                                    }
+                                    
                                     // Create application
                                     val application = StudentApplication(
                                         studentId = user.id,

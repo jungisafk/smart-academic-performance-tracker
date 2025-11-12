@@ -85,15 +85,22 @@ class HierarchicalTeacherSubjectApplicationViewModel @Inject constructor(
                     val currentUserResult = userRepository.getCurrentUser()
                     currentUserResult.onSuccess { currentUser ->
                         if (currentUser != null) {
+                            // Warn if teacher doesn't have a department set
+                            if (currentUser.departmentCourseId == null || currentUser.departmentCourseId.isBlank()) {
+                                android.util.Log.w("HierarchicalTeacherSubjects", "WARNING: Teacher ${currentUser.id} does not have departmentCourseId set! They will only see MINOR subjects.")
+                            }
+                            
                             // Filter subjects based on department and subject type
                             val filteredSubjects = subjectsList.filter { subject ->
                                 when (subject.subjectType) {
                                     com.smartacademictracker.data.model.SubjectType.MAJOR -> {
                                         // MAJOR subjects: only visible to teachers of the same course/department
-                                        currentUser.departmentCourseId != null && subject.courseId == currentUser.departmentCourseId
+                                        currentUser.departmentCourseId != null && 
+                                        currentUser.departmentCourseId.isNotBlank() && 
+                                        subject.courseId == currentUser.departmentCourseId
                                     }
                                     com.smartacademictracker.data.model.SubjectType.MINOR -> {
-                                        // MINOR subjects: visible to all teachers
+                                        // MINOR subjects: visible to all teachers (cross-departmental)
                                         true
                                     }
                                 }
@@ -168,11 +175,15 @@ class HierarchicalTeacherSubjectApplicationViewModel @Inject constructor(
                     val canApply = when (subject.subjectType) {
                         com.smartacademictracker.data.model.SubjectType.MAJOR -> {
                             // MAJOR subjects: only teachers of the same course/department can apply
-                            currentUser.departmentCourseId != null && subject.courseId == currentUser.departmentCourseId
+                            currentUser.departmentCourseId != null && 
+                            currentUser.departmentCourseId.isNotBlank() && 
+                            subject.courseId == currentUser.departmentCourseId
                         }
                         com.smartacademictracker.data.model.SubjectType.MINOR -> {
-                            // MINOR subjects: any teacher can apply
-                            true
+                            // MINOR subjects: also restricted to teacher's department
+                            currentUser.departmentCourseId != null && 
+                            currentUser.departmentCourseId.isNotBlank() && 
+                            subject.courseId == currentUser.departmentCourseId
                         }
                     }
                     
