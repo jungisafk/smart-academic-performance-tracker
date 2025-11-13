@@ -24,7 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.smartacademictracker.data.model.Enrollment
+import com.smartacademictracker.data.model.StudentEnrollment
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,8 +37,20 @@ fun StudentSubjectsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val enrollments by viewModel.enrollments.collectAsState()
 
+    // Debug logging
+    LaunchedEffect(uiState, enrollments) {
+        Log.d("StudentSubjectsScreen", "=== UI STATE CHANGED ===")
+        Log.d("StudentSubjectsScreen", "isLoading: ${uiState.isLoading}")
+        Log.d("StudentSubjectsScreen", "error: ${uiState.error}")
+        Log.d("StudentSubjectsScreen", "enrollments.size: ${enrollments.size}")
+        enrollments.forEachIndexed { index, enrollment ->
+            Log.d("StudentSubjectsScreen", "  Display[$index]: ${enrollment.subjectName} (${enrollment.subjectCode}) - Section: ${enrollment.sectionName}")
+        }
+    }
+
     // Load enrollments when screen is composed
     LaunchedEffect(Unit) {
+        Log.d("StudentSubjectsScreen", "Screen composed - Loading enrollments...")
         viewModel.loadEnrollments()
     }
 
@@ -259,61 +272,8 @@ fun StudentSubjectsScreen(
 }
 
 @Composable
-fun SubjectEnrollmentCard(
-    enrollment: Enrollment,
-    onNavigateToDetail: () -> Unit
-) {
-    Card(
-        // Non-clickable per requirement
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = enrollment.subjectName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = enrollment.subjectCode,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Semester: ${enrollment.semester}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Year: ${enrollment.academicYear}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = "Enrolled: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(enrollment.enrolledAt))}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
 fun EnhancedSubjectEnrollmentCard(
-    enrollment: Enrollment,
+    enrollment: StudentEnrollment,
     onNavigateToDetail: () -> Unit
 ) {
     Card(
@@ -370,15 +330,18 @@ fun EnhancedSubjectEnrollmentCard(
             // Subject Details
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Semester Info
                 Card(
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -389,20 +352,25 @@ fun EnhancedSubjectEnrollmentCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Semester ${enrollment.semester}",
+                            text = enrollment.semester.displayName,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF333333)
+                            color = Color(0xFF333333),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 }
                 
-                // Academic Year Info
+                // Section Info
                 Card(
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -413,9 +381,11 @@ fun EnhancedSubjectEnrollmentCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Year ${enrollment.academicYear}",
+                            text = enrollment.sectionName,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF333333)
+                            color = Color(0xFF333333),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -423,22 +393,48 @@ fun EnhancedSubjectEnrollmentCard(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Enrollment Date
+            // Enrollment Date and Status
             Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.CalendarToday,
-                    contentDescription = null,
-                    tint = Color(0xFF666666),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Enrolled: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(enrollment.enrolledAt))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF666666)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = null,
+                        tint = Color(0xFF666666),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Enrolled: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(enrollment.enrollmentDate))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF666666)
+                    )
+                }
+                
+                // Status Badge
+                Surface(
+                    color = when (enrollment.status) {
+                        com.smartacademictracker.data.model.EnrollmentStatus.ACTIVE -> Color(0xFF4CAF50)
+                        com.smartacademictracker.data.model.EnrollmentStatus.DROPPED -> Color(0xFFF44336)
+                        com.smartacademictracker.data.model.EnrollmentStatus.COMPLETED -> Color(0xFF2196F3)
+                        com.smartacademictracker.data.model.EnrollmentStatus.FAILED -> Color(0xFFF44336)
+                        com.smartacademictracker.data.model.EnrollmentStatus.KICKED -> Color(0xFFF44336)
+                    },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = enrollment.status.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }

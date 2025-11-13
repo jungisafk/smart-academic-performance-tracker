@@ -1324,12 +1324,12 @@ fun CollapsibleCourseCard(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
-                onClick = { isExpanded = !isExpanded }
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { isExpanded = !isExpanded }
                         .padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -1456,12 +1456,12 @@ fun CollapsibleYearLevelCard(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF66BB6A)),
-                onClick = { isExpanded = !isExpanded }
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF66BB6A))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { isExpanded = !isExpanded }
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween

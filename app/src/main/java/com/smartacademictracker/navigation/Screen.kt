@@ -51,6 +51,7 @@ sealed class Screen(val route: String) {
     object AdminYearLevelManagement : Screen("admin_year_level_management")
     object HierarchicalAcademicManagement : Screen("hierarchical_academic_management")
     object AdminGradeMonitoring : Screen("admin_grade_monitoring")
+    object AdminGradeEditRequests : Screen("admin_grade_edit_requests")
     object AdminAcademicPeriods : Screen("admin_academic_periods")
     object AddSubject : Screen("add_subject?courseId={courseId}&yearLevelId={yearLevelId}") {
         fun createRoute(courseId: String, yearLevelId: String) =
@@ -69,6 +70,8 @@ sealed class Screen(val route: String) {
     object AdminPreRegisteredStudents : Screen("admin_pre_registered_students")
     object AdminPreRegisteredTeachers : Screen("admin_pre_registered_teachers")
     object AdminPreRegistered : Screen("admin_pre_registered")
+    object AdminBulkImportStudents : Screen("admin_bulk_import_students")
+    object AdminBulkImportTeachers : Screen("admin_bulk_import_teachers")
     
     // Common Screens
     object Profile : Screen("profile")

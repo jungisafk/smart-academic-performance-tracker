@@ -35,12 +35,15 @@ import com.smartacademictracker.presentation.admin.AddCourseScreen
 import com.smartacademictracker.presentation.admin.AddYearLevelScreen
 import com.smartacademictracker.presentation.admin.ManageUsersScreen
 import com.smartacademictracker.presentation.admin.AdminGradeMonitoringScreen
+import com.smartacademictracker.presentation.admin.AdminGradeEditRequestsScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.TeacherSectionAssignmentScreen
 import com.smartacademictracker.presentation.admin.AcademicPeriodDataScreen
 import com.smartacademictracker.presentation.admin.AdminPreRegisteredStudentsScreen
 import com.smartacademictracker.presentation.admin.AdminPreRegisteredTeachersScreen
 import com.smartacademictracker.presentation.admin.AdminPreRegisteredScreen
+import com.smartacademictracker.presentation.admin.AdminBulkImportStudentsScreen
+import com.smartacademictracker.presentation.admin.AdminBulkImportTeachersScreen
 import com.smartacademictracker.presentation.student.StudentEnrollmentScreen
 import com.smartacademictracker.presentation.teacher.TeacherStudentManagementScreen
 import com.smartacademictracker.presentation.student.StudentAnalyticsScreen
@@ -346,6 +349,9 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToGradeMonitoring = {
                     navController.navigate(Screen.AdminGradeMonitoring.route)
                 },
+                onNavigateToGradeEditRequests = {
+                    navController.navigate(Screen.AdminGradeEditRequests.route)
+                },
                 onNavigateToAcademicPeriods = {
                     navController.navigate(Screen.AdminAcademicPeriods.route)
                 },
@@ -365,6 +371,12 @@ fun SmartAcademicTrackerNavigation(
             AdminPreRegisteredScreen(
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToStudentBulkImport = {
+                    navController.navigate(Screen.AdminBulkImportStudents.route)
+                },
+                onNavigateToTeacherBulkImport = {
+                    navController.navigate(Screen.AdminBulkImportTeachers.route)
                 }
             )
         }
@@ -372,6 +384,33 @@ fun SmartAcademicTrackerNavigation(
         composable(Screen.AdminPreRegisteredStudents.route) {
             AdminPreRegisteredStudentsScreen(
                 onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToBulkImport = {
+                    navController.navigate(Screen.AdminBulkImportStudents.route)
+                }
+            )
+        }
+        
+        composable(Screen.AdminBulkImportStudents.route) {
+            AdminBulkImportStudentsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onImportSuccess = {
+                    // Navigate back - the pre-registered screen will auto-refresh
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.AdminBulkImportTeachers.route) {
+            AdminBulkImportTeachersScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onImportSuccess = {
+                    // Navigate back - the pre-registered screen will auto-refresh
                     navController.popBackStack()
                 }
             )
@@ -381,6 +420,9 @@ fun SmartAcademicTrackerNavigation(
             AdminPreRegisteredTeachersScreen(
                 onNavigateBack = {
                     navController.popBackStack()
+                },
+                onNavigateToBulkImport = {
+                    navController.navigate(Screen.AdminBulkImportTeachers.route)
                 }
             )
         }
@@ -456,6 +498,14 @@ fun SmartAcademicTrackerNavigation(
         
         composable(Screen.AdminGradeMonitoring.route) {
             AdminGradeMonitoringScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.AdminGradeEditRequests.route) {
+            AdminGradeEditRequestsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

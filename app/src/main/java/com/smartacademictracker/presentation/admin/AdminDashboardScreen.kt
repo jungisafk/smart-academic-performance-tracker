@@ -42,6 +42,7 @@ fun AdminDashboardScreen(
     onNavigateToHierarchicalAcademicManagement: () -> Unit = {},
     onNavigateToUsers: () -> Unit = {},
     onNavigateToGradeMonitoring: () -> Unit = {},
+    onNavigateToGradeEditRequests: () -> Unit = {},
     onNavigateToAcademicPeriods: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
@@ -233,7 +234,7 @@ fun AdminDashboardScreen(
                         // Calculate responsive height for the grid
                         val configuration = LocalConfiguration.current
                         val screenWidth = configuration.screenWidthDp.dp
-                        val buttonCount = 8 // Updated: Added Profile button to grid
+                        val buttonCount = 9 // Updated: Added Grade Edit Requests button
                         val columns = 2
                         val rows = (buttonCount + columns - 1) / columns // Ceiling division
                         val horizontalPadding = 16.dp * 2 // Left and right padding
@@ -255,6 +256,7 @@ fun AdminDashboardScreen(
                                 QuickActionData("Academic Structure", onNavigateToHierarchicalAcademicManagement, Icons.Default.MenuBook, false),
                                 QuickActionData("Manage Users", onNavigateToUsers, Icons.Default.Person, false),
                                 QuickActionData("Grade Monitoring", onNavigateToGradeMonitoring, Icons.Default.BarChart, false),
+                                QuickActionData("Grade Edit Requests", onNavigateToGradeEditRequests, Icons.Default.Edit, false),
                                 QuickActionData("Academic Periods", onNavigateToAcademicPeriods, Icons.Default.CalendarToday, false),
                                 QuickActionData("Pre-Register", onNavigateToPreRegistered, Icons.Default.School, false),
                                 QuickActionData("Notifications", onNavigateToNotifications, Icons.Default.Notifications, false),
@@ -262,6 +264,7 @@ fun AdminDashboardScreen(
                             )) { actionData ->
                                 val badgeCount = when (actionData.title) {
                                     "Teacher Management" -> uiState.pendingTeacherApplications
+                                    "Grade Edit Requests" -> uiState.pendingGradeEditRequests
                                     "Notifications" -> unreadCount
                                     else -> 0
                                 }

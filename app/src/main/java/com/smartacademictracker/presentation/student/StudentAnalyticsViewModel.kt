@@ -192,6 +192,23 @@ class StudentAnalyticsViewModel @Inject constructor(
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
+    
+    fun setSelectedSubject(subjectId: String?) {
+        _uiState.value = _uiState.value.copy(selectedSubjectId = subjectId)
+        // Recalculate analytics for the selected subject
+        val filteredAggregates = if (subjectId == null) {
+            _gradeAggregates.value
+        } else {
+            _gradeAggregates.value.filter { it.subjectId == subjectId }
+        }
+        val analytics = calculateAnalytics(filteredAggregates)
+        _uiState.value = _uiState.value.copy(
+            overallAverage = analytics.overallAverage,
+            passingSubjects = analytics.passingSubjects,
+            atRiskSubjects = analytics.atRiskSubjects,
+            failingSubjects = analytics.failingSubjects
+        )
+    }
 
     private fun calculateAnalytics(aggregates: List<StudentGradeAggregate>): AnalyticsData {
         if (aggregates.isEmpty()) {
@@ -233,7 +250,8 @@ data class StudentAnalyticsUiState(
     val overallAverage: Double? = null,
     val passingSubjects: Int = 0,
     val atRiskSubjects: Int = 0,
-    val failingSubjects: Int = 0
+    val failingSubjects: Int = 0,
+    val selectedSubjectId: String? = null // null = overall, otherwise specific subject ID
 )
 
 private data class AnalyticsData(

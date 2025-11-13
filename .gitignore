@@ -87,3 +87,25 @@ Thumbs.db
 /app/build/
 *.apk
 *.aab
+
+# Data files (CSV samples, etc.)
+*.csv
+sample_*.csv
+
+# Firebase scripts and migration files
+*.js
+clear_*.kt
+migrate_*.kt
+fix_*.kt
+scripts/
+
+# Build output logs
+build_output.txt
+
+# Firebase security rules (keep template, exclude actual deployed rules)
+firestore_security_rules_updated.rules
+firestore_security_rules_id_auth.rules
+
+# Documentation that may contain sensitive info
+*_SUMMARY.md
+*_INSTRUCTIONS.md

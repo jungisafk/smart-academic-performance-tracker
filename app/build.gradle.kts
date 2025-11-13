@@ -55,6 +55,15 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/LICENSE.txt"
+            excludes += "/META-INF/license.txt"
+            excludes += "/META-INF/NOTICE"
+            excludes += "/META-INF/NOTICE.txt"
+            excludes += "/META-INF/notice.txt"
+            excludes += "/META-INF/ASL2.0"
+            excludes += "/META-INF/*.kotlin_module"
         }
     }
 }
@@ -103,6 +112,15 @@ dependencies {
     
     // Gson for JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Apache Commons CSV for CSV file reading (lightweight, Android-compatible)
+    implementation("org.apache.commons:commons-csv:1.10.0")
+    
+    // File picker
+    implementation("androidx.activity:activity-ktx:1.9.1")
+    
+    // Note: Excel (.xlsx) parsing now uses native Android APIs (ZipInputStream and XmlPullParser)
+    // No external dependencies needed for Excel support!
     
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.3.0"))

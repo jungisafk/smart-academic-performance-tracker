@@ -448,7 +448,9 @@ fun EnhancedCourseHierarchyCard(
     onEditSubject: (String) -> Unit,
     onDeleteSubject: (String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(true) }
+    // Use remember with key to persist state across recompositions
+    // Default to false (collapsed) so cards don't auto-expand when scrolling
+    var expanded by remember(course.id) { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

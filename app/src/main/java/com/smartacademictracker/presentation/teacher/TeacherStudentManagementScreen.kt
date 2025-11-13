@@ -570,7 +570,8 @@ fun ModernStudentApplicationsContent(
                 ModernStudentApplicationCard(
                     application = application,
                     onApprove = { onApprove(application.id) },
-                    onReject = { onReject(application.id) }
+                    onReject = { onReject(application.id) },
+                    isProcessing = uiState.processingApplications.contains(application.id)
                 )
             }
         }
@@ -581,7 +582,8 @@ fun ModernStudentApplicationsContent(
 fun ModernStudentApplicationCard(
     application: com.smartacademictracker.data.model.StudentApplication,
     onApprove: () -> Unit,
-    onReject: () -> Unit
+    onReject: () -> Unit,
+    isProcessing: Boolean = false
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -661,22 +663,34 @@ fun ModernStudentApplicationCard(
             ) {
                 Button(
                     onClick = onApprove,
+                    enabled = !isProcessing,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF4CAF50)
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Approve")
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Processing...")
+                    } else {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Approve")
+                    }
                 }
                 OutlinedButton(
                     onClick = onReject,
+                    enabled = !isProcessing,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Color(0xFFF44336)
@@ -684,13 +698,23 @@ fun ModernStudentApplicationCard(
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF44336)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Reject")
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color(0xFFF44336),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Processing...")
+                    } else {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Reject")
+                    }
                 }
             }
         }

@@ -537,9 +537,6 @@ fun StudentCard(
                     icon = Icons.Default.School,
                     text = "${student.courseCode} - ${student.yearLevelName}"
                 )
-                student.section?.let {
-                    InfoChip(icon = Icons.Default.Class, text = "Section $it")
-                }
             }
             
             if (!student.isRegistered) {
@@ -603,9 +600,9 @@ fun AddStudentDialog(
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var middleName by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
     var selectedYearLevel by remember { mutableStateOf<YearLevel?>(null) }
-    var section by remember { mutableStateOf("") }
     var enrollmentYear by remember { mutableStateOf("2024-2025") }
     
     LaunchedEffect(selectedCourse) {
@@ -655,6 +652,17 @@ fun AddStudentDialog(
                         value = lastName,
                         onValueChange = { lastName = it },
                         label = { Text("Last Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+                
+                item {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email (Optional)") },
+                        placeholder = { Text("e.g., student@university.edu") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -730,17 +738,6 @@ fun AddStudentDialog(
                 
                 item {
                     OutlinedTextField(
-                        value = section,
-                        onValueChange = { section = it },
-                        label = { Text("Section (Optional)") },
-                        placeholder = { Text("e.g., A, B, 1A") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                
-                item {
-                    OutlinedTextField(
                         value = enrollmentYear,
                         onValueChange = { enrollmentYear = it },
                         label = { Text("Enrollment Year") },
@@ -759,12 +756,13 @@ fun AddStudentDialog(
                         firstName = firstName,
                         lastName = lastName,
                         middleName = middleName.ifBlank { null },
+                        email = email.ifBlank { null },
                         courseId = selectedCourse?.id ?: "",
                         courseName = selectedCourse?.name ?: "",
                         courseCode = selectedCourse?.code ?: "",
                         yearLevelId = selectedYearLevel?.id ?: "",
                         yearLevelName = selectedYearLevel?.name ?: "",
-                        section = section.ifBlank { null },
+                        section = null,
                         enrollmentYear = enrollmentYear,
                         createdBy = "", // Will be set by repository
                         createdByName = "", // Will be set by repository

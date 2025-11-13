@@ -1,6 +1,8 @@
 package com.smartacademictracker.data.model
 
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
+import com.google.firebase.firestore.IgnoreExtraProperties
 
 data class Grade(
     @DocumentId
@@ -19,7 +21,20 @@ data class Grade(
     val dateRecorded: Long = System.currentTimeMillis(),
     val semester: String = "",
     val academicYear: String = "",
-    val academicPeriodId: String = "" // Reference to active academic period
+    val academicPeriodId: String = "", // Reference to active academic period
+    // Grade locking fields
+    @PropertyName("locked")
+    val isLocked: Boolean = false, // Whether the grade is locked from editing
+    @PropertyName("editRequested")
+    val editRequested: Boolean = false, // Whether teacher requested permission to edit
+    @PropertyName("lockedAt")
+    val lockedAt: Long? = null, // Timestamp when grade was locked
+    @PropertyName("lockedBy")
+    val lockedBy: String? = null, // User ID who locked the grade (teacherId when saved)
+    @PropertyName("unlockedBy")
+    val unlockedBy: String? = null, // Admin ID who unlocked the grade
+    @PropertyName("unlockedAt")
+    val unlockedAt: Long? = null // Timestamp when grade was unlocked
 ) {
     fun calculatePercentage(): Double {
         return if (maxScore > 0) (score / maxScore) * 100 else 0.0
@@ -82,6 +97,7 @@ enum class GradeStatus(val displayName: String, val threshold: Double) {
 /**
  * Aggregate model for student's complete grade record in a subject
  */
+@IgnoreExtraProperties
 data class StudentGradeAggregate(
     @DocumentId
     val id: String = "",

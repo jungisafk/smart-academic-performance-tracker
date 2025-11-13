@@ -8,6 +8,7 @@ import com.smartacademictracker.data.model.StudentApplicationStatus
 import com.smartacademictracker.data.repository.StudentApplicationRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.repository.YearLevelRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,7 @@ import javax.inject.Inject
 class StudentSubjectApplicationViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val subjectRepository: SubjectRepository,
+    private val yearLevelRepository: YearLevelRepository,
     private val studentApplicationRepository: StudentApplicationRepository,
     private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
 ) : ViewModel() {
@@ -47,26 +49,105 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        // Load all active subjects
-                        val subjectsResult = subjectRepository.getAllSubjects()
-                        subjectsResult.onSuccess { subjectsList ->
-                            // Filter subjects based on user's year level and course
-                            val filteredSubjects = subjectsList.filter { subject ->
-                                subject.active && 
-                                (user.yearLevelId == null || subject.yearLevelId == user.yearLevelId) &&
-                                (user.courseId == null || subject.courseId == user.courseId)
+                        // Load all year levels to create a map for level number matching
+                        val allYearLevelsResult = yearLevelRepository.getAllYearLevels()
+                        allYearLevelsResult.onSuccess { allYearLevels ->
+                            // Create a map of yearLevelId -> level number
+                            val yearLevelIdToLevelMap = allYearLevels.associateBy({ it.id }, { it.level })
+                            
+                            // Get student's year level number
+                            val studentYearLevelNumber = user.yearLevelId?.let { yearLevelIdToLevelMap[it] }
+                            
+                            println("DEBUG: StudentSubjectApplicationViewModel - Student YearLevelId: ${user.yearLevelId}, YearLevelNumber: $studentYearLevelNumber")
+                            
+                            // Load all active subjects
+                            val subjectsResult = subjectRepository.getAllSubjects()
+                            subjectsResult.onSuccess { subjectsList ->
+                                println("DEBUG: StudentSubjectApplicationViewModel - Loaded ${subjectsList.size} total subjects")
+                                
+                                // Debug: Log ALL subjects before filtering
+                                println("DEBUG: StudentSubjectApplicationViewModel - === ALL SUBJECTS BEFORE FILTERING ===")
+                                subjectsList.forEachIndexed { index, subject ->
+                                    val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
+                                    println("DEBUG: StudentSubjectApplicationViewModel - Subject[$index]: ${subject.name} (${subject.code}) - Type: ${subject.subjectType}, YearLevelId: ${subject.yearLevelId} (Level: $subjectLevel, ${subject.yearLevelName}), CourseId: ${subject.courseId}, Active: ${subject.active}")
+                                }
+                                
+                                // Debug: Log student's year level and course
+                                println("DEBUG: StudentSubjectApplicationViewModel - Student YearLevelId: ${user.yearLevelId}, YearLevelName: ${user.yearLevelName}, YearLevelNumber: $studentYearLevelNumber")
+                                println("DEBUG: StudentSubjectApplicationViewModel - Student CourseId: ${user.courseId}, CourseCode: ${user.courseCode}")
+                                
+                                // Debug: Count minor subjects in all subjects
+                                val allMinorSubjects = subjectsList.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
+                                println("DEBUG: StudentSubjectApplicationViewModel - Total minor subjects in database: ${allMinorSubjects.size}")
+                                allMinorSubjects.forEachIndexed { index, subject ->
+                                    val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
+                                    println("DEBUG: StudentSubjectApplicationViewModel - All Minor[$index]: ${subject.name} (${subject.code}) - YearLevelId: ${subject.yearLevelId} (Level: $subjectLevel, ${subject.yearLevelName}), CourseId: ${subject.courseId}, Active: ${subject.active}")
+                                }
+                                
+                                // Filter subjects based on user's year level and course
+                                // - Major subjects: must match both year level ID AND course
+                                // - Minor subjects: must match year level NUMBER (not ID) to allow cross-course matching
+                                val filteredSubjects = subjectsList.filter { subject ->
+                                    val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
+                                    val isActive = subject.active
+                                    val matchesYearLevelById = user.yearLevelId == null || subject.yearLevelId == user.yearLevelId
+                                    val matchesYearLevelByNumber = studentYearLevelNumber != null && subjectLevel == studentYearLevelNumber
+                                    val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                                    val matchesCourse = user.courseId == null || subject.courseId == user.courseId
+                                    
+                                    // For major subjects: match by year level ID and course
+                                    // For minor subjects: match by year level NUMBER (allows cross-course matching)
+                                    val passesFilter = if (isMinor) {
+                                        isActive && matchesYearLevelByNumber
+                                    } else {
+                                        isActive && matchesYearLevelById && matchesCourse
+                                    }
+                                    
+                                    // Debug each minor subject's filter evaluation
+                                    if (subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR) {
+                                        println("DEBUG: StudentSubjectApplicationViewModel - Minor Subject Filter Check: ${subject.name} (${subject.code})")
+                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Is Active: $isActive")
+                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Subject Level: $subjectLevel, Student Level: $studentYearLevelNumber")
+                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Matches YearLevel by Number: $matchesYearLevelByNumber")
+                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Is Minor: $isMinor")
+                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Passes Filter: $passesFilter")
+                                    }
+                                    
+                                    passesFilter
+                                }
+                                
+                                _availableSubjects.value = filteredSubjects
+                                _selectedYearLevel.value = user.yearLevelName ?: ""
+                                _selectedCourse.value = user.courseCode ?: ""
+                                _uiState.value = _uiState.value.copy(isLoading = false)
+                                
+                                val majorCount = filteredSubjects.count { it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR }
+                                val minorCount = filteredSubjects.count { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
+                                println("DEBUG: StudentSubjectApplicationViewModel - Loaded ${filteredSubjects.size} subjects for ${user.yearLevelName} ${user.courseCode} (${majorCount} major, ${minorCount} minor)")
+                                
+                                // Debug: Log details of minor subjects
+                                val minorSubjects = filteredSubjects.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
+                                println("DEBUG: StudentSubjectApplicationViewModel - Minor subjects found: ${minorSubjects.size}")
+                                minorSubjects.forEachIndexed { index, subject ->
+                                    println("DEBUG: StudentSubjectApplicationViewModel - Minor[$index]: ${subject.name} (${subject.code}) - YearLevel: ${subject.yearLevelId} (${subject.yearLevelName}), CourseId: ${subject.courseId}")
+                                }
+                                
+                                // Debug: Log details of major subjects
+                                val majorSubjects = filteredSubjects.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR }
+                                println("DEBUG: StudentSubjectApplicationViewModel - Major subjects found: ${majorSubjects.size}")
+                                majorSubjects.forEachIndexed { index, subject ->
+                                    println("DEBUG: StudentSubjectApplicationViewModel - Major[$index]: ${subject.name} (${subject.code}) - YearLevel: ${subject.yearLevelId} (${subject.yearLevelName}), CourseId: ${subject.courseId}")
+                                }
+                            }.onFailure { exception ->
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = exception.message ?: "Failed to load subjects"
+                                )
                             }
-                            
-                            _availableSubjects.value = filteredSubjects
-                            _selectedYearLevel.value = user.yearLevelName ?: ""
-                            _selectedCourse.value = user.courseCode ?: ""
-                            _uiState.value = _uiState.value.copy(isLoading = false)
-                            
-                            println("DEBUG: StudentSubjectApplicationViewModel - Loaded ${filteredSubjects.size} subjects for ${user.yearLevelName} ${user.courseCode}")
                         }.onFailure { exception ->
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                error = exception.message ?: "Failed to load subjects"
+                                error = exception.message ?: "Failed to load year levels"
                             )
                         }
                     } else {
@@ -245,10 +326,15 @@ class StudentSubjectApplicationViewModel @Inject constructor(
             try {
                 val subjectsResult = subjectRepository.getAllSubjects()
                 subjectsResult.onSuccess { subjectsList ->
+                    // Filter subjects based on selected year level and course
+                    // - Major subjects: must match both year level AND course
+                    // - Minor subjects: must match year level (regardless of course)
                     val filteredSubjects = subjectsList.filter { subject ->
                         subject.active &&
                         (selectedYearLevel.value.isEmpty() || subject.yearLevelName == selectedYearLevel.value) &&
-                        (selectedCourse.value.isEmpty() || subject.courseCode == selectedCourse.value)
+                        (subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR || 
+                         selectedCourse.value.isEmpty() || 
+                         subject.courseCode == selectedCourse.value)
                     }
                     _availableSubjects.value = filteredSubjects
                 }

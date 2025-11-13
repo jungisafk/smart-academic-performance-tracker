@@ -28,7 +28,8 @@ data class QuickActionData(
     val title: String,
     val onClick: () -> Unit,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val isYellow: Boolean = false
+    val isYellow: Boolean = false,
+    val badgeCount: Int = 0
 )
 
 data class RecentGradeData(
@@ -64,6 +65,16 @@ fun StudentDashboardScreen(
     LaunchedEffect(Unit) {
         dashboardViewModel.loadDashboardData()
         notificationViewModel.loadNotifications()
+    }
+    
+    // Debug: Log overview data changes
+    LaunchedEffect(dashboardState.enrolledSubjects, dashboardState.averageGrade) {
+        android.util.Log.d("StudentDashboard", "=== Overview Data Changed ===")
+        android.util.Log.d("StudentDashboard", "Enrolled Subjects: ${dashboardState.enrolledSubjects}")
+        android.util.Log.d("StudentDashboard", "Average Grade: ${dashboardState.averageGrade}")
+        android.util.Log.d("StudentDashboard", "Recent Grades Count: ${dashboardState.recentGrades.size}")
+        android.util.Log.d("StudentDashboard", "Is Loading: ${dashboardState.isLoading}")
+        android.util.Log.d("StudentDashboard", "Error: ${dashboardState.error}")
     }
     
     Column(
@@ -297,7 +308,7 @@ fun StudentDashboardScreen(
                 QuickActionData("Notifications", onNavigateToNotifications, Icons.Default.Notifications, true)
             )
             
-            // Create a 2-column grid using Rows
+            // Create a 2-column grid using Rows with fixed height to prevent scrolling issues
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -306,7 +317,9 @@ fun StudentDashboardScreen(
             ) {
                 quickActions.chunked(2).forEach { rowItems ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         rowItems.forEach { actionData ->
@@ -315,7 +328,10 @@ fun StudentDashboardScreen(
                                 onClick = actionData.onClick,
                                 icon = actionData.icon,
                                 isYellow = actionData.isYellow,
-                                modifier = Modifier.weight(1f)
+                                badgeCount = if (actionData.title == "Notifications") unreadCount else 0,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
                             )
                         }
                         // Add empty space if odd number of items
@@ -394,49 +410,68 @@ fun QuickActionCard(
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isYellow: Boolean = false,
+    badgeCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.height(120.dp),
+        modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // Colored square icon background
-            Box(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (isYellow) Color(0xFFFFC107) else Color(0xFF2196F3)
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = Color.White
+                // Colored square icon background
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isYellow) Color(0xFFFFC107) else Color(0xFF2196F3)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF333333),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF333333),
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
-            )
+            
+            // Notification badge
+            if (badgeCount > 0) {
+                Badge(
+                    containerColor = Color(0xFFD32F2F),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                ) {
+                    Text(
+                        text = if (badgeCount > 99) "99+" else badgeCount.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White
+                    )
+                }
+            }
         }
     }
 }

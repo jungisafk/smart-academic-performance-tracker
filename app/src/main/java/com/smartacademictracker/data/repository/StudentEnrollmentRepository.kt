@@ -2,8 +2,12 @@ package com.smartacademictracker.data.repository
 
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.smartacademictracker.data.model.StudentEnrollment
 import com.smartacademictracker.data.model.EnrollmentStatus
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,6 +38,38 @@ class StudentEnrollmentRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("StudentEnrollmentRepository", "Failed to get enrollments for student $studentId: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Get real-time flow of enrollments for a specific student
+     */
+    fun getEnrollmentsByStudentFlow(studentId: String): Flow<List<StudentEnrollment>> = callbackFlow {
+        Log.d("StudentEnrollmentRepository", "Setting up real-time listener for student: $studentId")
+        
+        val listenerRegistration = enrollmentsCollection
+            .whereEqualTo("studentId", studentId)
+            .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("StudentEnrollmentRepository", "Error in enrollment listener: ${error.message}")
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
+                    Log.d("StudentEnrollmentRepository", "Real-time update: Found ${enrollments.size} active enrollments for student $studentId")
+                    enrollments.forEach { enrollment ->
+                        Log.d("StudentEnrollmentRepository", "Enrollment: ${enrollment.subjectName} (${enrollment.subjectCode}) - Section: ${enrollment.sectionName}, Status: ${enrollment.status}")
+                    }
+                    trySend(enrollments)
+                }
+            }
+        
+        awaitClose {
+            Log.d("StudentEnrollmentRepository", "Removing real-time listener for student: $studentId")
+            listenerRegistration.remove()
         }
     }
 

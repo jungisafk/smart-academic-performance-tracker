@@ -7,19 +7,19 @@ package com.smartacademictracker.util
 object IdValidator {
     
     /**
-     * Student ID format: YYYY-NNNN (e.g., "2024-1234")
+     * Student ID format: YYYY-N+ (e.g., "2024-1", "2024-001", "2024-1234")
      * - YYYY: 4-digit year
-     * - NNNN: 4-digit sequential number
+     * - N+: One or more digits (no fixed length limit)
      */
-    private val STUDENT_ID_PATTERN = Regex("^\\d{4}-\\d{4}$")
+    private val STUDENT_ID_PATTERN = Regex("^\\d{4}-\\d+$")
     
     /**
-     * Teacher ID format: T-YYYY-NNN (e.g., "T-2024-001")
+     * Teacher ID format: T-YYYY-N+ (e.g., "T-2024-1", "T-2024-001")
      * - T: Teacher prefix
      * - YYYY: 4-digit year
-     * - NNN: 3-digit sequential number
+     * - N+: One or more digits (no fixed length limit)
      */
-    private val TEACHER_ID_PATTERN = Regex("^T-\\d{4}-\\d{3}$")
+    private val TEACHER_ID_PATTERN = Regex("^T-\\d{4}-\\d+$")
     
     /**
      * Alternative Teacher ID format: EMP-NNNNN (e.g., "EMP-12345")
@@ -29,12 +29,12 @@ object IdValidator {
     private val EMPLOYEE_ID_PATTERN = Regex("^EMP-\\d{5}$")
     
     /**
-     * Admin ID format: A-YYYY-NNN (e.g., "A-2024-001")
+     * Admin ID format: A-YYYY-N+ (e.g., "A-2024-1", "A-2024-001")
      * - A: Admin prefix
      * - YYYY: 4-digit year
-     * - NNN: 3-digit sequential number
+     * - N+: One or more digits (no fixed length limit)
      */
-    private val ADMIN_ID_PATTERN = Regex("^A-\\d{4}-\\d{3}$")
+    private val ADMIN_ID_PATTERN = Regex("^A-\\d{4}-\\d+$")
     
     /**
      * Validate Student ID format
@@ -50,8 +50,8 @@ object IdValidator {
         
         if (!STUDENT_ID_PATTERN.matches(trimmed)) {
             return ValidationResult(
-                false, 
-                "Invalid Student ID format. Expected format: YYYY-NNNN (e.g., 2024-1234)"
+                false,
+                "Invalid Student ID format. Expected format: YYYY-NNN (e.g., 2024-001, 2025-123)"
             )
         }
         
@@ -89,7 +89,7 @@ object IdValidator {
         if (!isValidTeacherFormat && !isValidEmployeeFormat) {
             return ValidationResult(
                 false,
-                "Invalid Teacher ID format. Expected format: T-YYYY-NNN (e.g., T-2024-001) or EMP-NNNNN (e.g., EMP-12345)"
+                "Invalid Teacher ID format. Expected format: T-YYYY-NNN (e.g., T-2024-001, T-2025-123) or EMP-NNNNN (e.g., EMP-12345)"
             )
         }
         
@@ -126,7 +126,7 @@ object IdValidator {
         if (!ADMIN_ID_PATTERN.matches(trimmed)) {
             return ValidationResult(
                 false,
-                "Invalid Admin ID format. Expected format: A-YYYY-NNN (e.g., A-2024-001)"
+                "Invalid Admin ID format. Expected format: A-YYYY-NNN (e.g., A-2024-001, A-2025-123)"
             )
         }
         
@@ -252,20 +252,22 @@ object IdValidator {
     
     /**
      * Generate next student ID for a given year
-     * @param year The enrollment year
-     * @param lastNumber The last sequential number used
-     * @return Next student ID
+     * Auto-increments starting from 001 with no upper limit
+     * @param year The enrollment year (from active academic period)
+     * @param lastNumber The last sequential number used (0 if first)
+     * @return Next student ID (e.g., "2025-001", "2025-002", etc.)
      */
     fun generateNextStudentId(year: Int, lastNumber: Int): String {
-        val nextNumber = (lastNumber + 1).toString().padStart(4, '0')
+        val nextNumber = (lastNumber + 1).toString().padStart(3, '0')
         return "$year-$nextNumber"
     }
     
     /**
      * Generate next teacher ID for a given year
-     * @param year The hiring year
-     * @param lastNumber The last sequential number used
-     * @return Next teacher ID
+     * Auto-increments starting from 001 with no upper limit
+     * @param year The hiring year (from active academic period)
+     * @param lastNumber The last sequential number used (0 if first)
+     * @return Next teacher ID (e.g., "T-2025-001", "T-2025-002", etc.)
      */
     fun generateNextTeacherId(year: Int, lastNumber: Int): String {
         val nextNumber = (lastNumber + 1).toString().padStart(3, '0')
@@ -274,13 +276,63 @@ object IdValidator {
     
     /**
      * Generate next admin ID for a given year
-     * @param year The year
-     * @param lastNumber The last sequential number used
-     * @return Next admin ID
+     * Auto-increments starting from 001 with no upper limit
+     * @param year The year (from active academic period)
+     * @param lastNumber The last sequential number used (0 if first)
+     * @return Next admin ID (e.g., "A-2025-001", "A-2025-002", etc.)
      */
     fun generateNextAdminId(year: Int, lastNumber: Int): String {
         val nextNumber = (lastNumber + 1).toString().padStart(3, '0')
         return "A-$year-$nextNumber"
+    }
+    
+    /**
+     * Extract sequential number from Student ID
+     * @param studentId Student ID in format YYYY-NNN+
+     * @return Sequential number or null if extraction fails
+     */
+    fun extractSequentialNumberFromStudentId(studentId: String): Int? {
+        return try {
+            studentId.trim().split("-").getOrNull(1)?.toIntOrNull()
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * Extract sequential number from Teacher ID
+     * @param teacherId Teacher ID in format T-YYYY-NNN+
+     * @return Sequential number or null if extraction fails
+     */
+    fun extractSequentialNumberFromTeacherId(teacherId: String): Int? {
+        return try {
+            val parts = teacherId.trim().split("-")
+            if (parts.size >= 3 && parts[0].uppercase() == "T") {
+                parts[2].toIntOrNull()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * Extract sequential number from Admin ID
+     * @param adminId Admin ID in format A-YYYY-NNN+
+     * @return Sequential number or null if extraction fails
+     */
+    fun extractSequentialNumberFromAdminId(adminId: String): Int? {
+        return try {
+            val parts = adminId.trim().split("-")
+            if (parts.size >= 3 && parts[0].uppercase() == "A") {
+                parts[2].toIntOrNull()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 }
 

@@ -14,6 +14,9 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.presentation.common.ChartUtils
@@ -146,6 +150,17 @@ fun StudentAnalyticsScreen(
                         }
                     }
                 }
+                
+                // Filter Section
+                item {
+                    AnalyticsFilterSection(
+                        gradeAggregates = gradeAggregates,
+                        selectedSubjectId = uiState.selectedSubjectId,
+                        onSubjectSelected = { subjectId ->
+                            viewModel.setSelectedSubject(subjectId)
+                        }
+                    )
+                }
             }
         
             // Loading State
@@ -202,29 +217,91 @@ fun StudentAnalyticsScreen(
                     }
                 }
             } else {
+                // Get filtered aggregates based on selected subject
+                val filteredAggregates = if (uiState.selectedSubjectId == null) {
+                    gradeAggregates
+                } else {
+                    gradeAggregates.filter { it.subjectId == uiState.selectedSubjectId }
+                }
+                
                 // Overall Performance Summary
                 item {
                     EnhancedOverallPerformanceCard(
-                        totalSubjects = gradeAggregates.size,
+                        totalSubjects = filteredAggregates.size,
                         averageGrade = uiState.overallAverage,
                         passingSubjects = uiState.passingSubjects,
                         atRiskSubjects = uiState.atRiskSubjects
                     )
                 }
                 
-                // Subject Performance Cards
-                items(gradeAggregates) { gradeAggregate ->
-                    SubjectPerformanceCard(
-                        subjectName = gradeAggregate.subjectName,
-                        currentAverage = gradeAggregate.finalAverage,
-                        prelimGrade = gradeAggregate.prelimGrade,
-                        midtermGrade = gradeAggregate.midtermGrade,
-                        finalGrade = gradeAggregate.finalGrade
-                    )
+                // Subject Performance Cards with Grade Trend Charts
+                items(filteredAggregates) { gradeAggregate ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SubjectPerformanceCard(
+                            subjectName = gradeAggregate.subjectName,
+                            currentAverage = gradeAggregate.finalAverage,
+                            prelimGrade = gradeAggregate.prelimGrade,
+                            midtermGrade = gradeAggregate.midtermGrade,
+                            finalGrade = gradeAggregate.finalGrade
+                        )
+                        
+                        // Grade Trend Chart for this subject
+                        if (gradeAggregate.prelimGrade != null || gradeAggregate.midtermGrade != null || gradeAggregate.finalGrade != null) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.TrendingUp,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2196F3),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "${gradeAggregate.subjectName} - Grade Trend",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF333333)
+                                        )
+                                    }
+                                    
+                                    ChartUtils.GradeTrendChart(
+                                        prelimGrade = gradeAggregate.prelimGrade,
+                                        midtermGrade = gradeAggregate.midtermGrade,
+                                        finalGrade = gradeAggregate.finalGrade,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 
-                // Grade Trend Chart (if we have multiple subjects)
-                if (gradeAggregates.size > 1) {
+                // Overall Performance Distribution Chart
+                if (filteredAggregates.isNotEmpty()) {
+                    item {
+                        PerformanceDistributionChart(
+                            passingCount = uiState.passingSubjects,
+                            atRiskCount = uiState.atRiskSubjects,
+                            failingCount = uiState.failingSubjects
+                        )
+                    }
+                }
+                
+                // Subject Comparison Chart (if we have multiple subjects and showing overall)
+                if (uiState.selectedSubjectId == null && gradeAggregates.size > 1) {
                     item {
                         EnhancedSubjectComparisonChart(
                             subjects = gradeAggregates.map { 
@@ -332,6 +409,133 @@ fun SubjectComparisonChart(
             ChartUtils.SubjectComparisonChart(
                 subjects = subjects,
                 modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+fun PerformanceDistributionChart(
+    passingCount: Int,
+    atRiskCount: Int,
+    failingCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.BarChart,
+                    contentDescription = null,
+                    tint = Color(0xFF2196F3),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Performance Distribution",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333)
+                )
+            }
+            
+            val total = passingCount + atRiskCount + failingCount
+            if (total > 0) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Passing
+                    PerformanceBarItem(
+                        label = "Passing",
+                        count = passingCount,
+                        total = total,
+                        color = Color(0xFF4CAF50)
+                    )
+                    
+                    // At Risk
+                    PerformanceBarItem(
+                        label = "At Risk",
+                        count = atRiskCount,
+                        total = total,
+                        color = Color(0xFFFF9800)
+                    )
+                    
+                    // Failing
+                    PerformanceBarItem(
+                        label = "Failing",
+                        count = failingCount,
+                        total = total,
+                        color = Color(0xFFF44336)
+                    )
+                }
+            } else {
+                Text(
+                    text = "No performance data available",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PerformanceBarItem(
+    label: String,
+    count: Int,
+    total: Int,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val percentage = if (total > 0) (count.toFloat() / total.toFloat()) * 100f else 0f
+    
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF333333)
+            )
+            Text(
+                text = "$count (${String.format("%.1f", percentage)}%)",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF666666)
+            )
+        }
+        
+        // Progress bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(24.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFE0E0E0))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(percentage / 100f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(color)
             )
         }
     }
@@ -471,6 +675,120 @@ fun EnhancedSubjectComparisonChart(
                 subjects = subjects,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnalyticsFilterSection(
+    gradeAggregates: List<com.smartacademictracker.data.model.StudentGradeAggregate>,
+    selectedSubjectId: String?,
+    onSubjectSelected: (String?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FilterList,
+                    contentDescription = null,
+                    tint = Color(0xFF2196F3),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Filter by Subject",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333)
+                )
+            }
+            
+            // Filter Dropdown
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = selectedSubjectId?.let { subjectId ->
+                        gradeAggregates.find { it.subjectId == subjectId }?.subjectName ?: "Overall"
+                    } ?: "Overall",
+                    onValueChange = { },
+                    readOnly = true,
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF2196F3),
+                        unfocusedBorderColor = Color(0xFFE0E0E0),
+                        focusedTextColor = Color(0xFF333333),
+                        unfocusedTextColor = Color(0xFF333333)
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    // Overall option
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Overall",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            onSubjectSelected(null)
+                            expanded = false
+                        },
+                        colors = MenuDefaults.itemColors(
+                            textColor = if (selectedSubjectId == null) Color(0xFF2196F3) else Color(0xFF333333)
+                        )
+                    )
+                    
+                    // Subject options
+                    gradeAggregates.forEach { aggregate ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = aggregate.subjectName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            onClick = {
+                                onSubjectSelected(aggregate.subjectId)
+                                expanded = false
+                            },
+                            colors = MenuDefaults.itemColors(
+                                textColor = if (selectedSubjectId == aggregate.subjectId) Color(0xFF2196F3) else Color(0xFF333333)
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }

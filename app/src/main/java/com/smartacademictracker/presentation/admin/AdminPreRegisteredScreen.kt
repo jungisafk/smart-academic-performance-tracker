@@ -18,10 +18,27 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun AdminPreRegisteredScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToStudentBulkImport: () -> Unit = {},
+    onNavigateToTeacherBulkImport: () -> Unit = {},
     studentsViewModel: AdminPreRegisteredStudentsViewModel = hiltViewModel(),
     teachersViewModel: AdminPreRegisteredTeachersViewModel = hiltViewModel()
 ) {
     var selectedTab by remember { mutableStateOf(0) }
+    var refreshTrigger by remember { mutableStateOf(0) }
+    
+    // Refresh data when refreshTrigger changes (manual refresh button or after bulk import)
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > 0) {
+            studentsViewModel.loadPreRegisteredStudents(null)
+            teachersViewModel.loadPreRegisteredTeachers(null)
+        }
+    }
+    
+    // Initial load when screen is first shown
+    LaunchedEffect(Unit) {
+        studentsViewModel.loadPreRegisteredStudents(null)
+        teachersViewModel.loadPreRegisteredTeachers(null)
+    }
     
     Scaffold(
         topBar = {
@@ -32,10 +49,31 @@ fun AdminPreRegisteredScreen(
                         Icon(Icons.Default.ArrowBack, "Back")
                     }
                 },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            if (selectedTab == 0) {
+                                onNavigateToStudentBulkImport()
+                            } else {
+                                onNavigateToTeacherBulkImport()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Upload, "Bulk Import", tint = Color.White)
+                    }
+                    IconButton(
+                        onClick = {
+                            refreshTrigger++
+                        }
+                    ) {
+                        Icon(Icons.Default.Refresh, "Refresh", tint = Color.White)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF2196F3),
                     titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
                 )
             )
         }
@@ -102,11 +140,13 @@ fun AdminPreRegisteredScreen(
             when (selectedTab) {
                 0 -> AdminPreRegisteredStudentsScreen(
                     onNavigateBack = onNavigateBack,
+                    onNavigateToBulkImport = onNavigateToStudentBulkImport,
                     viewModel = studentsViewModel,
                     showTopBar = false
                 )
                 1 -> AdminPreRegisteredTeachersScreen(
                     onNavigateBack = onNavigateBack,
+                    onNavigateToBulkImport = onNavigateToTeacherBulkImport,
                     viewModel = teachersViewModel,
                     showTopBar = false
                 )

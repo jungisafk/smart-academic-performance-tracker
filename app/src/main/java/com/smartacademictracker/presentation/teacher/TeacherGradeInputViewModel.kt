@@ -16,9 +16,12 @@ import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.utils.GradeCalculationEngine
 import com.smartacademictracker.data.notification.GradeCompletionNotificationService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -50,6 +53,9 @@ class TeacherGradeInputViewModel @Inject constructor(
     
     private val _selectedPeriod = MutableStateFlow(GradePeriod.PRELIM)
     val selectedPeriod: StateFlow<GradePeriod> = _selectedPeriod.asStateFlow()
+    
+    private var currentSubjectId: String? = null
+    private var gradeListenerJob: Job? = null
 
     fun loadSubjectAndStudents(subjectId: String) {
         viewModelScope.launch {
@@ -115,10 +121,29 @@ class TeacherGradeInputViewModel @Inject constructor(
                     }
                 }
 
-                // Load existing grades for this subject
+                // Load existing grades for this subject (initial load)
                 val gradesResult = gradeRepository.getGradesBySubject(subjectId)
                 gradesResult.onSuccess { gradesList ->
                     _grades.value = gradesList
+                }
+                
+                // Cancel any existing grade listener
+                gradeListenerJob?.cancel()
+                
+                // Set up real-time listener for grade updates
+                currentSubjectId = subjectId
+                gradeListenerJob = viewModelScope.launch {
+                    gradeRepository.getGradesBySubjectFlow(subjectId)
+                        .catch { exception ->
+                            println("DEBUG: TeacherGradeInputViewModel - Error in real-time grade listener: ${exception.message}")
+                        }
+                        .collect { grades ->
+                            println("DEBUG: TeacherGradeInputViewModel - Real-time grade update: ${grades.size} grades for subject $subjectId")
+                            // Only update if this is still the current subject
+                            if (currentSubjectId == subjectId) {
+                                _grades.value = grades
+                            }
+                        }
                 }
                 
                 // Load student grade aggregates for this subject
@@ -157,6 +182,11 @@ class TeacherGradeInputViewModel @Inject constructor(
                         return@launch
                     }
                     
+                    // Get current user info
+                    val currentUser = userRepository.getCurrentUser().getOrNull()
+                    val userId = currentUser?.id ?: ""
+                    val userRole = currentUser?.role ?: "TEACHER"
+                    
                     // Get student information
                     val enrollment = _enrollments.value.find { it.studentId == studentId }
                     val studentName = enrollment?.studentName ?: "Unknown Student"
@@ -168,12 +198,28 @@ class TeacherGradeInputViewModel @Inject constructor(
                     
                     val existingGrade = existingGradeResult.getOrNull()
                     
+                    // Check if existing grade is locked
+                    // A grade is considered locked if it exists and hasn't been unlocked by admin
+                    // This handles both new grades with lock fields and old grades without lock fields
+                    if (existingGrade != null && existingGrade.id.isNotEmpty() && userRole != "ADMIN") {
+                        if (existingGrade.unlockedBy == null) {
+                            // Grade exists and is locked (either explicitly locked or old grade without lock field)
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Grade is locked. Please request admin permission to edit."
+                            )
+                            return@launch
+                        }
+                    }
+                    
                     val grade = if (existingGrade != null) {
-                        // Update existing grade
+                        // Update existing grade - preserve all fields except score-related ones
                         existingGrade.copy(
                             score = value,
                             percentage = value, // Since maxScore is 100, percentage equals score
-                            letterGrade = GradeCalculationEngine.calculateLetterGrade(value)
+                            letterGrade = GradeCalculationEngine.calculateLetterGrade(value),
+                            dateRecorded = System.currentTimeMillis() // Update timestamp
+                            // Lock fields will be preserved/updated by repository
                         )
                     } else {
                         // Create new grade
@@ -194,19 +240,46 @@ class TeacherGradeInputViewModel @Inject constructor(
                     }
 
                     val result = if (existingGrade != null) {
-                        gradeRepository.updateGrade(grade)
+                        gradeRepository.updateGrade(grade, userId, userRole)
                     } else {
-                        gradeRepository.createGrade(grade)
+                        gradeRepository.createGrade(grade, userId, userRole)
                     }
+                    // Note: Re-locking is now handled in updateGrade() method
 
                     result.onSuccess {
-                        // Update local grades list
-                        val updatedGrades = if (existingGrade != null) {
-                            _grades.value.map { if (it.id == grade.id) grade else it }
-                        } else {
-                            _grades.value + grade
+                        // Reload all grades from Firestore to get the actual saved state with lock status
+                        // This ensures the UI immediately reflects the locked status after saving
+                        val refreshedGradesResult = gradeRepository.getGradesBySubject(subject.id)
+                        refreshedGradesResult.onSuccess { refreshedGrades ->
+                            _grades.value = refreshedGrades
+                            println("DEBUG: TeacherGradeInputViewModel - Reloaded ${refreshedGrades.size} grades after save")
+                        }.onFailure {
+                            // Fallback: manually update the grade in the list
+                            if (existingGrade != null) {
+                                val updatedGrades = _grades.value.map { 
+                                    if (it.id == grade.id) {
+                                        // Mark as locked after save
+                                        grade.copy(
+                                            isLocked = true,
+                                            lockedAt = System.currentTimeMillis(),
+                                            lockedBy = userId,
+                                            editRequested = false,
+                                            unlockedBy = null,
+                                            unlockedAt = null
+                                        )
+                                    } else it 
+                                }
+                                _grades.value = updatedGrades
+                            } else {
+                                // New grade - add it with lock fields
+                                val lockedGrade = grade.copy(
+                                    isLocked = true,
+                                    lockedAt = System.currentTimeMillis(),
+                                    lockedBy = userId
+                                )
+                                _grades.value = _grades.value + lockedGrade
+                            }
                         }
-                        _grades.value = updatedGrades
                         
                         // Update or create student grade aggregate
                         updateStudentGradeAggregate(studentId, studentName, subject)
@@ -298,6 +371,43 @@ class TeacherGradeInputViewModel @Inject constructor(
 
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+    
+    /**
+     * Request permission to edit a locked grade
+     */
+    fun requestGradeEdit(gradeId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            val result = gradeRepository.requestGradeEdit(gradeId)
+            
+            result.onSuccess {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    successMessage = "Edit permission requested. Waiting for admin approval."
+                )
+                // Refresh grades to show updated status (editRequested flag)
+                _subject.value?.id?.let { 
+                    // Reload the specific grade to get updated editRequested status
+                    val gradeResult = gradeRepository.getGradeById(gradeId)
+                    gradeResult.onSuccess { updatedGrade ->
+                        val updatedGrades = _grades.value.map { 
+                            if (it.id == updatedGrade.id) updatedGrade else it 
+                        }
+                        _grades.value = updatedGrades
+                        println("DEBUG: TeacherGradeInputViewModel - Updated grade ${updatedGrade.id} with editRequested=${updatedGrade.editRequested}")
+                    }
+                    // Also reload all data to ensure consistency
+                    loadSubjectAndStudents(it) 
+                }
+            }.onFailure { exception ->
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = exception.message ?: "Failed to request edit permission"
+                )
+            }
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 package com.smartacademictracker.presentation.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,12 +42,12 @@ fun CollapsibleSubjectCard(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFF9800)),
-                onClick = { isExpanded = !isExpanded }
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFF9800))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { isExpanded = !isExpanded }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween

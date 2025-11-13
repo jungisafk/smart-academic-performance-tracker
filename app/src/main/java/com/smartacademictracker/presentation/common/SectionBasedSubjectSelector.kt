@@ -66,46 +66,9 @@ fun SectionBasedSubjectSelector(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Year Level Selection
-        if (selectedCourseId != null) {
-            Text(
-                text = if (yearLevels.size == 1) "Your Year Level" else "Select Year Level",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            val filteredYearLevels = yearLevels.filter { it.courseId == selectedCourseId }
-            
-            // Add scroll indicator text for year levels
-            if (filteredYearLevels.size > 3) {
-                Text(
-                    text = "📜 Scroll to see more year levels",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-            }
-            
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(filteredYearLevels) { yearLevel ->
-                    YearLevelSelectionCard(
-                        yearLevel = yearLevel,
-                        isSelected = yearLevel.id == selectedYearLevelId,
-                        onClick = { onYearLevelSelected(if (yearLevel.id == selectedYearLevelId) null else yearLevel.id) }
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        
         // Subject Selection with Sections
+        // Note: Year level selection is removed - students can only see subjects of their year level
+        // The selectedYearLevelId should be auto-selected by the ViewModel
         if (selectedCourseId != null && selectedYearLevelId != null) {
             Text(
                 text = "Select Subject and Section",
@@ -114,8 +77,27 @@ fun SectionBasedSubjectSelector(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             
-            val filteredSubjects = subjects.filter { 
-                it.courseId == selectedCourseId && it.yearLevelId == selectedYearLevelId 
+            // Get the selected year level to get its level number for matching minor subjects
+            val selectedYearLevel = yearLevels.find { it.id == selectedYearLevelId }
+            val selectedYearLevelNumber = selectedYearLevel?.level
+            
+            // Filter subjects:
+            // - Major subjects: must match both courseId AND yearLevelId
+            // - Minor subjects: must match yearLevelId (regardless of courseId)
+            //   OR match by level number if yearLevelId is different but level number is same
+            val filteredSubjects = subjects.filter { subject ->
+                val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                val subjectYearLevel = yearLevels.find { it.id == subject.yearLevelId }
+                val subjectYearLevelNumber = subjectYearLevel?.level
+                
+                if (isMinor) {
+                    // For minor subjects: match by yearLevelId OR by level number
+                    subject.yearLevelId == selectedYearLevelId || 
+                    (selectedYearLevelNumber != null && subjectYearLevelNumber == selectedYearLevelNumber)
+                } else {
+                    // For major subjects: match by both courseId AND yearLevelId
+                    subject.courseId == selectedCourseId && subject.yearLevelId == selectedYearLevelId
+                }
             }
             
             if (filteredSubjects.isEmpty()) {
@@ -314,14 +296,31 @@ private fun SubjectWithSectionsCard(
                 
                 // Filter sections to only show those with assigned teachers
                 // Only show sections that have active section assignments with teachers
+                val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                
+                // Debug: Log all section assignments for this subject
+                val subjectAssignments = sectionAssignments.filter { it.subjectId == subject.id }
+                println("DEBUG: SectionBasedSubjectSelector - Subject ${subject.name} (${subject.code}) - Type: ${if (isMinor) "MINOR" else "MAJOR"}")
+                println("DEBUG: SectionBasedSubjectSelector -   Subject sections: ${subject.sections}")
+                println("DEBUG: SectionBasedSubjectSelector -   Found ${subjectAssignments.size} section assignments for this subject")
+                subjectAssignments.forEach { assignment ->
+                    println("DEBUG: SectionBasedSubjectSelector -     Assignment: Section=${assignment.sectionName}, Teacher=${assignment.teacherName} (${assignment.teacherId}), Status=${assignment.status}, CourseId=${assignment.courseId}")
+                }
+                
                 val sectionsWithTeachers = subject.sections.filter { sectionName ->
-                    sectionAssignments.any { assignment ->
+                    val hasAssignment = sectionAssignments.any { assignment ->
                         assignment.subjectId == subject.id && 
                         assignment.sectionName == sectionName &&
                         assignment.teacherId.isNotEmpty() &&
                         assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
                     }
+                    if (!hasAssignment) {
+                        println("DEBUG: SectionBasedSubjectSelector -   Section $sectionName has no active assignment with teacher")
+                    }
+                    hasAssignment
                 }
+                
+                println("DEBUG: SectionBasedSubjectSelector -   Sections with teachers: $sectionsWithTeachers")
                 
                 if (sectionsWithTeachers.isEmpty()) {
                     Text(
