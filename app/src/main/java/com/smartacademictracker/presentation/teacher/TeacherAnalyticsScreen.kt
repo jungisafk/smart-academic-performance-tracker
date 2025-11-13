@@ -1,18 +1,28 @@
 package com.smartacademictracker.presentation.teacher
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.presentation.common.ChartUtils
@@ -30,86 +40,181 @@ fun TeacherAnalyticsScreen(
         viewModel.loadAnalyticsData()
     }
     
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color.White)
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+            // Header Section
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                        Text(
+                            text = "Class Analytics",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333)
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.refreshData() },
+                        enabled = !uiState.isLoading
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
             }
-            Text(
-                text = "Class Analytics",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = { viewModel.refreshData() },
-                enabled = !uiState.isLoading
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // Filter Section
-        AnalyticsFilterSection(
-            selectedYearLevel = uiState.selectedYearLevel,
-            selectedCourse = uiState.selectedCourse,
-            selectedSubject = uiState.selectedSubject,
-            selectedSection = uiState.selectedSection,
-            yearLevels = uiState.availableYearLevels,
-            courses = uiState.availableCourses,
-            subjects = uiState.availableSubjects,
-            sections = uiState.availableSections,
-            onYearLevelChanged = { viewModel.updateYearLevelFilter(it) },
-            onCourseChanged = { viewModel.updateCourseFilter(it) },
-            onSubjectChanged = { viewModel.updateSubjectFilter(it) },
-            onSectionChanged = { viewModel.updateSectionFilter(it) },
-            onClearFilters = { viewModel.clearAllFilters() }
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (uiState.error != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Text(
-                    text = uiState.error ?: "Unknown error",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
+            
+            // Filter Section
+            item {
+                AnalyticsFilterSection(
+                    selectedYearLevel = uiState.selectedYearLevel,
+                    selectedCourse = uiState.selectedCourse,
+                    selectedSubject = uiState.selectedSubject,
+                    selectedSection = uiState.selectedSection,
+                    yearLevels = uiState.availableYearLevels,
+                    courses = uiState.availableCourses,
+                    subjects = uiState.availableSubjects,
+                    sections = uiState.availableSections,
+                    onYearLevelChanged = { viewModel.updateYearLevelFilter(it) },
+                    onCourseChanged = { viewModel.updateCourseFilter(it) },
+                    onSubjectChanged = { viewModel.updateSubjectFilter(it) },
+                    onSectionChanged = { viewModel.updateSectionFilter(it) },
+                    onClearFilters = { viewModel.clearAllFilters() }
                 )
             }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Overall Class Performance
+            
+            if (uiState.isLoading) {
                 item {
-                    OverallClassPerformanceCard(
-                        totalStudents = uiState.totalStudents,
-                        averageGrade = uiState.classAverage,
-                        passingStudents = uiState.passingStudents,
-                        atRiskStudents = uiState.atRiskStudents
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (uiState.error != null) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Text(
+                            text = uiState.error ?: "Unknown error",
+                            color = Color(0xFFD32F2F),
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            } else {
+                // Summary Card
+                if (classPerformance.isNotEmpty() || uiState.totalStudents > 0) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "Class Performance Overview",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    if (uiState.classAverage != null) {
+                                        Text(
+                                            text = "Average Grade: ${String.format("%.2f", uiState.classAverage)}",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "Passing Rate: ${String.format("%.1f", (uiState.passingStudents.toDouble() / uiState.totalStudents * 100))}%",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "No grade data available yet",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = Color.White.copy(alpha = 0.9f)
+                                        )
+                                    }
+                                }
+                                
+                                // Analytics Icon
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFFC107)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Analytics,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Performance Statistics
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                ClassStatItem("Total Students", uiState.totalStudents.toString())
+                                ClassStatItem("Passing", uiState.passingStudents.toString())
+                                ClassStatItem("At Risk", uiState.atRiskStudents.toString())
+                            }
+                        }
+                    }
                 }
                 
                 // Subject Performance Overview
@@ -123,104 +228,54 @@ fun TeacherAnalyticsScreen(
                             gradeDistribution = subjectPerformance.gradeDistribution
                         )
                     }
+                    
+                    // Class Performance Comparison Chart
+                    if (classPerformance.size > 1) {
+                        item {
+                            ClassPerformanceComparisonChart(
+                                subjects = classPerformance.map { 
+                                    it.subjectName to it.averageGrade 
+                                }
+                            )
+                        }
+                    }
                 } else {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                Icon(
+                                    Icons.Default.Analytics,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = Color(0xFF2196F3)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
                                 Text(
                                     text = "No Performance Data Available",
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF333333)
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = "Start inputting grades to see analytics",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = Color(0xFF666666)
                                 )
                             }
                         }
                     }
                 }
-                
-                // Class Performance Comparison Chart
-                if (classPerformance.size > 1) {
-                    item {
-                        ClassPerformanceComparisonChart(
-                            subjects = classPerformance.map { 
-                                it.subjectName to it.averageGrade 
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun OverallClassPerformanceCard(
-    totalStudents: Int,
-    averageGrade: Double?,
-    passingStudents: Int,
-    atRiskStudents: Int,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Class Performance Overview",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            
-            if (averageGrade != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Class Average: ${String.format("%.1f", averageGrade)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Passing Rate: ${String.format("%.1f", (passingStudents.toDouble() / totalStudents * 100))}%",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            } else {
-                Text(
-                    text = "No grade data available yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            // Performance Statistics
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                ClassStatItem("Total Students", totalStudents.toString())
-                ClassStatItem("Passing", passingStudents.toString())
-                ClassStatItem("At Risk", atRiskStudents.toString())
             }
         }
     }
@@ -240,12 +295,12 @@ private fun ClassStatItem(
             text = value,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            color = Color(0xFF2196F3)
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color(0xFF666666)
         )
     }
 }
@@ -261,7 +316,9 @@ fun SubjectPerformanceOverviewCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -270,7 +327,8 @@ fun SubjectPerformanceOverviewCard(
             Text(
                 text = subjectName,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF333333)
             )
             
             Row(
@@ -278,14 +336,16 @@ fun SubjectPerformanceOverviewCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Average: ${String.format("%.1f", averageGrade)}",
+                    text = "Average: ${String.format("%.2f", averageGrade)}",
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF333333)
                 )
                 Text(
                     text = "Passing Rate: ${String.format("%.1f", passingRate)}%",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = Color(0xFF2196F3),
+                    fontWeight = FontWeight.Medium
                 )
             }
             
@@ -293,7 +353,8 @@ fun SubjectPerformanceOverviewCard(
             Text(
                 text = "Grade Distribution",
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF666666)
             )
             
             Row(
@@ -322,17 +383,18 @@ private fun GradeDistributionItem(
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF333333)
         )
         Text(
             text = grade,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color(0xFF666666)
         )
         Text(
             text = "${String.format("%.1f", (count.toDouble() / totalStudents * 100))}%",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary
+            color = Color(0xFF2196F3)
         )
     }
 }
@@ -344,17 +406,31 @@ fun ClassPerformanceComparisonChart(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Subject Performance Comparison",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Analytics,
+                    contentDescription = null,
+                    tint = Color(0xFF2196F3),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Subject Performance Comparison",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333333)
+                )
+            }
             
             ChartUtils.SubjectComparisonChart(
                 subjects = subjects,
@@ -388,12 +464,12 @@ fun AnalyticsFilterSection(
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -402,24 +478,29 @@ fun AnalyticsFilterSection(
                 Icon(
                     Icons.Default.FilterList,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    modifier = Modifier.size(18.dp),
+                    tint = Color(0xFF2196F3)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Filter Analytics",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = Color(0xFF333333)
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 TextButton(
-                    onClick = onClearFilters
+                    onClick = onClearFilters,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text("Clear All")
+                    Text(
+                        "Clear All",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             // Filter Row 1: Year Level and Course
             Row(
@@ -432,8 +513,8 @@ fun AnalyticsFilterSection(
                 ) {
                     Text(
                         text = "Year Level",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF666666)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     ExposedDropdownMenuBox(
@@ -449,19 +530,40 @@ fun AnalyticsFilterSection(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF2196F3),
+                                unfocusedBorderColor = Color(0xFFE0E0E0)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
                         )
                         ExposedDropdownMenu(
                             expanded = expandedYearLevel,
-                            onDismissRequest = { expandedYearLevel = false }
+                            onDismissRequest = { expandedYearLevel = false },
+                            modifier = Modifier.background(Color.White)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("All Year Levels") },
+                                text = { 
+                                    Text(
+                                        "All Year Levels",
+                                        color = Color(0xFF333333),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    ) 
+                                },
                                 onClick = { onYearLevelChanged(null) }
                             )
                             yearLevels.forEach { yearLevel ->
                                 DropdownMenuItem(
-                                    text = { Text(yearLevel) },
+                                    text = { 
+                                        Text(
+                                            yearLevel,
+                                            color = Color(0xFF333333),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        ) 
+                                    },
                                     onClick = { onYearLevelChanged(yearLevel) }
                                 )
                             }
@@ -475,8 +577,8 @@ fun AnalyticsFilterSection(
                 ) {
                     Text(
                         text = "Course",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF666666)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     ExposedDropdownMenuBox(
@@ -492,19 +594,40 @@ fun AnalyticsFilterSection(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF2196F3),
+                                unfocusedBorderColor = Color(0xFFE0E0E0)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
                         )
                         ExposedDropdownMenu(
                             expanded = expandedCourse,
-                            onDismissRequest = { expandedCourse = false }
+                            onDismissRequest = { expandedCourse = false },
+                            modifier = Modifier.background(Color.White)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("All Courses") },
+                                text = { 
+                                    Text(
+                                        "All Courses",
+                                        color = Color(0xFF333333),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    ) 
+                                },
                                 onClick = { onCourseChanged(null) }
                             )
                             courses.forEach { course ->
                                 DropdownMenuItem(
-                                    text = { Text(course) },
+                                    text = { 
+                                        Text(
+                                            course,
+                                            color = Color(0xFF333333),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        ) 
+                                    },
                                     onClick = { onCourseChanged(course) }
                                 )
                             }
@@ -526,8 +649,8 @@ fun AnalyticsFilterSection(
                 ) {
                     Text(
                         text = "Subject",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF666666)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     ExposedDropdownMenuBox(
@@ -543,19 +666,40 @@ fun AnalyticsFilterSection(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF2196F3),
+                                unfocusedBorderColor = Color(0xFFE0E0E0)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
                         )
                         ExposedDropdownMenu(
                             expanded = expandedSubject,
-                            onDismissRequest = { expandedSubject = false }
+                            onDismissRequest = { expandedSubject = false },
+                            modifier = Modifier.background(Color.White)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("All Subjects") },
+                                text = { 
+                                    Text(
+                                        "All Subjects",
+                                        color = Color(0xFF333333),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    ) 
+                                },
                                 onClick = { onSubjectChanged(null) }
                             )
                             subjects.forEach { subject ->
                                 DropdownMenuItem(
-                                    text = { Text(subject) },
+                                    text = { 
+                                        Text(
+                                            subject,
+                                            color = Color(0xFF333333),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        ) 
+                                    },
                                     onClick = { onSubjectChanged(subject) }
                                 )
                             }
@@ -569,8 +713,8 @@ fun AnalyticsFilterSection(
                 ) {
                     Text(
                         text = "Section",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF666666)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     ExposedDropdownMenuBox(
@@ -586,19 +730,40 @@ fun AnalyticsFilterSection(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF2196F3),
+                                unfocusedBorderColor = Color(0xFFE0E0E0)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
                         )
                         ExposedDropdownMenu(
                             expanded = expandedSection,
-                            onDismissRequest = { expandedSection = false }
+                            onDismissRequest = { expandedSection = false },
+                            modifier = Modifier.background(Color.White)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("All Sections") },
+                                text = { 
+                                    Text(
+                                        "All Sections",
+                                        color = Color(0xFF333333),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    ) 
+                                },
                                 onClick = { onSectionChanged(null) }
                             )
                             sections.forEach { section ->
                                 DropdownMenuItem(
-                                    text = { Text(section) },
+                                    text = { 
+                                        Text(
+                                            section,
+                                            color = Color(0xFF333333),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        ) 
+                                    },
                                     onClick = { onSectionChanged(section) }
                                 )
                             }

@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Subject
@@ -112,14 +113,14 @@ fun TeacherSubjectsScreen(
             if (!uiState.isLoading && (mySubjects.isNotEmpty() || applications.isNotEmpty() || availableSubjects.isNotEmpty())) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(
@@ -127,27 +128,32 @@ fun TeacherSubjectsScreen(
                         ) {
                             Text(
                                 text = "Subject Management",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                            Text(
-                                text = "${mySubjects.size} Assigned • ${applications.size} Applied • ${availableSubjects.size} Available",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Manage your subject assignments and applications",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.padding(top = 4.dp)
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = buildString {
+                                    append("${mySubjects.size} Assigned")
+                                    append(" • ")
+                                    append("${applications.size} Applied")
+                                    append(" • ")
+                                    append("${availableSubjects.size} Available")
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp)
                             )
                         }
                         
                         // Subject Icon
                         Box(
                             modifier = Modifier
-                                .size(60.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFFFFC107)),
                             contentAlignment = Alignment.Center
@@ -156,13 +162,13 @@ fun TeacherSubjectsScreen(
                                 imageVector = Icons.Default.MenuBook,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // Loading State
@@ -727,6 +733,14 @@ fun AvailableSubjectCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (subject.yearLevelName.isNotBlank()) {
+                        Text(
+                            text = "Year Level: ${subject.yearLevelName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                     if (subject.sections.isNotEmpty()) {
                         Text(
                             text = "Sections: ${subject.sections.joinToString(", ")}",

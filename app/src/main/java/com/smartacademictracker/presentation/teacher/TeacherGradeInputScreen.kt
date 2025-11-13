@@ -3,24 +3,14 @@ package com.smartacademictracker.presentation.teacher
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,7 +21,6 @@ import com.smartacademictracker.data.model.Enrollment
 import com.smartacademictracker.data.model.Grade
 import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.model.StudentGradeAggregate
-import com.smartacademictracker.data.model.GradeStatus
 import com.smartacademictracker.data.utils.GradeCalculationEngine
 import com.smartacademictracker.presentation.common.EmptyState
 
@@ -47,251 +36,166 @@ fun TeacherGradeInputScreen(
     val enrollments by viewModel.enrollments.collectAsState()
     val grades by viewModel.grades.collectAsState()
     val gradeAggregates by viewModel.gradeAggregates.collectAsState()
-    val selectedPeriod by viewModel.selectedPeriod.collectAsState()
+    var selectedStudentIndex by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(subjectId) {
         viewModel.loadSubjectAndStudents(subjectId)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = subject?.name ?: "Loading...",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                subject?.let { subject ->
-                    Text(
-                        text = subject.code,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Error State
-        if (uiState.error != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Error,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
                         Text(
-                            text = "Error",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            text = subject?.name ?: "Loading...",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
+                        subject?.let {
+                            Text(
+                                text = it.code,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = uiState.error ?: "Unknown error occurred",
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { viewModel.clearError() }
-                    ) {
-                        Text("Dismiss")
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
-            }
+            )
         }
-        
-        // Success Message
-        if (uiState.successMessage != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Success",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = uiState.successMessage ?: "",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { viewModel.clearSuccessMessage() }
-                    ) {
-                        Text("Dismiss")
-                    }
-                }
-            }
-        }
-
-        // Loading State
+    ) { paddingValues ->
         if (uiState.isLoading) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
             }
-        } else {
-            // Grade Period Selection
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        } else if (uiState.error != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
                     Text(
-                        text = "Select Grade Period",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        text = uiState.error ?: "Unknown error",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(16.dp)
                     )
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        GradePeriod.values().forEach { period ->
-                            FilterChip(
-                                onClick = { viewModel.setSelectedPeriod(period) },
-                                label = { 
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = period.displayName,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "${(period.weight * 100).toInt()}%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (selectedPeriod == period) {
-                                                MaterialTheme.colorScheme.onSecondaryContainer
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            }
-                                        )
-                                    }
-                                },
-                                selected = selectedPeriod == period,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Students List
-            if (enrollments.isEmpty()) {
+        } else if (enrollments.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
                 EmptyState(
                     title = "No students enrolled",
                     message = "There are no students enrolled in this subject yet.",
                     icon = Icons.Default.Person
                 )
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                // Header with column labels
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
                 ) {
-                    items(enrollments) { enrollment ->
-                        StudentGradeInputCard(
-                            enrollment = enrollment,
-                            selectedPeriod = selectedPeriod,
-                            existingGrade = viewModel.getGradeForStudentAndPeriod(
-                                enrollment.studentId, 
-                                selectedPeriod
-                            ),
-                            gradeAggregate = viewModel.getStudentGradeAggregate(enrollment.studentId),
-                            allGrades = grades.filter { it.studentId == enrollment.studentId },
-                            isLoading = uiState.savingGrades.contains(enrollment.studentId),
-                            onGradeChange = { studentId, gradeValue ->
-                                viewModel.updateGradeForPeriod(studentId, selectedPeriod, gradeValue)
-                            }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Student Name",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "Average",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.width(80.dp)
+                        )
+                    }
+                }
+
+                // Students List
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    itemsIndexed(enrollments) { index, enrollment ->
+                        val aggregate = gradeAggregates.find { it.studentId == enrollment.studentId }
+                        val averageGrade = aggregate?.finalAverage?.let { 
+                            GradeCalculationEngine.calculateLetterGrade(it)
+                        } ?: "INC"
+                        
+                        StudentGradeRow(
+                            studentName = enrollment.studentName,
+                            averageGrade = averageGrade,
+                            onClick = { selectedStudentIndex = index }
                         )
                     }
                 }
             }
         }
 
-        // Error Message
-        uiState.error?.let { error ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        }
-
-        // Success Message
-        uiState.successMessage?.let { message ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Text(
-                    text = message,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(16.dp)
+        // Student Grade Input Dialog
+        selectedStudentIndex?.let { index ->
+            val enrollment = enrollments.getOrNull(index)
+            if (enrollment != null) {
+                val studentGrades = grades.filter { it.studentId == enrollment.studentId }
+                val aggregate = gradeAggregates.find { it.studentId == enrollment.studentId }
+                
+                StudentGradeInputDialog(
+                    enrollment = enrollment,
+                    studentGrades = studentGrades,
+                    aggregate = aggregate,
+                    currentIndex = index,
+                    totalStudents = enrollments.size,
+                    onDismiss = { selectedStudentIndex = null },
+                    onNavigatePrevious = {
+                        if (index > 0) {
+                            selectedStudentIndex = index - 1
+                        }
+                    },
+                    onNavigateNext = {
+                        if (index < enrollments.size - 1) {
+                            selectedStudentIndex = index + 1
+                        }
+                    },
+                    onSaveGrade = { period, grade ->
+                        viewModel.updateGradeForPeriod(enrollment.studentId, period, grade)
+                    }
                 )
             }
         }
@@ -299,32 +203,76 @@ fun TeacherGradeInputScreen(
 }
 
 @Composable
-fun StudentGradeInputCard(
-    enrollment: Enrollment,
-    selectedPeriod: GradePeriod,
-    existingGrade: Grade?,
-    gradeAggregate: StudentGradeAggregate?,
-    allGrades: List<Grade>,
-    isLoading: Boolean,
-    onGradeChange: (String, Double) -> Unit
+fun StudentGradeRow(
+    studentName: String,
+    averageGrade: String,
+    onClick: () -> Unit
 ) {
-    var gradeValue by remember(existingGrade) { 
-        mutableStateOf(existingGrade?.score?.toString() ?: "") 
-    }
-    var isEditing by remember { mutableStateOf(false) }
-
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Student Header with Status
+            Text(
+                text = studentName,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = averageGrade,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    averageGrade == "INC" -> Color(0xFF9E9E9E)
+                    averageGrade.toDoubleOrNull()?.let { it <= 3.0 } == true -> Color(0xFF4CAF50)
+                    averageGrade.toDoubleOrNull()?.let { it <= 3.5 } == true -> Color(0xFFFF9800)
+                    else -> Color(0xFFF44336)
+                },
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(80.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun StudentGradeInputDialog(
+    enrollment: Enrollment,
+    studentGrades: List<Grade>,
+    aggregate: StudentGradeAggregate?,
+    currentIndex: Int,
+    totalStudents: Int,
+    onDismiss: () -> Unit,
+    onNavigatePrevious: () -> Unit,
+    onNavigateNext: () -> Unit,
+    onSaveGrade: (GradePeriod, Double) -> Unit
+) {
+    var prelimGrade by remember { 
+        mutableStateOf(studentGrades.find { it.gradePeriod == GradePeriod.PRELIM }?.score?.toString() ?: "")
+    }
+    var midtermGrade by remember { 
+        mutableStateOf(studentGrades.find { it.gradePeriod == GradePeriod.MIDTERM }?.score?.toString() ?: "")
+    }
+    var finalGrade by remember { 
+        mutableStateOf(studentGrades.find { it.gradePeriod == GradePeriod.FINAL }?.score?.toString() ?: "")
+    }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -333,286 +281,223 @@ fun StudentGradeInputCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Student ID: ${enrollment.studentId}",
+                        text = "Student ${currentIndex + 1} of $totalStudents",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
-                // Grade Status Indicator
-                gradeAggregate?.let { aggregate ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = when (aggregate.status) {
-                                GradeStatus.PASSING -> Icons.Default.CheckCircle
-                                GradeStatus.AT_RISK -> Icons.Default.Warning
-                                GradeStatus.FAILING -> Icons.Default.Error
-                                GradeStatus.INCOMPLETE -> Icons.Default.Schedule
-                            },
-                            contentDescription = aggregate.status.displayName,
-                            tint = when (aggregate.status) {
-                                GradeStatus.PASSING -> Color(0xFF4CAF50)
-                                GradeStatus.AT_RISK -> Color(0xFFFF9800)
-                                GradeStatus.FAILING -> Color(0xFFF44336)
-                                GradeStatus.INCOMPLETE -> Color(0xFF9E9E9E)
-                            },
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = aggregate.status.displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = when (aggregate.status) {
-                                GradeStatus.PASSING -> Color(0xFF4CAF50)
-                                GradeStatus.AT_RISK -> Color(0xFFFF9800)
-                                GradeStatus.FAILING -> Color(0xFFF44336)
-                                GradeStatus.INCOMPLETE -> Color(0xFF9E9E9E)
-                            }
-                        )
-                    }
-                }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // All Period Grades Overview
-            Row(
+        },
+        text = {
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                GradePeriod.values().forEach { period ->
-                    val periodGrade = allGrades.find { it.gradePeriod == period }
-                    val isCurrentPeriod = period == selectedPeriod
-                    
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        colors = CardDefaults.cardColors(
-                            containerColor = when {
-                                isCurrentPeriod && periodGrade != null -> MaterialTheme.colorScheme.primaryContainer
-                                isCurrentPeriod -> MaterialTheme.colorScheme.secondaryContainer
-                                periodGrade != null -> MaterialTheme.colorScheme.surfaceVariant
-                                else -> MaterialTheme.colorScheme.surface
-                            }
-                        ),
-                        border = if (isCurrentPeriod) {
-                            androidx.compose.foundation.BorderStroke(
-                                2.dp, 
-                                MaterialTheme.colorScheme.primary
-                            )
-                        } else null
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                // Prelim Grade
+                OutlinedTextField(
+                    value = prelimGrade,
+                    onValueChange = { prelimGrade = it },
+                    label = { Text("Preliminary (30%)") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = {
+                        prelimGrade.toDoubleOrNull()?.let { grade ->
                             Text(
-                                text = period.displayName,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isCurrentPeriod) FontWeight.Bold else FontWeight.Normal,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "${(period.weight * 100).toInt()}%",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "1-5 Scale: ${GradeCalculationEngine.calculateLetterGrade(grade)}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            
-                            if (periodGrade != null) {
-                                Text(
-                                    text = GradeCalculationEngine.formatGrade(periodGrade.score, 1),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isCurrentPeriod) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .background(
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "—",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
                         }
                     }
-                    
-                    if (period != GradePeriod.FINAL) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Current Period Grade Input
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Enter ${selectedPeriod.displayName} Grade (${(selectedPeriod.weight * 100).toInt()}%)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = gradeValue,
-                            onValueChange = { 
-                                gradeValue = it
-                                isEditing = true
-                            },
-                            label = { Text("Grade (0-100)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            supportingText = {
-                                val value = gradeValue.toDoubleOrNull()
-                                when {
-                                    value == null && gradeValue.isNotBlank() -> {
-                                        Text(
-                                            "Please enter a valid number",
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                    value != null && (value < 0 || value > 100) -> {
-                                        Text(
-                                            "Grade must be between 0 and 100",
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                    value != null -> {
-                                        Text(
-                                            "Letter Grade: ${GradeCalculationEngine.calculateLetterGrade(value)}",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            isError = gradeValue.isNotBlank() && 
-                                     (gradeValue.toDoubleOrNull() == null || 
-                                      gradeValue.toDoubleOrNull()?.let { it < 0 || it > 100 } == true)
-                        )
-                        
-                        Spacer(modifier = Modifier.width(12.dp))
-                        
-                        Button(
-                            onClick = {
-                                val value = gradeValue.toDoubleOrNull()
-                                if (value != null && value >= 0 && value <= 100) {
-                                    onGradeChange(enrollment.studentId, value)
-                                    isEditing = false
-                                }
-                            },
-                            enabled = !isLoading && isEditing && 
-                                     gradeValue.toDoubleOrNull()?.let { it in 0.0..100.0 } == true
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.Save,
-                                    contentDescription = "Save Grade",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (existingGrade != null) "Update" else "Save")
+                )
+
+                // Midterm Grade
+                OutlinedTextField(
+                    value = midtermGrade,
+                    onValueChange = { midtermGrade = it },
+                    label = { Text("Midterm (30%)") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = {
+                        midtermGrade.toDoubleOrNull()?.let { grade ->
+                            Text(
+                                text = "1-5 Scale: ${GradeCalculationEngine.calculateLetterGrade(grade)}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
+                )
+
+                // Final Grade
+                OutlinedTextField(
+                    value = finalGrade,
+                    onValueChange = { finalGrade = it },
+                    label = { Text("Final (40%)") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = {
+                        finalGrade.toDoubleOrNull()?.let { grade ->
+                            Text(
+                                text = "1-5 Scale: ${GradeCalculationEngine.calculateLetterGrade(grade)}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                )
+
+                // Calculated Average
+                val calculatedAverage = aggregate?.finalAverage?.let {
+                    GradeCalculationEngine.calculateLetterGrade(it)
+                } ?: run {
+                    val prelim = prelimGrade.toDoubleOrNull()
+                    val midterm = midtermGrade.toDoubleOrNull()
+                    val final = finalGrade.toDoubleOrNull()
+                    if (prelim != null && midterm != null && final != null) {
+                        val avg = GradeCalculationEngine.calculateFinalAverage(prelim, midterm, final)
+                        avg?.let { GradeCalculationEngine.calculateLetterGrade(it) } ?: "INC"
+                    } else "INC"
                 }
-            }
-            
-            // Final Average Display (if available)
-            gradeAggregate?.finalAverage?.let { finalAverage ->
-                Spacer(modifier = Modifier.height(12.dp))
+
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = when (gradeAggregate.status) {
-                            GradeStatus.PASSING -> Color(0xFF4CAF50).copy(alpha = 0.1f)
-                            GradeStatus.AT_RISK -> Color(0xFFFF9800).copy(alpha = 0.1f)
-                            GradeStatus.FAILING -> Color(0xFFF44336).copy(alpha = 0.1f)
-                            GradeStatus.INCOMPLETE -> Color(0xFF9E9E9E).copy(alpha = 0.1f)
-                        }
-                    )
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Final Average:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = GradeCalculationEngine.formatGrade(finalAverage),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = when (gradeAggregate.status) {
-                                    GradeStatus.PASSING -> Color(0xFF4CAF50)
-                                    GradeStatus.AT_RISK -> Color(0xFFFF9800)
-                                    GradeStatus.FAILING -> Color(0xFFF44336)
-                                    GradeStatus.INCOMPLETE -> Color(0xFF9E9E9E)
-                                }
-                            )
-                            Surface(
-                                color = when (gradeAggregate.status) {
-                                    GradeStatus.PASSING -> Color(0xFF4CAF50)
-                                    GradeStatus.AT_RISK -> Color(0xFFFF9800)
-                                    GradeStatus.FAILING -> Color(0xFFF44336)
-                                    GradeStatus.INCOMPLETE -> Color(0xFF9E9E9E)
-                                },
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = gradeAggregate.letterGrade,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                        Text(
+                            text = calculatedAverage,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                calculatedAverage == "INC" -> Color(0xFF9E9E9E)
+                                calculatedAverage.toDoubleOrNull()?.let { it <= 3.0 } == true -> Color(0xFF4CAF50)
+                                calculatedAverage.toDoubleOrNull()?.let { it <= 3.5 } == true -> Color(0xFFFF9800)
+                                else -> Color(0xFFF44336)
                             }
-                        }
+                        )
                     }
                 }
             }
+        },
+        confirmButton = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Previous Button
+                if (currentIndex > 0) {
+                    IconButton(onClick = onNavigatePrevious) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Previous")
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+
+                // Save Button
+                Button(
+                    onClick = {
+                        showConfirmDialog = true
+                    },
+                    enabled = prelimGrade.toDoubleOrNull()?.let { it in 0.0..100.0 } == true ||
+                             midtermGrade.toDoubleOrNull()?.let { it in 0.0..100.0 } == true ||
+                             finalGrade.toDoubleOrNull()?.let { it in 0.0..100.0 } == true
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save")
+                }
+
+                // Next Button
+                if (currentIndex < totalStudents - 1) {
+                    IconButton(onClick = onNavigateNext) {
+                        Icon(Icons.Default.ArrowForward, contentDescription = "Next")
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
         }
+    )
+    
+    // Confirmation Dialog
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = {
+                Text(
+                    text = "Confirm Save",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Are you sure you want to save the grades for ${enrollment.studentName}?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (prelimGrade.toDoubleOrNull() != null) {
+                        Text(
+                            text = "Preliminary: ${prelimGrade}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (midtermGrade.toDoubleOrNull() != null) {
+                        Text(
+                            text = "Midterm: ${midtermGrade}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (finalGrade.toDoubleOrNull() != null) {
+                        Text(
+                            text = "Final: ${finalGrade}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        prelimGrade.toDoubleOrNull()?.let { 
+                            onSaveGrade(GradePeriod.PRELIM, it)
+                        }
+                        midtermGrade.toDoubleOrNull()?.let { 
+                            onSaveGrade(GradePeriod.MIDTERM, it)
+                        }
+                        finalGrade.toDoubleOrNull()?.let { 
+                            onSaveGrade(GradePeriod.FINAL, it)
+                        }
+                        showConfirmDialog = false
+                    }
+                ) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
-

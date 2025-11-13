@@ -43,10 +43,9 @@ fun AdminDashboardScreen(
     onNavigateToUsers: () -> Unit = {},
     onNavigateToGradeMonitoring: () -> Unit = {},
     onNavigateToAcademicPeriods: () -> Unit = {},
-    onNavigateToAcademicPeriodData: () -> Unit = {},
-    onNavigateToTeacherSectionAssignment: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
+    onNavigateToPreRegistered: () -> Unit = {},
     viewModel: AdminDashboardViewModel = hiltViewModel(),
     notificationViewModel: NotificationViewModel = hiltViewModel()
 ) {
@@ -64,8 +63,28 @@ fun AdminDashboardScreen(
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        // Show error if present, but don't block UI
-        if (uiState.error != null && !uiState.isLoading) {
+        // Show loading state when data is loading
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Text(
+                        text = "Loading dashboard data...",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
+        } else if (uiState.error != null) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -214,7 +233,7 @@ fun AdminDashboardScreen(
                         // Calculate responsive height for the grid
                         val configuration = LocalConfiguration.current
                         val screenWidth = configuration.screenWidthDp.dp
-                        val buttonCount = 8 // Number of buttons in the grid
+                        val buttonCount = 8 // Updated: Added Profile button to grid
                         val columns = 2
                         val rows = (buttonCount + columns - 1) / columns // Ceiling division
                         val horizontalPadding = 16.dp * 2 // Left and right padding
@@ -232,17 +251,17 @@ fun AdminDashboardScreen(
                             modifier = Modifier.height(gridHeight)
                         ) {
                             items(listOf(
-                                QuickActionData("Teacher Applications", onNavigateToApplications, Icons.Default.PersonAdd, true),
+                                QuickActionData("Teacher Management", onNavigateToApplications, Icons.Default.PersonAdd, true),
                                 QuickActionData("Academic Structure", onNavigateToHierarchicalAcademicManagement, Icons.Default.MenuBook, false),
                                 QuickActionData("Manage Users", onNavigateToUsers, Icons.Default.Person, false),
                                 QuickActionData("Grade Monitoring", onNavigateToGradeMonitoring, Icons.Default.BarChart, false),
                                 QuickActionData("Academic Periods", onNavigateToAcademicPeriods, Icons.Default.CalendarToday, false),
-                                QuickActionData("Teacher Assignments", onNavigateToTeacherSectionAssignment, Icons.Default.Assignment, false),
-                                QuickActionData("Period Data Viewer", onNavigateToAcademicPeriodData, Icons.Default.Description, false),
-                                QuickActionData("Notifications", onNavigateToNotifications, Icons.Default.Notifications, false)
+                                QuickActionData("Pre-Register", onNavigateToPreRegistered, Icons.Default.School, false),
+                                QuickActionData("Notifications", onNavigateToNotifications, Icons.Default.Notifications, false),
+                                QuickActionData("Profile", onNavigateToProfile, Icons.Default.Person, false)
                             )) { actionData ->
                                 val badgeCount = when (actionData.title) {
-                                    "Teacher Applications" -> uiState.pendingTeacherApplications
+                                    "Teacher Management" -> uiState.pendingTeacherApplications
                                     "Notifications" -> unreadCount
                                     else -> 0
                                 }
@@ -255,31 +274,6 @@ fun AdminDashboardScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
-                        }
-                        
-                        // Bottom row with Profile and Refresh Data
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            QuickActionButton(
-                                title = "Profile",
-                                onClick = onNavigateToProfile,
-                                icon = Icons.Default.Person,
-                                isYellow = false,
-                                modifier = Modifier
-                                    .weight(1f)
-                            )
-                            QuickActionButton(
-                                title = "Refresh Data",
-                                onClick = { viewModel.refreshData() },
-                                icon = Icons.Default.Refresh,
-                                isYellow = false,
-                                modifier = Modifier
-                                    .weight(1f)
-                            )
                         }
                     }
                 }

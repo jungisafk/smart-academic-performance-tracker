@@ -2,7 +2,7 @@ package com.smartacademictracker.navigation
 
 sealed class Screen(val route: String) {
     object SignIn : Screen("sign_in")
-    object SignUp : Screen("sign_up")
+    object AccountActivation : Screen("account_activation")
     
     // Student Screens
     object StudentDashboard : Screen("student_dashboard")
@@ -66,6 +66,9 @@ sealed class Screen(val route: String) {
     object StudentEnrollment : Screen("student_enrollment")
     object TeacherStudentManagement : Screen("teacher_student_management")
     object TeacherSectionAssignment : Screen("teacher_section_assignment")
+    object AdminPreRegisteredStudents : Screen("admin_pre_registered_students")
+    object AdminPreRegisteredTeachers : Screen("admin_pre_registered_teachers")
+    object AdminPreRegistered : Screen("admin_pre_registered")
     
     // Common Screens
     object Profile : Screen("profile")

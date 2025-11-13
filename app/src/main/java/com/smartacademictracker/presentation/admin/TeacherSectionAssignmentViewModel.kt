@@ -79,9 +79,27 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                     }
 
                     applicationsResult.onSuccess { applicationsList ->
+                        android.util.Log.d("TeacherSectionAssignmentVM", "=== Teacher Applications Loaded ===")
+                        android.util.Log.d("TeacherSectionAssignmentVM", "Total applications: ${applicationsList.size}")
+                        
+                        // Log each application
+                        applicationsList.forEachIndexed { index, app ->
+                            android.util.Log.d("TeacherSectionAssignmentVM", "App[$index]: id=${app.id}, teacher=${app.teacherName} (${app.teacherId}), subject=${app.subjectName} (${app.subjectId}), status=${app.status}")
+                        }
+                        
+                        // Group by status for summary
+                        val byStatus = applicationsList.groupBy { it.status }
+                        byStatus.forEach { (status, apps) ->
+                            android.util.Log.d("TeacherSectionAssignmentVM", "Status ${status}: ${apps.size} applications")
+                        }
+                        
                         _teacherApplications.value = applicationsList
                         println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${applicationsList.size} teacher applications")
                     }.onFailure { exception ->
+                        android.util.Log.e("TeacherSectionAssignmentVM", "=== Teacher Applications Load Error ===")
+                        android.util.Log.e("TeacherSectionAssignmentVM", "Error type: ${exception.javaClass.simpleName}")
+                        android.util.Log.e("TeacherSectionAssignmentVM", "Error message: ${exception.message}")
+                        android.util.Log.e("TeacherSectionAssignmentVM", "Error cause: ${exception.cause?.message}")
                         println("DEBUG: TeacherSectionAssignmentViewModel - Error loading teacher applications: ${exception.message}")
                     }
 

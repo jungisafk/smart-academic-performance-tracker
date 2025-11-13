@@ -1512,14 +1512,14 @@ fun CollapsibleYearLevelCard(
                 }
             }
             
-            // Collapsible Content - Subjects
+            // Collapsible Content - Subjects (each subject is also collapsible)
             if (isExpanded) {
                 Column(
                     modifier = Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     subjects.forEach { subject ->
-                        EnhancedSubjectSectionCard(
+                        CollapsibleSubjectCard(
                             subject = subject,
                             sectionAssignments = sectionAssignments.filter { it.subjectId == subject.id },
                             teacherApplications = teacherApplications.filter { it.subjectId == subject.id },

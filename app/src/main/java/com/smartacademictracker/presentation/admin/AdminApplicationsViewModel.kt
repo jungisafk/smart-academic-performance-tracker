@@ -28,20 +28,41 @@ class AdminApplicationsViewModel @Inject constructor(
 
     fun loadApplications() {
         viewModelScope.launch {
+            android.util.Log.d("AdminApplicationsVM", "=== loadApplications START ===")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
+                android.util.Log.d("AdminApplicationsVM", "Calling teacherApplicationRepository.getAllApplications()")
                 val result = teacherApplicationRepository.getAllApplications()
+                
                 result.onSuccess { applicationsList ->
+                    android.util.Log.d("AdminApplicationsVM", "Success: Loaded ${applicationsList.size} applications")
+                    
+                    // Log each application
+                    applicationsList.forEachIndexed { index, app ->
+                        android.util.Log.d("AdminApplicationsVM", "App[$index]: ${app.teacherName} -> ${app.subjectName} (${app.status})")
+                    }
+                    
                     _applications.value = applicationsList
                     _uiState.value = _uiState.value.copy(isLoading = false)
+                    android.util.Log.d("AdminApplicationsVM", "=== loadApplications SUCCESS ===")
                 }.onFailure { exception ->
+                    android.util.Log.e("AdminApplicationsVM", "=== loadApplications FAILURE ===")
+                    android.util.Log.e("AdminApplicationsVM", "Exception type: ${exception.javaClass.simpleName}")
+                    android.util.Log.e("AdminApplicationsVM", "Exception message: ${exception.message}")
+                    android.util.Log.e("AdminApplicationsVM", "Exception cause: ${exception.cause?.message}")
+                    
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to load applications"
                     )
                 }
             } catch (e: Exception) {
+                android.util.Log.e("AdminApplicationsVM", "=== loadApplications EXCEPTION ===")
+                android.util.Log.e("AdminApplicationsVM", "Exception type: ${e.javaClass.simpleName}")
+                android.util.Log.e("AdminApplicationsVM", "Exception message: ${e.message}")
+                android.util.Log.e("AdminApplicationsVM", "Exception stack trace:", e)
+                
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load applications"

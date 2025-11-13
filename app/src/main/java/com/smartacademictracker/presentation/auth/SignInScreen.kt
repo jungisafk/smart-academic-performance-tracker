@@ -8,10 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,8 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -28,18 +23,21 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.smartacademictracker.data.model.UserRole
+import com.smartacademictracker.util.IdValidator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignInScreen(
-    onNavigateToSignUp: () -> Unit,
+    onNavigateToActivation: () -> Unit = {},
     onSignInSuccess: () -> Unit,
     onNavigateToDashboard: (String) -> Unit = {},
     viewModel: AuthViewModel = hiltViewModel()
 ) {
-    var email by remember { mutableStateOf("") }
+    var userId by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var selectedUserType by remember { mutableStateOf(UserRole.STUDENT) }
     
     val uiState by viewModel.uiState.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
@@ -47,6 +45,13 @@ fun SignInScreen(
     // Clear sign-in success state when screen is first loaded
     LaunchedEffect(Unit) {
         viewModel.clearSignInSuccess()
+    }
+    
+    // Clear input fields when user type changes
+    LaunchedEffect(selectedUserType) {
+        userId = ""
+        password = ""
+        passwordVisible = false
     }
     
     LaunchedEffect(currentUser, uiState.isSignedIn) {
@@ -64,6 +69,20 @@ fun SignInScreen(
                 }
                 println("DEBUG: SignInScreen - Direct navigation to: $destination")
                 onNavigateToDashboard(destination)
+            }
+        }
+    }
+    
+    // Validate user ID
+    val idValidation = remember(userId, selectedUserType) {
+        if (userId.isBlank()) {
+            com.smartacademictracker.util.ValidationResult(true, null)
+        } else {
+            when (selectedUserType) {
+                UserRole.STUDENT -> IdValidator.validateStudentId(userId)
+                UserRole.TEACHER -> IdValidator.validateTeacherId(userId)
+                UserRole.ADMIN -> IdValidator.validateAdminId(userId)
+                else -> com.smartacademictracker.util.ValidationResult(false, "Invalid user type")
             }
         }
     }
@@ -99,12 +118,11 @@ fun SignInScreen(
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // Book icon placeholder - using a simple rectangle to represent a book
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.White)
+                Icon(
+                    Icons.Default.School,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
                 )
             }
             
@@ -145,42 +163,149 @@ fun SignInScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333333),
-                        modifier = Modifier.padding(bottom = 32.dp)
+                        modifier = Modifier.padding(bottom = 24.dp)
                     )
+                    
+                    // User Type Selection - UPDATED WITH ADMIN
+                    Text(
+                        text = "I am a:",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF333333),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    )
+                    
+                    // Updated layout: 2 rows for better spacing
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // First row: Student and Teacher
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedUserType == UserRole.STUDENT,
+                                onClick = { selectedUserType = UserRole.STUDENT },
+                                label = { Text("Student") },
+                                leadingIcon = if (selectedUserType == UserRole.STUDENT) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                                } else null,
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF2196F3),
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                            FilterChip(
+                                selected = selectedUserType == UserRole.TEACHER,
+                                onClick = { selectedUserType = UserRole.TEACHER },
+                                label = { Text("Teacher") },
+                                leadingIcon = if (selectedUserType == UserRole.TEACHER) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                                } else null,
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF2196F3),
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        
+                        // Second row: Admin (full width for emphasis)
+                        FilterChip(
+                            selected = selectedUserType == UserRole.ADMIN,
+                            onClick = { selectedUserType = UserRole.ADMIN },
+                            label = { 
+                                Row(
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Administrator")
+                                }
+                            },
+                            leadingIcon = if (selectedUserType == UserRole.ADMIN) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            } else {
+                                { Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF9C27B0),  // Purple for admin
+                                selectedLabelColor = Color.White,
+                                labelColor = Color(0xFF9C27B0)
+                            )
+                        )
+                    }
 
-                    // Email Field
+                    // User ID Field - UPDATED WITH ADMIN
                     OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
+                        value = userId,
+                        onValueChange = { userId = it.trim() },
                         label = { 
                             Text(
-                                "Email",
+                                when (selectedUserType) {
+                                    UserRole.STUDENT -> "Student ID"
+                                    UserRole.TEACHER -> "Teacher ID"
+                                    UserRole.ADMIN -> "Admin ID"
+                                    else -> "User ID"
+                                },
                                 color = Color(0xFF666666)
                             ) 
                         },
                         placeholder = { 
                             Text(
-                                "Enter your email",
+                                when (selectedUserType) {
+                                    UserRole.STUDENT -> "e.g., 2024-1234"
+                                    UserRole.TEACHER -> "e.g., T-2024-001"
+                                    UserRole.ADMIN -> "e.g., A-2024-001"
+                                    else -> "Enter your ID"
+                                },
                                 color = Color(0xFF999999)
                             ) 
                         },
                         leadingIcon = {
                             Icon(
-                                Icons.Default.Email, 
+                                when (selectedUserType) {
+                                    UserRole.ADMIN -> Icons.Default.AdminPanelSettings
+                                    else -> Icons.Default.Person
+                                },
                                 contentDescription = null,
-                                tint = Color(0xFF999999)
+                                tint = when (selectedUserType) {
+                                    UserRole.ADMIN -> Color(0xFF9C27B0)
+                                    else -> Color(0xFF2196F3)
+                                }
                             )
                         },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp),
+                            .padding(bottom = 8.dp),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF2196F3),
+                            focusedBorderColor = when (selectedUserType) {
+                                UserRole.ADMIN -> Color(0xFF9C27B0)
+                                else -> Color(0xFF2196F3)
+                            },
                             unfocusedBorderColor = Color(0xFFE0E0E0)
-                        )
+                        ),
+                        isError = userId.isNotEmpty() && !idValidation.isValid,
+                        supportingText = {
+                            if (userId.isNotEmpty() && !idValidation.isValid) {
+                                Text(
+                                    idValidation.errorMessage ?: "",
+                                    color = Color(0xFFF44336),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
                     )
 
                     // Password Field
@@ -203,7 +328,10 @@ fun SignInScreen(
                             Icon(
                                 Icons.Default.Lock, 
                                 contentDescription = null,
-                                tint = Color(0xFF999999)
+                                tint = when (selectedUserType) {
+                                    UserRole.ADMIN -> Color(0xFF9C27B0)
+                                    else -> Color(0xFF2196F3)
+                                }
                             )
                         },
                         trailingIcon = {
@@ -223,7 +351,10 @@ fun SignInScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF2196F3),
+                            focusedBorderColor = when (selectedUserType) {
+                                UserRole.ADMIN -> Color(0xFF9C27B0)
+                                else -> Color(0xFF2196F3)
+                            },
                             unfocusedBorderColor = Color(0xFFE0E0E0)
                         )
                     )
@@ -239,8 +370,11 @@ fun SignInScreen(
                         ) {
                             Text(
                                 "Forgot Password?",
-                                color = Color(0xFF2196F3),
-                                style = MaterialTheme.typography.bodyMedium
+                                color = when (selectedUserType) {
+                                    UserRole.ADMIN -> Color(0xFF9C27B0)
+                                    else -> Color(0xFF2196F3)
+                                },
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
@@ -249,37 +383,76 @@ fun SignInScreen(
 
                     // Success Message
                     if (uiState.isSignedIn) {
-                        Text(
-                            text = "Sign in successful! Redirecting...",
-                            color = Color(0xFF4CAF50),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Sign in successful! Redirecting...",
+                                color = Color(0xFF4CAF50),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                     
                     // Error Message
                     uiState.error?.let { error ->
-                        Text(
-                            text = error,
-                            color = Color(0xFFF44336),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = Color(0xFFF44336),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = error,
+                                color = Color(0xFFF44336),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
 
-                    // Sign In Button
+                    // Sign In Button - UPDATED COLOR FOR ADMIN
                     Button(
                         onClick = {
-                            viewModel.signIn(email.trim(), password)
+                            viewModel.signInWithId(
+                                userId = userId,
+                                password = password,
+                                userType = selectedUserType
+                            )
                         },
-                        enabled = !uiState.isLoading && email.isNotBlank() && password.isNotBlank(),
+                        enabled = !uiState.isLoading && 
+                                 userId.isNotBlank() && 
+                                 password.isNotBlank() &&
+                                 idValidation.isValid,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
-                            .padding(bottom = 24.dp),
+                            .padding(bottom = 16.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF2196F3)
+                            containerColor = when (selectedUserType) {
+                                UserRole.ADMIN -> Color(0xFF9C27B0)  // Purple for admin
+                                else -> Color(0xFF2196F3)
+                            }
                         )
                     ) {
                         if (uiState.isLoading) {
@@ -297,50 +470,66 @@ fun SignInScreen(
                         }
                     }
 
-                    // Separator
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        HorizontalDivider(
-                            modifier = Modifier.weight(1f),
-                            color = Color(0xFFE0E0E0)
-                        )
-                        Text(
-                            text = "or",
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = Color(0xFF999999),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.weight(1f),
-                            color = Color(0xFFE0E0E0)
-                        )
-                    }
-
-                    // Navigate to Sign Up
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "Don't have an account? ",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF666666)
-                        )
-                        TextButton(
-                            onClick = onNavigateToSignUp,
-                            enabled = !uiState.isLoading
+                    // Separator - Only show for non-admin
+                    if (selectedUserType != UserRole.ADMIN) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            HorizontalDivider(
+                                modifier = Modifier.weight(1f),
+                                color = Color(0xFFE0E0E0)
+                            )
                             Text(
-                                "Sign Up",
-                                color = Color(0xFF2196F3),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
+                                text = "or",
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                color = Color(0xFF999999),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.weight(1f),
+                                color = Color(0xFFE0E0E0)
                             )
                         }
+
+                        // First-time activation link - Only for students and teachers
+                        OutlinedButton(
+                            onClick = onNavigateToActivation,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .padding(bottom = 16.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFF4CAF50)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF4CAF50))
+                        ) {
+                            Icon(
+                                Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "First Time? Activate Account",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        // Admin-specific message
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Administrator access only",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF9C27B0),
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -374,3 +563,4 @@ fun SignInScreen(
         }
     }
 }
+

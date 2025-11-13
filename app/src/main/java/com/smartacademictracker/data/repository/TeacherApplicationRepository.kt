@@ -47,14 +47,34 @@ class TeacherApplicationRepository @Inject constructor(
 
     suspend fun getAllApplications(): Result<List<TeacherApplication>> {
         return try {
+            android.util.Log.d("TeacherApplicationRepo", "=== getAllApplications START ===")
+            android.util.Log.d("TeacherApplicationRepo", "Collection path: teacher_applications")
+            
             val snapshot = applicationsCollection
                 .get()
                 .await()
+            
+            android.util.Log.d("TeacherApplicationRepo", "Query completed. Document count: ${snapshot.size()}")
+            
             val applications = snapshot.toObjects(TeacherApplication::class.java)
+            android.util.Log.d("TeacherApplicationRepo", "Converted to objects: ${applications.size} applications")
+            
+            // Log each application for debugging
+            applications.forEachIndexed { index, app ->
+                android.util.Log.d("TeacherApplicationRepo", "Application[$index]: id=${app.id}, teacherId=${app.teacherId}, teacherName=${app.teacherName}, subjectId=${app.subjectId}, subjectName=${app.subjectName}, status=${app.status}, appliedAt=${app.appliedAt}")
+            }
+            
             // Sort by appliedAt in descending order locally
             val sortedApplications = applications.sortedByDescending { it.appliedAt }
+            android.util.Log.d("TeacherApplicationRepo", "Sorted applications: ${sortedApplications.size}")
+            android.util.Log.d("TeacherApplicationRepo", "=== getAllApplications SUCCESS ===")
+            
             Result.success(sortedApplications)
         } catch (e: Exception) {
+            android.util.Log.e("TeacherApplicationRepo", "=== getAllApplications ERROR ===")
+            android.util.Log.e("TeacherApplicationRepo", "Error type: ${e.javaClass.simpleName}")
+            android.util.Log.e("TeacherApplicationRepo", "Error message: ${e.message}")
+            android.util.Log.e("TeacherApplicationRepo", "Error stack trace:", e)
             Result.failure(e)
         }
     }

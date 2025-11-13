@@ -33,19 +33,32 @@ class TeacherDashboardViewModel @Inject constructor(
         // Set up real-time data flow
         viewModelScope.launch {
             combine(_teacherId, _subjects, _enrollments) { teacherId, subjects, enrollments ->
-                if (teacherId != null && !_uiState.value.isLoading) {
+                println("DEBUG: TeacherDashboardViewModel - Combine triggered: teacherId=$teacherId, subjects=${subjects.size}, enrollments=${enrollments.size}, isLoading=${_uiState.value.isLoading}")
+                
+                if (teacherId != null) {
                     val teacherSubjects = subjects.filter { it.teacherId == teacherId && it.active }
                     val subjectIds = teacherSubjects.map { it.id }
                     val teacherEnrollments = enrollments.filter { it.subjectId in subjectIds }
                     val totalStudents = teacherEnrollments.distinctBy { it.studentId }.size
                     
-                    _uiState.value = _uiState.value.copy(
+                    val previousState = _uiState.value
+                    val newState = previousState.copy(
                         activeSubjects = teacherSubjects.size,
                         totalStudents = totalStudents,
                         isLoading = false
                     )
                     
-                    println("DEBUG: TeacherDashboardViewModel - Real-time update: ${teacherSubjects.size} subjects, ${totalStudents} students")
+                    println("DEBUG: TeacherDashboardViewModel - Real-time update:")
+                    println("  - Previous state: activeSubjects=${previousState.activeSubjects}, totalStudents=${previousState.totalStudents}")
+                    println("  - New state: activeSubjects=${newState.activeSubjects}, totalStudents=${newState.totalStudents}")
+                    println("  - Teacher subjects: ${teacherSubjects.size} (IDs: ${teacherSubjects.map { it.id }})")
+                    println("  - Subject IDs: $subjectIds")
+                    println("  - Teacher enrollments: ${teacherEnrollments.size}")
+                    println("  - Unique students: $totalStudents")
+                    
+                    _uiState.value = newState
+                } else {
+                    println("DEBUG: TeacherDashboardViewModel - Skipping update: teacherId is null")
                 }
             }.collect { }
         }
@@ -70,14 +83,17 @@ class TeacherDashboardViewModel @Inject constructor(
                         
                         // Process subjects
                         subjectsResult.onSuccess { subjectsList ->
+                            println("DEBUG: TeacherDashboardViewModel - SubjectRepository returned ${subjectsList.size} subjects")
                             _subjects.value = subjectsList
-                            println("DEBUG: TeacherDashboardViewModel - Loaded ${subjectsList.size} subjects")
+                            println("DEBUG: TeacherDashboardViewModel - Updated _subjects StateFlow with ${subjectsList.size} subjects")
                             
                             // Calculate teacher-specific data
                             val teacherSubjects = subjectsList.filter { it.teacherId == user.id && it.active }
                             println("DEBUG: TeacherDashboardViewModel - Teacher has ${teacherSubjects.size} active subjects")
+                            println("DEBUG: TeacherDashboardViewModel - Active subject details: ${teacherSubjects.map { "${it.name} (${it.id})" }}")
                         }.onFailure { exception ->
                             println("DEBUG: TeacherDashboardViewModel - Error loading subjects: ${exception.message}")
+                            println("DEBUG: TeacherDashboardViewModel - Exception: ${exception.stackTraceToString()}")
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 error = exception.message ?: "Failed to load subjects"
@@ -87,6 +103,7 @@ class TeacherDashboardViewModel @Inject constructor(
                         // Process enrollments - use new StudentEnrollmentRepository
                         if (studentEnrollmentsResult.isSuccess) {
                             val se = studentEnrollmentsResult.getOrNull().orEmpty()
+                            println("DEBUG: TeacherDashboardViewModel - StudentEnrollmentRepository returned ${se.size} enrollments")
                             val legacyMapped = se.map { e ->
                                 com.smartacademictracker.data.model.Enrollment(
                                     id = e.id,
@@ -102,11 +119,14 @@ class TeacherDashboardViewModel @Inject constructor(
                                 )
                             }
                             _enrollments.value = legacyMapped
-                            println("DEBUG: TeacherDashboardViewModel - Loaded ${legacyMapped.size} enrollments (student_enrollments)")
+                            println("DEBUG: TeacherDashboardViewModel - Updated _enrollments StateFlow with ${legacyMapped.size} enrollments")
+                            println("DEBUG: TeacherDashboardViewModel - Enrollment details: ${legacyMapped.map { "${it.studentName} -> ${it.subjectName}" }}")
                         } else {
                             // If student enrollments fail to load, set empty list
                             _enrollments.value = emptyList()
-                            println("DEBUG: TeacherDashboardViewModel - Error loading enrollments (student_enrollments): ${studentEnrollmentsResult.exceptionOrNull()?.message}")
+                            val error = studentEnrollmentsResult.exceptionOrNull()
+                            println("DEBUG: TeacherDashboardViewModel - Error loading enrollments (student_enrollments): ${error?.message}")
+                            println("DEBUG: TeacherDashboardViewModel - Exception: ${error?.stackTraceToString()}")
                         }
                         
                         // Set loading to false after both operations complete

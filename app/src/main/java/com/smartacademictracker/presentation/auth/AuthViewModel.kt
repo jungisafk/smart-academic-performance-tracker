@@ -126,11 +126,112 @@ class AuthViewModel @Inject constructor(
     fun isUserSignedIn(): Boolean {
         return userRepository.isUserSignedIn()
     }
+    
+    // ==================== ID-BASED AUTHENTICATION METHODS ====================
+    
+    /**
+     * Sign in using Student ID or Teacher ID
+     * @param userId Student ID or Teacher ID
+     * @param password User's password
+     * @param userType The role type (STUDENT or TEACHER)
+     */
+    fun signInWithId(userId: String, password: String, userType: UserRole) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                val result = userRepository.signInWithId(userId, password, userType)
+                result.onSuccess { user ->
+                    _currentUser.value = user
+                    _uiState.value = AuthUiState(isLoading = false, isSignedIn = true)
+                    println("DEBUG: Sign in successful for user ID: $userId")
+                }.onFailure { exception ->
+                    _uiState.value = AuthUiState(
+                        isLoading = false,
+                        error = exception.message ?: "Sign in failed"
+                    )
+                    println("DEBUG: Sign in failed: ${exception.message}")
+                }
+            } catch (e: Exception) {
+                _uiState.value = AuthUiState(
+                    isLoading = false,
+                    error = e.message ?: "Sign in failed"
+                )
+                println("DEBUG: Sign in exception: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Activate account using pre-registered institutional ID
+     * @param userId Student ID or Teacher ID from pre-registration
+     * @param password New password for the account
+     * @param confirmPassword Password confirmation
+     * @param userType The role type (STUDENT or TEACHER)
+     */
+    fun activateAccount(
+        userId: String,
+        password: String,
+        confirmPassword: String,
+        userType: UserRole
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                val result = userRepository.activateAccount(userId, password, confirmPassword, userType)
+                result.onSuccess { user ->
+                    _currentUser.value = user
+                    _uiState.value = AuthUiState(
+                        isLoading = false, 
+                        isSignUpSuccess = true,
+                        isAccountActivated = true
+                    )
+                    println("DEBUG: Account activation successful for user ID: $userId")
+                }.onFailure { exception ->
+                    _uiState.value = AuthUiState(
+                        isLoading = false,
+                        error = exception.message ?: "Account activation failed"
+                    )
+                    println("DEBUG: Account activation failed: ${exception.message}")
+                }
+            } catch (e: Exception) {
+                _uiState.value = AuthUiState(
+                    isLoading = false,
+                    error = e.message ?: "Account activation failed"
+                )
+                println("DEBUG: Account activation exception: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Check if a user ID exists in pre-registration
+     */
+    fun checkUserIdExists(userId: String, userType: UserRole, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val result = userRepository.checkUserIdExists(userId, userType)
+                result.onSuccess { exists ->
+                    onResult(exists)
+                }.onFailure {
+                    onResult(false)
+                }
+            } catch (e: Exception) {
+                onResult(false)
+            }
+        }
+    }
+    
+    fun clearAccountActivatedFlag() {
+        _uiState.value = _uiState.value.copy(isAccountActivated = false)
+    }
 }
 
 data class AuthUiState(
     val isLoading: Boolean = false,
     val isSignedIn: Boolean = false,
     val isSignUpSuccess: Boolean = false,
+    val isAccountActivated: Boolean = false,  // For first-time account activation
     val error: String? = null
 )

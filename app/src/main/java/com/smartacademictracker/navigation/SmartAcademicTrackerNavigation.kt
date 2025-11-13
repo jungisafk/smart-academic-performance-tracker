@@ -12,7 +12,7 @@ import androidx.navigation.compose.composable
 import com.smartacademictracker.data.model.UserRole
 import com.smartacademictracker.presentation.auth.AuthViewModel
 import com.smartacademictracker.presentation.auth.SignInScreen
-import com.smartacademictracker.presentation.auth.SignUpScreen
+import com.smartacademictracker.presentation.auth.AccountActivationScreen
 import com.smartacademictracker.presentation.student.StudentDashboardScreen
 import com.smartacademictracker.presentation.student.StudentGradesScreen
 import com.smartacademictracker.presentation.student.StudentSubjectsScreen
@@ -38,6 +38,9 @@ import com.smartacademictracker.presentation.admin.AdminGradeMonitoringScreen
 import com.smartacademictracker.presentation.admin.AdminAcademicPeriodScreen
 import com.smartacademictracker.presentation.admin.TeacherSectionAssignmentScreen
 import com.smartacademictracker.presentation.admin.AcademicPeriodDataScreen
+import com.smartacademictracker.presentation.admin.AdminPreRegisteredStudentsScreen
+import com.smartacademictracker.presentation.admin.AdminPreRegisteredTeachersScreen
+import com.smartacademictracker.presentation.admin.AdminPreRegisteredScreen
 import com.smartacademictracker.presentation.student.StudentEnrollmentScreen
 import com.smartacademictracker.presentation.teacher.TeacherStudentManagementScreen
 import com.smartacademictracker.presentation.student.StudentAnalyticsScreen
@@ -97,8 +100,8 @@ fun SmartAcademicTrackerNavigation(
         // Authentication Screens
         composable(Screen.SignIn.route) {
             SignInScreen(
-                onNavigateToSignUp = {
-                    navController.navigate(Screen.SignUp.route)
+                onNavigateToActivation = {
+                    navController.navigate(Screen.AccountActivation.route)
                 },
                 onSignInSuccess = {
                     // Navigation is handled by LaunchedEffect above
@@ -120,13 +123,15 @@ fun SmartAcademicTrackerNavigation(
             )
         }
         
-        composable(Screen.SignUp.route) {
-            SignUpScreen(
+        composable(Screen.AccountActivation.route) {
+            AccountActivationScreen(
                 onNavigateToSignIn = {
-                    navController.popBackStack()
+                    navController.navigate(Screen.SignIn.route) {
+                        popUpTo(Screen.SignIn.route) { inclusive = true }
+                    }
                 },
-                onSignUpSuccess = {
-                    // Navigation is handled by LaunchedEffect above
+                onActivationSuccess = {
+                    // Will redirect to sign-in automatically via screen logic
                 }
             )
         }
@@ -154,9 +159,6 @@ fun SmartAcademicTrackerNavigation(
                 },
                 onNavigateToGradeComparison = {
                     navController.navigate(Screen.StudentGradeComparison.route)
-                },
-                onNavigateToEnrollments = {
-                    navController.navigate(Screen.StudentEnrollment.route)
                 },
                 onNavigateToStudyProgress = {
                     navController.navigate(Screen.StudentStudyProgress.route)
@@ -269,20 +271,14 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToSubjects = {
                     navController.navigate(Screen.TeacherSubjects.route)
                 },
-                onNavigateToApplications = {
-                    navController.navigate(Screen.TeacherApplications.route)
-                },
-                onNavigateToStudentApplications = {
-                    navController.navigate(Screen.TeacherStudentApplications.route)
+                onNavigateToStudentManagement = {
+                    navController.navigate(Screen.TeacherStudentManagement.route)
                 },
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
                 },
                 onNavigateToAnalytics = {
                     navController.navigate(Screen.TeacherAnalytics.route)
-                },
-                onNavigateToStudentManagement = {
-                    navController.navigate(Screen.TeacherStudentManagement.route)
                 },
                 onNavigateToNotifications = {
                     navController.navigate(Screen.Notifications.route)
@@ -353,21 +349,41 @@ fun SmartAcademicTrackerNavigation(
                 onNavigateToAcademicPeriods = {
                     navController.navigate(Screen.AdminAcademicPeriods.route)
                 },
-                onNavigateToAcademicPeriodData = {
-                    navController.navigate(Screen.AcademicPeriodData.route)
-                },
-                onNavigateToTeacherSectionAssignment = {
-                    navController.navigate(Screen.TeacherSectionAssignment.route)
-                },
                 onNavigateToProfile = {
                     navController.navigate(Screen.Profile.route)
                 },
                 onNavigateToNotifications = {
                     navController.navigate(Screen.Notifications.route)
+                },
+                onNavigateToPreRegistered = {
+                    navController.navigate(Screen.AdminPreRegistered.route)
                 }
             )
         }
         
+        composable(Screen.AdminPreRegistered.route) {
+            AdminPreRegisteredScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.AdminPreRegisteredStudents.route) {
+            AdminPreRegisteredStudentsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable(Screen.AdminPreRegisteredTeachers.route) {
+            AdminPreRegisteredTeachersScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
         
         composable(Screen.AdminApplications.route) {
             AdminApplicationsScreen(

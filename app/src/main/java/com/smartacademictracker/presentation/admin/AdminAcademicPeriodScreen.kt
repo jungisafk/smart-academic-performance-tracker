@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.AcademicPeriod
 import com.smartacademictracker.presentation.utils.*
+import com.smartacademictracker.presentation.admin.AcademicPeriodDataViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -38,8 +39,10 @@ import java.util.*
 fun AdminAcademicPeriodScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAddPeriod: () -> Unit,
-    viewModel: AdminAcademicPeriodViewModel = hiltViewModel()
+    viewModel: AdminAcademicPeriodViewModel = hiltViewModel(),
+    periodDataViewModel: AcademicPeriodDataViewModel = hiltViewModel()
 ) {
+    var selectedTab by remember { mutableStateOf(0) }
     val uiState by viewModel.uiState.collectAsState()
     val academicPeriods by viewModel.academicPeriods.collectAsState()
     val activePeriod by viewModel.activePeriod.collectAsState()
@@ -115,36 +118,82 @@ fun AdminAcademicPeriodScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = "Manage academic periods and semesters",
+                                text = "Manage periods and view data",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                        
-                        IconButton(
-                            onClick = onNavigateToAddPeriod,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFC107))
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Add Period",
-                                tint = Color.White
                             )
                         }
                     }
                 }
             }
             
-            // Content
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            // Tab Row
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.White,
+                contentColor = Color(0xFF2196F3),
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.fillMaxWidth()
+                            .wrapContentSize(Alignment.BottomStart)
+                            .offset(x = tabPositions[selectedTab].left)
+                            .width(tabPositions[selectedTab].width),
+                        color = Color(0xFF2196F3),
+                        height = 3.dp
+                    )
+                }
             ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { 
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Periods")
+                        }
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { 
+                        selectedTab = 1
+                        periodDataViewModel.loadAcademicPeriodsAndSummaries()
+                    },
+                    text = { 
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.School,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Data Viewer")
+                        }
+                    }
+                )
+            }
+            
+            // Content
+            when (selectedTab) {
+                0 -> {
+                    // Periods Tab Content
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = 80.dp) // Add padding for FAB
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
                 // Current Academic Period Section
                 item {
                     EnhancedCurrentAcademicPeriodCard(
@@ -239,6 +288,246 @@ fun AdminAcademicPeriodScreen(
                     }
                 }
             }
+                        
+            // Floating Action Button - Only show in Periods tab
+            FloatingActionButton(
+                onClick = onNavigateToAddPeriod,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                containerColor = Color(0xFFFFC107)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Add Period",
+                    tint = Color.White
+                )
+            }
+        }
+                }
+                1 -> {
+                    // Data Viewer Tab Content
+                    val periodDataUiState by periodDataViewModel.uiState.collectAsState()
+                    val periodSummaries by periodDataViewModel.periodSummaries.collectAsState()
+                    val selectedPeriodData by periodDataViewModel.selectedPeriodData.collectAsState()
+                    
+                    LaunchedEffect(Unit) {
+                        periodDataViewModel.loadAcademicPeriodsAndSummaries()
+                        // Load active period data by default
+                        activePeriod?.let {
+                            periodDataViewModel.loadPeriodData(it.id)
+                        }
+                    }
+                    
+                    LaunchedEffect(activePeriod?.id) {
+                        activePeriod?.let {
+                            periodDataViewModel.loadPeriodData(it.id)
+                        }
+                    }
+                    
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp)
+                    ) {
+                        if (periodDataUiState.isLoading) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color(0xFF2196F3))
+                            }
+                        } else if (selectedPeriodData != null) {
+                            // Show detailed data for selected period
+                            val data = selectedPeriodData!!
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Period Info Card
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3)),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(20.dp)
+                                        ) {
+                                            Text(
+                                                text = data.academicPeriod?.name ?: "Unknown Period",
+                                                style = MaterialTheme.typography.headlineSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "${data.academicPeriod?.academicYear ?: ""} - ${data.academicPeriod?.semester ?: ""}",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = Color.White.copy(alpha = 0.9f)
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                // Statistics Card
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(20.dp)
+                                        ) {
+                                            Text(
+                                                text = "Statistics",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF333333)
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceEvenly
+                                            ) {
+                                                StatisticItem("Students", data.statistics.totalStudents.toString())
+                                                StatisticItem("Teachers", data.statistics.totalTeachers.toString())
+                                                StatisticItem("Subjects", data.statistics.totalSubjects.toString())
+                                            }
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceEvenly
+                                            ) {
+                                                StatisticItem("Courses", data.statistics.totalCourses.toString())
+                                                StatisticItem("Year Levels", data.statistics.totalYearLevels.toString())
+                                                StatisticItem("Sections", data.statistics.totalSections.toString())
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // All Periods List
+                                if (periodSummaries.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            text = "All Periods",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF333333),
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
+                                    items(periodSummaries) { summary ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { periodDataViewModel.loadPeriodData(summary.periodId) },
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (summary.periodId == selectedPeriodData?.periodId) 
+                                                    Color(0xFFE3F2FD) else Color.White
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(16.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = summary.periodName,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    if (summary.isActive) {
+                                                        Surface(
+                                                            color = Color(0xFF4CAF50),
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Active",
+                                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color.White
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = "Students: ${summary.statistics.totalStudents} | Subjects: ${summary.statistics.totalSubjects}",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = Color(0xFF666666)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Show period summaries if no data selected
+                            if (periodSummaries.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No period data available",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color(0xFF666666)
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(periodSummaries) { summary ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = { periodDataViewModel.loadPeriodData(summary.periodId) }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(16.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = summary.periodName,
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    if (summary.isActive) {
+                                                        Surface(
+                                                            color = Color(0xFF4CAF50),
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Active",
+                                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color.White
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = "Students: ${summary.statistics.totalStudents} | Subjects: ${summary.statistics.totalSubjects}",
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -255,6 +544,26 @@ fun AdminAcademicPeriodScreen(
         SuccessMessage(
             message = message,
             onDismiss = { viewModel.clearSuccessMessage() }
+        )
+    }
+}
+
+@Composable
+fun StatisticItem(label: String, value: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth(1f / 3f)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF2196F3)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF666666)
         )
     }
 }

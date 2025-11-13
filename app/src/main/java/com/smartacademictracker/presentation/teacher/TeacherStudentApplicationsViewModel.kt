@@ -247,6 +247,14 @@ class TeacherStudentApplicationsViewModel @Inject constructor(
         loadApplications()
     }
 
+    fun approveApplication(applicationId: String) {
+        updateApplicationStatus(applicationId, StudentApplicationStatus.APPROVED)
+    }
+
+    fun rejectApplication(applicationId: String) {
+        updateApplicationStatus(applicationId, StudentApplicationStatus.REJECTED)
+    }
+
     private suspend fun createStudentEnrollment(application: StudentApplication) {
         try {
             println("DEBUG: TeacherStudentApplicationsViewModel - Creating enrollment for legacy application: ${application.id}")
