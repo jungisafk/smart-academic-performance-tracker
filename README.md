@@ -3,7 +3,7 @@
 A comprehensive Android application for managing academic performance, built with Kotlin, Jetpack Compose, and Firebase.
 
 **Author**: jungisafk  
-**Last Updated**: November 13, 2025
+**Last Updated**: November 19, 2025
 
 ## 🎯 Project Overview
 
