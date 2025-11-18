@@ -3,10 +3,14 @@ package com.smartacademictracker.presentation.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.manager.AdminDataCache
+import com.smartacademictracker.data.notification.NotificationSenderService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -18,7 +22,9 @@ class ManageUsersViewModel @Inject constructor(
     private val courseRepository: com.smartacademictracker.data.repository.CourseRepository,
     private val sectionAssignmentRepository: com.smartacademictracker.data.repository.SectionAssignmentRepository,
     private val subjectRepository: com.smartacademictracker.data.repository.SubjectRepository,
-    private val studentEnrollmentRepository: com.smartacademictracker.data.repository.StudentEnrollmentRepository
+    private val studentEnrollmentRepository: com.smartacademictracker.data.repository.StudentEnrollmentRepository,
+    private val adminDataCache: AdminDataCache,
+    private val notificationSenderService: NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ManageUsersUiState())
@@ -37,10 +43,82 @@ class ManageUsersViewModel @Inject constructor(
     // Map of studentId -> List of enrollments
     private val _studentEnrollments = MutableStateFlow<Map<String, List<StudentEnrollmentInfo>>>(emptyMap())
     val studentEnrollments: StateFlow<Map<String, List<StudentEnrollmentInfo>>> = _studentEnrollments.asStateFlow()
+    
+    private var usersFlowJob: Job? = null
 
-    fun loadUsers() {
+    init {
+        // Load cached data immediately if available
+        val cachedUsers = adminDataCache.cachedUsers.value
+        val cachedCourses = adminDataCache.cachedCourses.value
+        val cachedSubjects = adminDataCache.cachedSubjects.value
+        val cachedEnrollments = adminDataCache.cachedEnrollments.value
+        
+        if (cachedUsers.isNotEmpty() && cachedCourses.isNotEmpty() && 
+            cachedSubjects.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _users.value = cachedUsers
+            _courses.value = cachedCourses
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+        
+        // Set up real-time listener for users
+        setupRealtimeListeners()
+    }
+    
+    private fun setupRealtimeListeners() {
+        // Set up real-time listener for users
+        usersFlowJob = viewModelScope.launch {
+            userRepository.getAllUsersFlow()
+                .catch { exception ->
+                    // Fallback to one-time query on error
+                    val result = userRepository.getAllUsers()
+                    result.onSuccess { users ->
+                        processUsersWithComputedFields(users)
+                    }
+                }
+                .collect { users ->
+                    processUsersWithComputedFields(users)
+                }
+        }
+    }
+    
+    private suspend fun processUsersWithComputedFields(usersList: List<com.smartacademictracker.data.model.User>) {
+        val coursesResult = courseRepository.getAllCourses()
+        coursesResult.onSuccess { coursesList ->
+            val usersWithComputedFields = usersList.map { user ->
+                if (user.role == "TEACHER" && user.departmentCourseId != null) {
+                    val departmentCourse = coursesList.find { it.id == user.departmentCourseId }
+                    user.copy(
+                        departmentCourseName = departmentCourse?.name,
+                        departmentCourseCode = departmentCourse?.code
+                    )
+                } else {
+                    user
+                }
+            }
+            _users.value = usersWithComputedFields
+            adminDataCache.updateUsers(usersWithComputedFields)
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun loadUsers(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedUsers.value.isNotEmpty() && 
+                adminDataCache.cachedCourses.value.isNotEmpty() &&
+                adminDataCache.cachedSubjects.value.isNotEmpty() &&
+                adminDataCache.isCacheValid()) {
+                _users.value = adminDataCache.cachedUsers.value
+                _courses.value = adminDataCache.cachedCourses.value
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedUsers.value.isEmpty() || 
+                    adminDataCache.cachedCourses.value.isEmpty() ||
+                    adminDataCache.cachedSubjects.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 // Load all data in parallel for faster loading
@@ -61,11 +139,13 @@ class ManageUsersViewModel @Inject constructor(
                     // Process results
                     coursesResult.onSuccess { coursesList ->
                         _courses.value = coursesList
+                        adminDataCache.updateCourses(coursesList)
                     }
                     
                     // Process assignments and subjects together
                     assignmentsResult.onSuccess { assignments ->
                         subjectsResult.onSuccess { subjects ->
+                            adminDataCache.updateSubjects(subjects)
                             val assignmentsMap = mutableMapOf<String, MutableList<TeacherAssignmentInfo>>()
                             assignments.forEach { assignment ->
                                 val subject = subjects.find { it.id == assignment.subjectId }
@@ -84,6 +164,7 @@ class ManageUsersViewModel @Inject constructor(
                     
                     // Process enrollments
                     enrollmentsResult.onSuccess { enrollments ->
+                        adminDataCache.updateEnrollments(enrollments)
                         val enrollmentsMap = mutableMapOf<String, MutableList<StudentEnrollmentInfo>>()
                         enrollments.forEach { enrollment ->
                             val info = StudentEnrollmentInfo(
@@ -115,8 +196,9 @@ class ManageUsersViewModel @Inject constructor(
                                 }
                             }
                             _users.value = usersWithComputedFields
+                            adminDataCache.updateUsers(usersWithComputedFields)
                             _uiState.value = _uiState.value.copy(isLoading = false)
-                            println("DEBUG: ManageUsersViewModel - Loaded ${usersList.size} users")
+                            
                         }
                     }.onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
@@ -142,10 +224,21 @@ class ManageUsersViewModel @Inject constructor(
             )
             
             try {
+                // Get current admin user for notification
+                val currentAdmin = userRepository.getCurrentUser().getOrNull()
+                val adminName = currentAdmin?.let { "${it.firstName} ${it.lastName}" } ?: "Admin"
+                
                 val result = userRepository.updateUserStatus(userId, active)
                 result.onSuccess {
+                    // Send notification to user
+                    notificationSenderService.sendUserStatusChangedNotification(
+                        userId = userId,
+                        status = if (active) "Active" else "Inactive",
+                        changedBy = adminName
+                    )
+                    
                     // Reload users to reflect changes
-                    loadUsers()
+                    loadUsers(forceRefresh = true)
                     _uiState.value = _uiState.value.copy(
                         processingUsers = _uiState.value.processingUsers - userId
                     )
@@ -172,10 +265,21 @@ class ManageUsersViewModel @Inject constructor(
             )
             
             try {
+                // Get current admin user for notification
+                val currentAdmin = userRepository.getCurrentUser().getOrNull()
+                val adminName = currentAdmin?.let { "${it.firstName} ${it.lastName}" } ?: "Admin"
+                
                 val result = userRepository.updateUserRole(userId, newRole)
                 result.onSuccess {
+                    // Send notification to user
+                    notificationSenderService.sendUserRoleChangedNotification(
+                        userId = userId,
+                        newRole = newRole,
+                        changedBy = adminName
+                    )
+                    
                     // Reload users to reflect changes
-                    loadUsers()
+                    loadUsers(forceRefresh = true)
                     _uiState.value = _uiState.value.copy(
                         processingUsers = _uiState.value.processingUsers - userId
                     )
@@ -199,7 +303,7 @@ class ManageUsersViewModel @Inject constructor(
     }
 
     fun refreshUsers() {
-        loadUsers()
+        loadUsers(forceRefresh = true)
     }
 
     fun updateTeacherDepartment(userId: String, departmentCourseId: String?) {
@@ -213,7 +317,7 @@ class ManageUsersViewModel @Inject constructor(
                 val result = userRepository.updateTeacherDepartment(userId, departmentCourseId)
                 result.onSuccess {
                     // Reload users to reflect changes
-                    loadUsers()
+                    loadUsers(forceRefresh = true)
                     _uiState.value = _uiState.value.copy(
                         processingUsers = _uiState.value.processingUsers - userId
                     )

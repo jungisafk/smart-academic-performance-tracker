@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.teacher
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.SectionAssignment
@@ -11,6 +10,7 @@ import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.notification.NotificationSenderService
 import com.smartacademictracker.data.notification.EnrollmentNotificationService
 import com.smartacademictracker.data.model.NotificationType
+import com.smartacademictracker.data.manager.TeacherDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +24,8 @@ class TeacherStudentManagementViewModel @Inject constructor(
     private val enrollmentRepository: StudentEnrollmentRepository,
     private val userRepository: UserRepository,
     private val notificationSenderService: NotificationSenderService,
-    private val enrollmentNotificationService: EnrollmentNotificationService
+    private val enrollmentNotificationService: EnrollmentNotificationService,
+    private val teacherDataCache: TeacherDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherStudentManagementUiState())
@@ -36,16 +37,26 @@ class TeacherStudentManagementViewModel @Inject constructor(
     private val _selectedSectionStudents = MutableStateFlow<List<StudentEnrollment>>(emptyList())
     val selectedSectionStudents: StateFlow<List<StudentEnrollment>> = _selectedSectionStudents.asStateFlow()
 
-    fun loadTeacherSections() {
+    fun loadTeacherSections(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            Log.d("TeacherStudentManagement", "Loading teacher sections...")
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached sections if available
+            val cachedSections = teacherDataCache.cachedSections.value
+            if (!forceRefresh && cachedSections.isNotEmpty() && teacherDataCache.isCacheValid()) {
+                _sections.value = cachedSections
+                if (cachedSections.size == 1) {
+                    selectSection(cachedSections[0].id)
+                }
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                if (cachedSections.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { currentUser ->
                     if (currentUser == null) {
-                        Log.e("TeacherStudentManagement", "Current user is null")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = "User not found"
@@ -53,18 +64,13 @@ class TeacherStudentManagementViewModel @Inject constructor(
                         return@onSuccess
                     }
                     
-                    Log.d("TeacherStudentManagement", "Loading sections for teacher: ${currentUser.id} (${currentUser.firstName} ${currentUser.lastName})")
                     val result = sectionAssignmentRepository.getSectionAssignmentsByTeacher(currentUser.id)
                     result.onSuccess { assignments ->
-                        Log.d("TeacherStudentManagement", "Found ${assignments.size} section assignments for teacher")
-                        assignments.forEach { assignment ->
-                            Log.d("TeacherStudentManagement", "Section: ${assignment.sectionName} for Subject: ${assignment.subjectId}")
-                        }
                         _sections.value = assignments
+                        teacherDataCache.updateSections(assignments)
                         
                         // Automatically select the first section if only one section is available
                         if (assignments.size == 1) {
-                            Log.d("TeacherStudentManagement", "Auto-selecting single section: ${assignments[0].id}")
                             selectSection(assignments[0].id)
                         }
                         
@@ -73,21 +79,18 @@ class TeacherStudentManagementViewModel @Inject constructor(
                             error = null
                         )
                     }.onFailure { exception ->
-                        Log.e("TeacherStudentManagement", "Failed to load section assignments: ${exception.message}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = exception.message ?: "Failed to load sections"
                         )
                     }
                 }.onFailure { exception ->
-                    Log.e("TeacherStudentManagement", "Failed to get current user: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to get user information"
                     )
                 }
             } catch (e: Exception) {
-                Log.e("TeacherStudentManagement", "Exception in loadTeacherSections: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load sections"
@@ -98,8 +101,6 @@ class TeacherStudentManagementViewModel @Inject constructor(
 
     fun selectSection(sectionId: String) {
         viewModelScope.launch {
-            Log.d("TeacherStudentManagement", "Selecting section: $sectionId")
-            Log.d("TeacherStudentManagement", "Available sections: ${_sections.value.map { "${it.id} (${it.sectionName})" }}")
             _uiState.value = _uiState.value.copy(
                 selectedSectionId = sectionId,
                 isLoading = true,
@@ -109,39 +110,30 @@ class TeacherStudentManagementViewModel @Inject constructor(
             try {
                 val section = _sections.value.find { it.id == sectionId }
                 if (section != null) {
-                    Log.d("TeacherStudentManagement", "Found section: ${section.sectionName} for subject: ${section.subjectId}")
-                    Log.d("TeacherStudentManagement", "Loading students for section: ${section.sectionName} in subject: ${section.subjectId}")
                     val result = enrollmentRepository.getStudentsBySection(
                         subjectId = section.subjectId,
                         sectionName = section.sectionName
                     )
                     
                     result.onSuccess { students ->
-                        Log.d("TeacherStudentManagement", "Found ${students.size} students in section ${section.sectionName}")
-                        students.forEach { student ->
-                            Log.d("TeacherStudentManagement", "Student: ${student.studentName} (${student.studentId}) - Status: ${student.status}")
-                        }
                         _selectedSectionStudents.value = students
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = null
                         )
                     }.onFailure { exception ->
-                        Log.e("TeacherStudentManagement", "Failed to load students for section ${section.sectionName}: ${exception.message}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = exception.message ?: "Failed to load students"
                         )
                     }
                 } else {
-                    Log.e("TeacherStudentManagement", "Section not found: $sectionId")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "Section not found"
                     )
                 }
             } catch (e: Exception) {
-                Log.e("TeacherStudentManagement", "Exception in selectSection: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load students"

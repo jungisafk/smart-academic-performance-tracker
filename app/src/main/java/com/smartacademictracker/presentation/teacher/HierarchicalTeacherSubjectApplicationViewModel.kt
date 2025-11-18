@@ -78,46 +78,52 @@ class HierarchicalTeacherSubjectApplicationViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Load subjects and filter based on teacher's department
-                val subjectsResult = subjectRepository.getAllSubjects()
-                subjectsResult.onSuccess { subjectsList ->
-                    // Get current user to filter by department
-                    val currentUserResult = userRepository.getCurrentUser()
-                    currentUserResult.onSuccess { currentUser ->
-                        if (currentUser != null) {
-                            // Warn if teacher doesn't have a department set
-                            if (currentUser.departmentCourseId == null || currentUser.departmentCourseId.isBlank()) {
-                                android.util.Log.w("HierarchicalTeacherSubjects", "WARNING: Teacher ${currentUser.id} does not have departmentCourseId set! They will only see MINOR subjects.")
-                            }
-                            
-                            // Filter subjects based on department and subject type
-                            val filteredSubjects = subjectsList.filter { subject ->
-                                when (subject.subjectType) {
-                                    com.smartacademictracker.data.model.SubjectType.MAJOR -> {
-                                        // MAJOR subjects: only visible to teachers of the same course/department
-                                        currentUser.departmentCourseId != null && 
-                                        currentUser.departmentCourseId.isNotBlank() && 
-                                        subject.courseId == currentUser.departmentCourseId
-                                    }
-                                    com.smartacademictracker.data.model.SubjectType.MINOR -> {
-                                        // MINOR subjects: visible to all teachers (cross-departmental)
-                                        true
-                                    }
+                // Get current user first (needed for filtering)
+                val currentUserResult = userRepository.getCurrentUser()
+                currentUserResult.onSuccess { currentUser ->
+                    if (currentUser == null) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "User not found"
+                        )
+                        return@launch
+                    }
+                    
+                    // Helper function to filter subjects
+                    fun filterSubjectsList(subjects: List<Subject>): List<Subject> {
+                        return subjects.filter { subject ->
+                            when (subject.subjectType) {
+                                com.smartacademictracker.data.model.SubjectType.MAJOR -> {
+                                    // MAJOR subjects: only visible to teachers of the same course/department
+                                    currentUser.departmentCourseId != null && 
+                                    currentUser.departmentCourseId.isNotBlank() && 
+                                    subject.courseId == currentUser.departmentCourseId
+                                }
+                                com.smartacademictracker.data.model.SubjectType.MINOR -> {
+                                    // MINOR subjects: visible to all teachers (cross-departmental)
+                                    true
                                 }
                             }
-                            _subjects.value = filteredSubjects
-                        } else {
-                            _subjects.value = subjectsList
                         }
-                    }.onFailure {
-                        _subjects.value = subjectsList
+                    }
+                    
+                    // Load subjects and filter based on teacher's department
+                    val subjectsResult = subjectRepository.getAllSubjects()
+                    subjectsResult.onSuccess { subjectsList ->
+                        // Filter subjects before displaying
+                        val filteredSubjects = filterSubjectsList(subjectsList)
+                        _subjects.value = filteredSubjects
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Failed to load subjects: ${exception.message}"
+                        )
                     }
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Failed to load subjects: ${exception.message}"
+                        error = "Failed to get user: ${exception.message}"
                     )
-                    return@launch
                 }
 
                 // Load my applications

@@ -1,10 +1,11 @@
 package com.smartacademictracker.presentation.student
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.FilterList
@@ -13,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -20,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Subject
 import com.smartacademictracker.data.model.StudentApplication
 import com.smartacademictracker.data.model.StudentApplicationStatus
+import com.smartacademictracker.presentation.student.StudentApplicationCardWithCancel
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,28 +36,44 @@ fun StudentSubjectApplicationScreen(
     val uiState by viewModel.uiState.collectAsState()
     val availableSubjects by viewModel.availableSubjects.collectAsState()
     val myApplications by viewModel.myApplications.collectAsState()
+    val canApplyForSubject by viewModel.canApplyForSubject.collectAsState()
     val selectedYearLevel by viewModel.selectedYearLevel.collectAsState()
     val selectedCourse by viewModel.selectedCourse.collectAsState()
     
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    // Load data when screen is composed, using ViewModel as key to prevent unnecessary reloads
+    LaunchedEffect(viewModel) {
         viewModel.loadAvailableSubjects()
         viewModel.loadMyApplications()
     }
     
     // Show success snackbar when application is successful
     var showSuccessSnackbar by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
     
     LaunchedEffect(uiState.isApplicationSuccess) {
         if (uiState.isApplicationSuccess) {
             // Switch to applied tab to show the new application
             selectedTab = 1
             showSuccessSnackbar = true
+            successMessage = "Application submitted successfully!"
             // Clear success state after a delay
             delay(3000)
             viewModel.clearApplicationSuccess()
             showSuccessSnackbar = false
+            successMessage = null
+        }
+    }
+    
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { message ->
+            successMessage = message
+            showSuccessSnackbar = true
+            delay(3000)
+            showSuccessSnackbar = false
+            successMessage = null
+            viewModel.clearError() // Clear success message from state
         }
     }
 
@@ -62,54 +82,65 @@ fun StudentSubjectApplicationScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header
+        // Custom Tab Row - Modern rounded buttons
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                text = "Available Subjects",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = { 
-                    viewModel.refreshData()
-                },
-                enabled = !uiState.isLoading
+            // Available Tab
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { selectedTab = 0 },
+                color = if (selectedTab == 0) Color(0xFFFFC107) else Color(0xFF2196F3),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Available (${availableSubjects.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selectedTab == 0) Color(0xFF333333) else Color.White
+                    )
+                }
+            }
+            
+            // Applied Tab
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { 
+                        selectedTab = 1
+                        // Force refresh applications when switching to Applied tab
+                        viewModel.loadMyApplications()
+                    },
+                color = if (selectedTab == 1) Color(0xFFFFC107) else Color(0xFF2196F3),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Applied (${myApplications.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selectedTab == 1) Color(0xFF333333) else Color.White
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Tab Row
-        TabRow(
-            selectedTabIndex = selectedTab,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Available (${availableSubjects.size})") }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { 
-                    selectedTab = 1
-                    // Force refresh applications when switching to Applied tab
-                    viewModel.loadMyApplications()
-                },
-                text = { Text("Applied (${myApplications.size})") }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Loading State
         if (uiState.isLoading) {
@@ -155,12 +186,28 @@ fun StudentSubjectApplicationScreen(
                         }
                     } else {
                         LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             items(availableSubjects) { subject ->
+                                // Check if student can apply for this subject
+                                // If there's a PENDING application, can't apply
+                                // If there's an APPROVED application, check enrollment status
+                                val hasPending = myApplications.any { 
+                                    it.subjectId == subject.id && 
+                                    it.status == StudentApplicationStatus.PENDING 
+                                }
+                                val hasApproved = myApplications.any { 
+                                    it.subjectId == subject.id && 
+                                    it.status == StudentApplicationStatus.APPROVED 
+                                }
+                                // Use canApplyForSubject map if available, otherwise fallback to checking applications
+                                val canApply = canApplyForSubject[subject.id] ?: (!hasPending && !hasApproved)
+                                
                                 AvailableSubjectCard(
                                     subject = subject,
-                                    isApplied = myApplications.any { it.subjectId == subject.id },
+                                    isApplied = !canApply, // Show "Already Applied" if can't apply
                                     onApply = { viewModel.applyForSubject(subject.id) },
                                     isApplying = uiState.applyingSubjects.contains(subject.id)
                                 )
@@ -202,29 +249,17 @@ fun StudentSubjectApplicationScreen(
                         }
                     } else {
                         LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             items(myApplications) { application ->
-                                // Simple card for old screen compatibility
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp)
-                                    ) {
-                                        Text(
-                                            text = application.subjectName,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "Status: ${application.status.name}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                StudentApplicationCardWithCancel(
+                                    application = application,
+                                    onCancel = { 
+                                        viewModel.cancelApplication(application.id) 
                                     }
-                                }
+                                )
                             }
                         }
                     }
@@ -251,11 +286,14 @@ fun StudentSubjectApplicationScreen(
         }
         
         // Success Snackbar
-        if (showSuccessSnackbar) {
+        if (showSuccessSnackbar && successMessage != null) {
             Snackbar(
                 modifier = Modifier.padding(16.dp),
                 action = {
-                    TextButton(onClick = { showSuccessSnackbar = false }) {
+                    TextButton(onClick = { 
+                        showSuccessSnackbar = false
+                        successMessage = null
+                    }) {
                         Text("Dismiss")
                     }
                 }
@@ -269,7 +307,7 @@ fun StudentSubjectApplicationScreen(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Application submitted successfully!")
+                    Text(successMessage ?: "Operation successful!")
                 }
             }
         }
@@ -291,41 +329,48 @@ fun AvailableSubjectCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             Text(
                 text = subject.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = subject.code,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = subject.description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = onApply,
                 enabled = !isApplied && !isApplying,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 if (isApplying) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         color = MaterialTheme.colorScheme.onPrimary
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Applying...")
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Applying...",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 } else if (isApplied) {
-                    Text("Already Applied")
+                    Text(
+                        text = "Already Applied",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 } else {
-                    Text("Apply for Subject")
+                    Text(
+                        text = "Apply for Subject",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }

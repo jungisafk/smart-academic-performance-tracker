@@ -5,6 +5,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.Timestamp
 import com.smartacademictracker.data.model.User
 import com.smartacademictracker.data.model.UserRole
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -119,6 +122,7 @@ class UserRepository @Inject constructor(
             courseId = data["courseId"] as? String,
             section = data["section"] as? String,
             enrollmentYear = data["enrollmentYear"] as? String,
+            lastAcademicPeriodId = data["lastAcademicPeriodId"] as? String,
             departmentCourseId = data["departmentCourseId"] as? String,
             employmentType = data["employmentType"] as? String,
             position = data["position"] as? String,
@@ -132,7 +136,8 @@ class UserRepository @Inject constructor(
             lastLoginAt = convertTimestamp(data["lastLoginAt"]),
             passwordChangedAt = convertTimestamp(data["passwordChangedAt"]),
             mustChangePassword = data["mustChangePassword"] as? Boolean ?: false,
-            accountSource = data["accountSource"] as? String ?: "MANUAL"
+            accountSource = data["accountSource"] as? String ?: "MANUAL",
+            actualEmail = data["actualEmail"] as? String
         )
     }
 
@@ -146,6 +151,62 @@ class UserRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get real-time flow of current user
+     * This listens to changes in Firebase Auth state and the current user's document
+     * IMPORTANT: When a new user signs in, this Flow will restart and listen to the new user's document
+     */
+    fun getCurrentUserFlow(): Flow<User?> = callbackFlow {
+        var firestoreListener: com.google.firebase.firestore.ListenerRegistration? = null
+        
+        // Listen to Firebase Auth state changes
+        val authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            // Remove old listener when auth state changes
+            firestoreListener?.remove()
+            firestoreListener = null
+            
+            val currentUser = firebaseAuth.currentUser
+            if (currentUser == null) {
+                trySend(null)
+                return@AuthStateListener
+            }
+            
+            // Set up new listener for the current user's document
+            firestoreListener = usersCollection.document(currentUser.uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("UserRepository", "Error in Firestore listener: ${error.message}", error)
+                        return@addSnapshotListener
+                    }
+                    
+                    if (snapshot != null && snapshot.exists()) {
+                        try {
+                            val data = snapshot.data ?: return@addSnapshotListener
+                            val user = convertDocumentToUser(snapshot.id, data)
+                            trySend(user)
+                        } catch (e: Exception) {
+                            // Skip corrupted user data
+                            android.util.Log.e("UserRepository", "Error converting user document: ${e.message}", e)
+                        }
+                    } else {
+                        trySend(null)
+                    }
+                }
+        }
+        
+        // Register auth state listener
+        auth.addAuthStateListener(authStateListener)
+        
+        // Trigger initial state check
+        authStateListener.onAuthStateChanged(auth)
+        
+        awaitClose {
+            // Clean up listeners
+            auth.removeAuthStateListener(authStateListener)
+            firestoreListener?.remove()
         }
     }
 
@@ -231,6 +292,155 @@ class UserRepository @Inject constructor(
         }
     }
     
+    /**
+     * Update student's year level (used for year level progression)
+     */
+    suspend fun updateStudentYearLevel(
+        studentId: String,
+        newYearLevelId: String,
+        newYearLevelName: String,
+        academicPeriodId: String
+    ): Result<Unit> {
+        return try {
+            android.util.Log.d("UserRepository", "updateStudentYearLevel - studentId: $studentId, newYearLevelId: $newYearLevelId, newYearLevelName: $newYearLevelName, academicPeriodId: $academicPeriodId")
+            val updates = hashMapOf<String, Any>(
+                "yearLevelId" to newYearLevelId,
+                "yearLevelName" to newYearLevelName, // IMPORTANT: Update yearLevelName so UI displays correctly
+                "lastAcademicPeriodId" to academicPeriodId
+            )
+            usersCollection.document(studentId).update(updates).await()
+            android.util.Log.d("UserRepository", "updateStudentYearLevel - Successfully updated student $studentId to year level $newYearLevelName")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("UserRepository", "updateStudentYearLevel - Failed to update student $studentId: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Update student's last academic period (without changing year level)
+     */
+    suspend fun updateStudentAcademicPeriod(
+        studentId: String,
+        academicPeriodId: String
+    ): Result<Unit> {
+        return try {
+            val updates = hashMapOf<String, Any>(
+                "lastAcademicPeriodId" to academicPeriodId
+            )
+            usersCollection.document(studentId).update(updates).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Update user profile information (firstName, lastName, middleName)
+     */
+    suspend fun updateUserProfile(
+        userId: String,
+        firstName: String,
+        lastName: String,
+        middleName: String?
+    ): Result<Unit> {
+        return try {
+            val updates = hashMapOf<String, Any?>(
+                "firstName" to firstName,
+                "lastName" to lastName,
+                "middleName" to middleName
+            )
+            usersCollection.document(userId).update(updates).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Change user password using Firebase Auth
+     * Requires re-authentication with current password
+     */
+    suspend fun changePassword(
+        currentPassword: String,
+        newPassword: String
+    ): Result<Unit> {
+        return try {
+            val currentUser = auth.currentUser
+                ?: return Result.failure(Exception("No user signed in"))
+            
+            // Re-authenticate with current password
+            val email = currentUser.email
+                ?: return Result.failure(Exception("User email not found"))
+            
+            // Validate that current password is not empty
+            if (currentPassword.isBlank()) {
+                return Result.failure(Exception("Current password cannot be empty"))
+            }
+            
+            // Validate that new password is not empty
+            if (newPassword.isBlank()) {
+                return Result.failure(Exception("New password cannot be empty"))
+            }
+            
+            // Check if new password is different from current password
+            if (currentPassword == newPassword) {
+                return Result.failure(Exception("New password must be different from current password"))
+            }
+            
+            try {
+                val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, currentPassword)
+                currentUser.reauthenticate(credential).await()
+            } catch (e: com.google.firebase.auth.FirebaseAuthInvalidCredentialsException) {
+                // Handle specific Firebase Auth credential errors
+                return Result.failure(Exception("Current password is incorrect. Please check your password and try again."))
+            } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
+                return Result.failure(Exception("User account is invalid or has been disabled. Please contact support."))
+            } catch (e: com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException) {
+                return Result.failure(Exception("For security reasons, please sign out and sign in again before changing your password."))
+            } catch (e: Exception) {
+                // Check for specific error messages
+                val errorMessage = e.message ?: "Authentication failed"
+                when {
+                    errorMessage.contains("auth/wrong-password", ignoreCase = true) ||
+                    errorMessage.contains("auth/invalid-credential", ignoreCase = true) ||
+                    errorMessage.contains("incorrect", ignoreCase = true) ||
+                    errorMessage.contains("malformed", ignoreCase = true) -> {
+                        return Result.failure(Exception("Current password is incorrect. Please check your password and try again."))
+                    }
+                    errorMessage.contains("auth/requires-recent-login", ignoreCase = true) -> {
+                        return Result.failure(Exception("For security reasons, please sign out and sign in again before changing your password."))
+                    }
+                    else -> {
+                        return Result.failure(Exception("Authentication failed: $errorMessage"))
+                    }
+                }
+            }
+            
+            // Update password
+            try {
+                currentUser.updatePassword(newPassword).await()
+            } catch (e: Exception) {
+                val errorMessage = e.message ?: "Failed to update password"
+                return Result.failure(Exception("Failed to update password: $errorMessage"))
+            }
+            
+            // Update passwordChangedAt timestamp in Firestore
+            try {
+                usersCollection.document(currentUser.uid).update(
+                    "passwordChangedAt", Timestamp.now()
+                ).await()
+            } catch (e: Exception) {
+                // Log but don't fail - password was changed successfully in Auth
+                android.util.Log.w("UserRepository", "Failed to update passwordChangedAt timestamp: ${e.message}")
+            }
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
     // ==================== ID-BASED AUTHENTICATION METHODS ====================
     
     /**
@@ -255,12 +465,83 @@ class UserRepository @Inject constructor(
             }
             
             // Convert ID to email format for Firebase
-            val email = convertIdToEmail(userId, userType)
+            val convertedEmail = convertIdToEmail(userId, userType)
+            android.util.Log.d("UserRepository", "signInWithId - userId: $userId, converted email: $convertedEmail, userType: $userType")
             
-            // Authenticate with Firebase
-            val authResult = try {
-                auth.signInWithEmailAndPassword(email, password).await()
+            // Try to get actual email from User document first (for activated accounts)
+            // Then try pre-registration (for accounts not yet activated)
+            var actualEmail: String? = null
+            
+            // First, try to find user by ID in Firestore to get actualEmail
+            try {
+                val userDoc = when (userType) {
+                    UserRole.STUDENT -> {
+                        usersCollection.whereEqualTo("studentId", userId).limit(1).get().await()
+                            .documents.firstOrNull()
+                    }
+                    UserRole.TEACHER -> {
+                        usersCollection.whereEqualTo("teacherId", userId).limit(1).get().await()
+                            .documents.firstOrNull()
+                    }
+                    else -> null
+                }
+                
+                if (userDoc != null) {
+                    val userData = userDoc.data
+                    actualEmail = userData?.get("actualEmail") as? String
+                    if (actualEmail.isNullOrBlank()) {
+                        actualEmail = userData?.get("email") as? String
+                    }
+                    android.util.Log.d("UserRepository", "Found user document - actualEmail: ${userData?.get("actualEmail")}, email: ${userData?.get("email")}")
+                }
             } catch (e: Exception) {
+                android.util.Log.w("UserRepository", "Could not check User document for actualEmail: ${e.message}")
+            }
+            
+            // If not found in User document, try pre-registration
+            if (actualEmail.isNullOrBlank()) {
+                actualEmail = when (userType) {
+                    UserRole.STUDENT -> {
+                        val preReg = preRegisteredRepository.getPreRegisteredStudent(userId).getOrNull()
+                        preReg?.email?.takeIf { it.isNotBlank() }
+                    }
+                    UserRole.TEACHER -> {
+                        val preReg = preRegisteredRepository.getPreRegisteredTeacher(userId).getOrNull()
+                        preReg?.email?.takeIf { it.isNotBlank() }
+                    }
+                    else -> null
+                }
+            }
+            
+            // Try actual email first (if available), then converted email (for backward compatibility)
+            val emailsToTry = listOfNotNull(actualEmail, convertedEmail).distinct()
+            android.util.Log.d("UserRepository", "Trying emails in order: $emailsToTry")
+            
+            var lastException: Exception? = null
+            
+            // Authenticate with Firebase - try converted email first, then actual email
+            var authResult: com.google.firebase.auth.AuthResult? = null
+            try {
+                for (email in emailsToTry) {
+                    try {
+                        android.util.Log.d("UserRepository", "Attempting Firebase Auth sign in with email: $email")
+                        val result = auth.signInWithEmailAndPassword(email, password).await()
+                        android.util.Log.d("UserRepository", "Firebase Auth sign in successful - UID: ${result.user?.uid}, email: $email")
+                        authResult = result
+                        break // Success, exit loop
+                    } catch (e: Exception) {
+                        android.util.Log.w("UserRepository", "Failed to sign in with email $email: ${e.message}")
+                        lastException = e
+                        // Continue to next email
+                    }
+                }
+                
+                if (authResult == null) {
+                    // All emails failed
+                    throw lastException ?: Exception("Failed to sign in with any email")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("UserRepository", "Firebase Auth sign in failed for all emails - last error: ${e.message}", e)
                 // Record failed attempt
                 when (val result = loginAttemptTracker.recordFailedAttempt(userId)) {
                     is com.smartacademictracker.data.model.LoginAttemptResult.Failed -> {
@@ -277,7 +558,7 @@ class UserRepository @Inject constructor(
                 }
             }
             
-            val firebaseUserId = authResult.user?.uid 
+            val firebaseUserId = authResult?.user?.uid 
                 ?: throw Exception("Failed to sign in")
             
             // Fetch user data
@@ -377,9 +658,31 @@ class UserRepository @Inject constructor(
                 throw Exception("Account already activated. Please sign in with your credentials.")
             }
             
-            // Create Firebase Auth account
-            val email = convertIdToEmail(userId, userType)
-            val authResult = auth.createUserWithEmailAndPassword(email, password).await()
+            // Get actual email from pre-registration
+            val actualEmail = when (userType) {
+                UserRole.STUDENT -> (preRegData as com.smartacademictracker.data.model.PreRegisteredStudent).email?.trim()
+                UserRole.TEACHER -> (preRegData as com.smartacademictracker.data.model.PreRegisteredTeacher).email?.trim()
+                else -> null
+            }
+            
+            // IMPORTANT: Use actual email for Firebase Auth if available (for password reset)
+            // Otherwise fall back to converted email for backward compatibility
+            val emailForAuth = if (actualEmail.isNullOrBlank()) {
+                convertIdToEmail(userId, userType)
+            } else {
+                actualEmail
+            }
+            
+            android.util.Log.d("UserRepository", "activateAccount - userId: $userId, actualEmail: $actualEmail, emailForAuth: $emailForAuth, userType: $userType")
+            
+            if (actualEmail.isNullOrBlank()) {
+                android.util.Log.w("UserRepository", "No actual email found in pre-registration data, using converted email: $emailForAuth")
+            } else {
+                android.util.Log.d("UserRepository", "Using actual email from CSV for Firebase Auth: $emailForAuth (password reset will use this email)")
+            }
+            
+            // Create Firebase Auth account with actual email (if available) or converted email (fallback)
+            val authResult = auth.createUserWithEmailAndPassword(emailForAuth, password).await()
             val firebaseUserId = authResult.user?.uid 
                 ?: throw Exception("Failed to create account")
             
@@ -452,9 +755,15 @@ class UserRepository @Inject constructor(
         firebaseUserId: String,
         preRegStudent: com.smartacademictracker.data.model.PreRegisteredStudent
     ): User {
+        // Get actual email from pre-registration
+        val actualEmail = preRegStudent.email?.trim()?.takeIf { it.isNotBlank() }
+        // Use actual email if available, otherwise use converted email
+        val email = actualEmail ?: convertIdToEmail(preRegStudent.studentId, UserRole.STUDENT)
+        android.util.Log.d("UserRepository", "createUserFromPreRegStudent - studentId: ${preRegStudent.studentId}, email: $email, actualEmail: $actualEmail")
+        
         return User(
             id = firebaseUserId,
-            email = convertIdToEmail(preRegStudent.studentId, UserRole.STUDENT),
+            email = email, // Use actual email if available, otherwise converted email
             studentId = preRegStudent.studentId,
             firstName = preRegStudent.firstName,
             lastName = preRegStudent.lastName,
@@ -470,7 +779,8 @@ class UserRepository @Inject constructor(
             enrollmentYear = preRegStudent.enrollmentYear,
             active = true,
             createdAt = System.currentTimeMillis(),
-            accountSource = "PRE_REGISTERED"
+            accountSource = "PRE_REGISTERED",
+            actualEmail = actualEmail // Store actual email from CSV for password reset
         )
     }
     
@@ -481,9 +791,15 @@ class UserRepository @Inject constructor(
         firebaseUserId: String,
         preRegTeacher: com.smartacademictracker.data.model.PreRegisteredTeacher
     ): User {
+        // Get actual email from pre-registration
+        val actualEmail = preRegTeacher.email?.trim()?.takeIf { it.isNotBlank() }
+        // Use actual email if available, otherwise use converted email
+        val email = actualEmail ?: convertIdToEmail(preRegTeacher.teacherId, UserRole.TEACHER)
+        android.util.Log.d("UserRepository", "createUserFromPreRegTeacher - teacherId: ${preRegTeacher.teacherId}, email: $email, actualEmail: $actualEmail")
+        
         return User(
             id = firebaseUserId,
-            email = convertIdToEmail(preRegTeacher.teacherId, UserRole.TEACHER),
+            email = email, // Use actual email if available, otherwise converted email
             teacherId = preRegTeacher.teacherId,
             employeeId = preRegTeacher.employeeNumber,
             firstName = preRegTeacher.firstName,
@@ -500,8 +816,149 @@ class UserRepository @Inject constructor(
             dateHired = preRegTeacher.dateHired,
             active = true,
             createdAt = System.currentTimeMillis(),
-            accountSource = "PRE_REGISTERED"
+            accountSource = "PRE_REGISTERED",
+            actualEmail = actualEmail // Store actual email from CSV for password reset
         )
+    }
+    
+    /**
+     * Send password reset email
+     * Supports both email-based and ID-based authentication
+     */
+    suspend fun sendPasswordResetEmail(
+        identifier: String,
+        userType: UserRole
+    ): Result<Unit> {
+        return try {
+            android.util.Log.d("UserRepository", "sendPasswordResetEmail called - identifier: $identifier, userType: $userType")
+            
+            // IMPORTANT: For password reset, we need to use the SAME email format that's used for login
+            // Login uses convertIdToEmail() which converts ID to email format (e.g., "2024-001" -> "s2024-001@sjp2cd.edu.ph")
+            // So password reset should also use convertIdToEmail() to ensure consistency
+            
+            // Determine which email to use for password reset
+            val emailToUse: String?
+            
+            if (android.util.Patterns.EMAIL_ADDRESS.matcher(identifier).matches()) {
+                // Identifier is already an email - use it directly
+                android.util.Log.d("UserRepository", "Identifier is an email: $identifier")
+                emailToUse = identifier
+            } else {
+                // Identifier is an ID - look up the user's actual email from Firestore
+                android.util.Log.d("UserRepository", "Looking up user with ID: $identifier")
+                
+                val userResult = when (userType) {
+                    UserRole.STUDENT -> {
+                        usersCollection.whereEqualTo("studentId", identifier).limit(1).get().await()
+                            .documents.firstOrNull()?.toObject(User::class.java)
+                    }
+                    UserRole.TEACHER -> {
+                        usersCollection.whereEqualTo("teacherId", identifier).limit(1).get().await()
+                            .documents.firstOrNull()?.toObject(User::class.java)
+                    }
+                    else -> null
+                }
+                
+                if (userResult != null) {
+                    // IMPORTANT: Use actualEmail if available (from CSV import), otherwise use email field
+                    // actualEmail contains the real email from CSV/pre-registration
+                    // email field contains the converted email (s2024-001@sjp2cd.edu.ph) for Firebase Auth
+                    val emailFromRecord = userResult.actualEmail?.takeIf { it.isNotBlank() } 
+                        ?: userResult.email
+                    
+                    android.util.Log.d("UserRepository", "Found user in Firestore - actualEmail: ${userResult.actualEmail}, email: ${userResult.email}, using: $emailFromRecord")
+                    
+                    if (emailFromRecord.isNullOrBlank()) {
+                        android.util.Log.e("UserRepository", "User found but email is blank")
+                        return Result.failure(Exception("Account found but email is not set. Please contact support."))
+                    }
+                    
+                    emailToUse = emailFromRecord
+                } else {
+                    // User not found in Firestore - try pre-registration collection
+                    android.util.Log.d("UserRepository", "User not found in Firestore, checking pre-registration collection")
+                    val preRegEmail = when (userType) {
+                        UserRole.STUDENT -> {
+                            preRegisteredRepository.getPreRegisteredStudent(identifier).getOrNull()?.email?.trim()
+                        }
+                        UserRole.TEACHER -> {
+                            preRegisteredRepository.getPreRegisteredTeacher(identifier).getOrNull()?.email?.trim()
+                        }
+                        else -> null
+                    }
+                    
+                    if (preRegEmail != null && preRegEmail.isNotBlank()) {
+                        android.util.Log.d("UserRepository", "Found email in pre-registration: $preRegEmail")
+                        emailToUse = preRegEmail
+                    } else {
+                        android.util.Log.w("UserRepository", "User not found in Firestore or pre-registration for ID: $identifier")
+                        return Result.failure(Exception("No account found with this ID. Please verify your information and try again. If you haven't activated your account yet, please activate it first."))
+                    }
+                }
+            }
+            
+            // Validate email is not empty
+            if (emailToUse.isNullOrBlank()) {
+                android.util.Log.e("UserRepository", "Email is blank for identifier: $identifier")
+                return Result.failure(Exception("Email address not found for the provided identifier"))
+            }
+            
+            android.util.Log.d("UserRepository", "Using email for password reset: $emailToUse")
+            android.util.Log.d("UserRepository", "Email format valid: ${android.util.Patterns.EMAIL_ADDRESS.matcher(emailToUse).matches()}")
+            
+            // Send password reset email using the actual email from Firestore
+            try {
+                android.util.Log.d("UserRepository", "Sending password reset email to: $emailToUse")
+                auth.sendPasswordResetEmail(emailToUse).await()
+                android.util.Log.d("UserRepository", "Password reset email sent successfully to: $emailToUse")
+                android.util.Log.d("UserRepository", "Note: Check your email inbox and spam folder for the reset link")
+                return Result.success(Unit)
+            } catch (e: com.google.firebase.auth.FirebaseAuthException) {
+                val errorCode = e.errorCode
+                val errorMessage = e.message ?: "Unknown error"
+                android.util.Log.e("UserRepository", "Firebase Auth error sending password reset: $errorCode - $errorMessage", e)
+                
+                when (errorCode) {
+                    "ERROR_USER_NOT_FOUND" -> {
+                        android.util.Log.w("UserRepository", "Account not found in Firebase Auth for email: $emailToUse")
+                        return Result.failure(Exception("Account found but not activated in Firebase Auth. Please activate your account first before resetting password. If you've already activated your account, please contact support."))
+                    }
+                    "ERROR_INVALID_EMAIL" -> {
+                        return Result.failure(Exception("Invalid email address. Please contact support."))
+                    }
+                    "ERROR_TOO_MANY_REQUESTS" -> {
+                        return Result.failure(Exception("Too many password reset requests. Please wait a few minutes and try again."))
+                    }
+                    else -> {
+                        return Result.failure(Exception("Failed to send password reset email: $errorMessage (Code: $errorCode)"))
+                    }
+                }
+            } catch (e: Exception) {
+                val errorMessage = e.message ?: "Failed to send password reset email"
+                android.util.Log.e("UserRepository", "Exception sending password reset email: $errorMessage", e)
+                
+                when {
+                    errorMessage.contains("auth/user-not-found", ignoreCase = true) ||
+                    errorMessage.contains("ERROR_USER_NOT_FOUND", ignoreCase = true) -> {
+                        return Result.failure(Exception("Account found but not activated in Firebase Auth. Please activate your account first before resetting password. If you've already activated your account, please contact support."))
+                    }
+                    errorMessage.contains("auth/invalid-email", ignoreCase = true) ||
+                    errorMessage.contains("ERROR_INVALID_EMAIL", ignoreCase = true) -> {
+                        return Result.failure(Exception("Invalid email address. Please contact support."))
+                    }
+                    errorMessage.contains("auth/too-many-requests", ignoreCase = true) ||
+                    errorMessage.contains("ERROR_TOO_MANY_REQUESTS", ignoreCase = true) -> {
+                        return Result.failure(Exception("Too many password reset requests. Please wait a few minutes and try again."))
+                    }
+                    else -> {
+                        return Result.failure(Exception("Failed to send password reset email: $errorMessage"))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("UserRepository", "Unexpected error in sendPasswordResetEmail: ${e.message}", e)
+            Result.failure(Exception("An unexpected error occurred: ${e.message ?: "Unknown error"}"))
+        }
     }
     
     /**
@@ -550,6 +1007,69 @@ class UserRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get real-time flow of all users
+     */
+    fun getAllUsersFlow(): Flow<List<User>> = callbackFlow {
+        val listener = usersCollection
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    val users = mutableListOf<User>()
+                    for (document in snapshot.documents) {
+                        try {
+                            val data = document.data ?: continue
+                            val user = convertDocumentToUser(document.id, data)
+                            users.add(user)
+                        } catch (e: Exception) {
+                            // Skip corrupted users
+                        }
+                    }
+                    trySend(users)
+                }
+            }
+        
+        awaitClose {
+            listener.remove()
+        }
+    }
+    
+    /**
+     * Get real-time flow of users by role
+     */
+    fun getUsersByRoleFlow(role: UserRole): Flow<List<User>> = callbackFlow {
+        val listener = usersCollection
+            .whereEqualTo("role", role.value)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    val users = mutableListOf<User>()
+                    for (document in snapshot.documents) {
+                        try {
+                            val data = document.data ?: continue
+                            val user = convertDocumentToUser(document.id, data)
+                            users.add(user)
+                        } catch (e: Exception) {
+                            // Skip corrupted users
+                        }
+                    }
+                    trySend(users)
+                }
+            }
+        
+        awaitClose {
+            listener.remove()
         }
     }
 }

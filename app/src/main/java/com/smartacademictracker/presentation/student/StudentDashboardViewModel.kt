@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.student
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.repository.StudentEnrollmentRepository
@@ -9,6 +8,7 @@ import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.model.Grade
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.utils.GradeCalculationEngine
+import com.smartacademictracker.data.manager.StudentDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,51 +21,66 @@ import javax.inject.Inject
 class StudentDashboardViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val studentEnrollmentRepository: StudentEnrollmentRepository,
-    private val gradeRepository: GradeRepository
+    private val gradeRepository: GradeRepository,
+    private val studentDataCache: StudentDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StudentDashboardUiState())
     val uiState: StateFlow<StudentDashboardUiState> = _uiState.asStateFlow()
 
-    fun loadDashboardData() {
+    fun loadDashboardData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            Log.d("StudentDashboard", "=== Starting loadDashboardData() ===")
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Check cache first
+            val cachedEnrollments = studentDataCache.cachedEnrollments.value
+            val cachedGrades = studentDataCache.cachedGrades.value
+            
+            // Only show loading if no cached data or cache is invalid
+            if (forceRefresh || !studentDataCache.isCacheValid() || cachedEnrollments.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             
             try {
                 // Get current user
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        Log.d("StudentDashboard", "Loading enrollments for user: ${user.id} (${user.studentId})")
+                        // Use cached data immediately if available and valid
+                        if (!forceRefresh && studentDataCache.isCacheValid() && cachedEnrollments.isNotEmpty() && cachedGrades.isNotEmpty()) {
+                            val totalSubjectsPassed = calculateTotalSubjectsPassed(cachedGrades)
+                            val recentGrades = cachedGrades.sortedByDescending { it.dateRecorded }.take(5)
+                            
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                enrolledSubjects = cachedEnrollments.size,
+                                recentGrades = recentGrades,
+                                totalSubjectsPassed = totalSubjectsPassed
+                            )
+                        }
                         
                         // Set up real-time listener for enrollments in a separate coroutine
                         launch {
                             studentEnrollmentRepository.getEnrollmentsByStudentFlow(user.id)
                                 .catch { exception ->
-                                    Log.e("StudentDashboard", "Error in enrollment flow: ${exception.message}")
-                                    _uiState.value = _uiState.value.copy(
-                                        isLoading = false,
-                                        error = exception.message ?: "Failed to load enrollments"
-                                    )
+                                    if (!studentDataCache.isCacheValid()) {
+                                        _uiState.value = _uiState.value.copy(
+                                            isLoading = false,
+                                            error = exception.message ?: "Failed to load enrollments"
+                                        )
+                                    }
                                 }
                                 .collect { enrollments ->
-                                    Log.d("StudentDashboard", "=== Real-time enrollment update ===")
-                                    Log.d("StudentDashboard", "Loaded ${enrollments.size} enrollments")
-                                    enrollments.forEachIndexed { index, enrollment ->
-                                        Log.d("StudentDashboard", "  Enrollment[$index]: ${enrollment.subjectName} (${enrollment.subjectCode}) - Section: ${enrollment.sectionName}, Status: ${enrollment.status}")
-                                    }
+                                    // Update cache
+                                    studentDataCache.updateEnrollments(enrollments)
                                     
                                     // Load recent grades
                                     launch {
                                         val gradesResult = gradeRepository.getGradesByStudent(user.id)
                                         gradesResult.onSuccess { grades ->
-                                            Log.d("StudentDashboard", "Loaded ${grades.size} grades")
+                                            // Update cache
+                                            studentDataCache.updateGrades(grades)
                                             
-                                            // Calculate average grade
-                                            val averageGrade = if (grades.isNotEmpty()) {
-                                                grades.map { it.percentage }.average()
-                                            } else 0.0
+                                            // Calculate total subjects passed
+                                            val totalSubjectsPassed = calculateTotalSubjectsPassed(grades)
                                             
                                             // Get recent grades (last 5)
                                             val recentGrades = grades.sortedByDescending { it.dateRecorded }.take(5)
@@ -74,37 +89,47 @@ class StudentDashboardViewModel @Inject constructor(
                                                 isLoading = false,
                                                 enrolledSubjects = enrollments.size,
                                                 recentGrades = recentGrades,
-                                                averageGrade = averageGrade
+                                                totalSubjectsPassed = totalSubjectsPassed
                                             )
-                                            Log.d("StudentDashboard", "UI State updated - enrolledSubjects: ${enrollments.size}, averageGrade: $averageGrade")
                                         }.onFailure { gradeException ->
-                                            Log.e("StudentDashboard", "Error loading grades: ${gradeException.message}")
-                                            _uiState.value = _uiState.value.copy(
-                                                isLoading = false,
-                                                enrolledSubjects = enrollments.size,
-                                                recentGrades = emptyList(),
-                                                averageGrade = 0.0
-                                            )
+                                            if (!studentDataCache.isCacheValid()) {
+                                                _uiState.value = _uiState.value.copy(
+                                                    isLoading = false,
+                                                    enrolledSubjects = enrollments.size,
+                                                    recentGrades = emptyList(),
+                                                    totalSubjectsPassed = 0
+                                                )
+                                            }
                                         }
                                     }
                                 }
                         }
                     } else {
-                        Log.e("StudentDashboard", "User not found")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = "User not found"
                         )
                     }
                 }.onFailure { exception ->
-                    Log.e("StudentDashboard", "Error getting current user: ${exception.message}")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Failed to load user data"
-                    )
+                    // If cache exists, use it; otherwise show error
+                    if (cachedEnrollments.isNotEmpty() && studentDataCache.isCacheValid()) {
+                        val totalSubjectsPassed = calculateTotalSubjectsPassed(cachedGrades)
+                        val recentGrades = cachedGrades.sortedByDescending { it.dateRecorded }.take(5)
+                        
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            enrolledSubjects = cachedEnrollments.size,
+                            recentGrades = recentGrades,
+                            totalSubjectsPassed = totalSubjectsPassed
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "Failed to load user data"
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                Log.e("StudentDashboard", "Exception in loadDashboardData: ${e.message}", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load dashboard data"
@@ -112,9 +137,32 @@ class StudentDashboardViewModel @Inject constructor(
             }
         }
     }
+    
+    private fun calculateTotalSubjectsPassed(grades: List<Grade>): Int {
+        return if (grades.isNotEmpty()) {
+            // Group grades by subject
+            val gradesBySubject = grades.groupBy { it.subjectId }
+            
+            // Count subjects with passing grade (>= 75)
+            gradesBySubject.count { (_, subjectGrades) ->
+                // Get grades for each period
+                val prelimGrade = subjectGrades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.PRELIM }?.percentage
+                val midtermGrade = subjectGrades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.MIDTERM }?.percentage
+                val finalGrade = subjectGrades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.FINAL }?.percentage
+                
+                // Calculate final average using standard formula
+                val finalAverage = GradeCalculationEngine.calculateFinalAverage(
+                    prelimGrade, midtermGrade, finalGrade
+                )
+                
+                // Check if passing (>= 75)
+                finalAverage != null && finalAverage >= com.smartacademictracker.data.model.GradeStatus.PASSING.threshold
+            }
+        } else 0
+    }
 
     fun refreshData() {
-        loadDashboardData()
+        loadDashboardData(forceRefresh = true)
     }
 }
 
@@ -123,5 +171,5 @@ data class StudentDashboardUiState(
     val error: String? = null,
     val enrolledSubjects: Int = 0,
     val recentGrades: List<Grade> = emptyList(),
-    val averageGrade: Double = 0.0
+    val totalSubjectsPassed: Int = 0
 )

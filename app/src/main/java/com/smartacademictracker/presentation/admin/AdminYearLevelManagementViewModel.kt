@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.YearLevel
 import com.smartacademictracker.data.repository.YearLevelRepository
+import com.smartacademictracker.data.manager.AdminDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AdminYearLevelManagementViewModel @Inject constructor(
-    private val yearLevelRepository: YearLevelRepository
+    private val yearLevelRepository: YearLevelRepository,
+    private val adminDataCache: AdminDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminYearLevelManagementUiState())
@@ -22,16 +24,34 @@ class AdminYearLevelManagementViewModel @Inject constructor(
     private val _yearLevels = MutableStateFlow<List<YearLevel>>(emptyList())
     val yearLevels: StateFlow<List<YearLevel>> = _yearLevels.asStateFlow()
 
-    fun loadYearLevels() {
+    init {
+        // Load cached data immediately if available
+        val cachedYearLevels = adminDataCache.cachedYearLevels.value
+        if (cachedYearLevels.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _yearLevels.value = cachedYearLevels
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun loadYearLevels(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedYearLevels.value.isNotEmpty() && adminDataCache.isCacheValid()) {
+                _yearLevels.value = adminDataCache.cachedYearLevels.value
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedYearLevels.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 val yearLevelsResult = yearLevelRepository.getAllYearLevels()
                 yearLevelsResult.onSuccess { yearLevelsList ->
                     _yearLevels.value = yearLevelsList
+                    adminDataCache.updateYearLevels(yearLevelsList)
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    println("DEBUG: AdminYearLevelManagementViewModel - Loaded ${yearLevelsList.size} year levels")
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -61,8 +81,8 @@ class AdminYearLevelManagementViewModel @Inject constructor(
                         deletingYearLevels = _uiState.value.deletingYearLevels - yearLevelId
                     )
                     // Reload year levels to update UI
-                    loadYearLevels()
-                    println("DEBUG: AdminYearLevelManagementViewModel - Year level deleted successfully")
+                    loadYearLevels(forceRefresh = true)
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         deletingYearLevels = _uiState.value.deletingYearLevels - yearLevelId,

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +37,7 @@ import java.util.*
 fun AddAcademicPeriodScreen(
     onNavigateBack: () -> Unit,
     onPeriodAdded: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: AddAcademicPeriodViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -52,7 +54,7 @@ fun AddAcademicPeriodScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color.White)
     ) {
@@ -378,7 +380,7 @@ fun AddAcademicPeriodScreen(
                                 Checkbox(
                                     checked = uiState.isActive,
                                     onCheckedChange = { isChecked ->
-                                        println("DEBUG: AddAcademicPeriodScreen - Checkbox changed to: $isChecked")
+                                        
                                         viewModel.setAsActive(isChecked)
                                     },
                                     colors = CheckboxDefaults.colors(
@@ -477,8 +479,10 @@ fun AddAcademicPeriodScreen(
     // Date Picker Dialogs
     if (showStartDatePicker) {
         val calendar = Calendar.getInstance()
-        if (uiState.startDate > 0) {
-            calendar.timeInMillis = uiState.startDate
+        val initialDate = if (uiState.startDate > 0) {
+            uiState.startDate
+        } else {
+            System.currentTimeMillis()
         }
         
         DatePickerDialog(
@@ -487,17 +491,22 @@ fun AddAcademicPeriodScreen(
                 viewModel.setStartDate(selectedDate)
                 showStartDatePicker = false
             },
-            initialDateMillis = calendar.timeInMillis
+            initialDateMillis = initialDate,
+            onDismiss = {
+                showStartDatePicker = false
+            }
         )
     }
     
     if (showEndDatePicker) {
         val calendar = Calendar.getInstance()
-        if (uiState.endDate > 0) {
-            calendar.timeInMillis = uiState.endDate
-        } else if (uiState.startDate > 0) {
-            // If no end date is set but start date exists, set initial to start date + 5 months
-            calendar.timeInMillis = uiState.startDate + (150L * 24 * 60 * 60 * 1000)
+        val initialDate = when {
+            uiState.endDate > 0 -> uiState.endDate
+            uiState.startDate > 0 -> {
+                // If no end date is set but start date exists, set initial to start date + 5 months
+                uiState.startDate + (150L * 24 * 60 * 60 * 1000)
+            }
+            else -> System.currentTimeMillis() + (150L * 24 * 60 * 60 * 1000)
         }
         
         DatePickerDialog(
@@ -506,7 +515,10 @@ fun AddAcademicPeriodScreen(
                 viewModel.setEndDate(selectedDate)
                 showEndDatePicker = false
             },
-            initialDateMillis = calendar.timeInMillis
+            initialDateMillis = initialDate,
+            onDismiss = {
+                showEndDatePicker = false
+            }
         )
     }
 }
@@ -565,25 +577,41 @@ fun EnhancedSemesterDropdown(
 fun DatePickerDialog(
     context: android.content.Context,
     onDateSelected: (Long) -> Unit,
-    initialDateMillis: Long
+    initialDateMillis: Long,
+    onDismiss: () -> Unit = {}
 ) {
     val calendar = Calendar.getInstance()
     calendar.timeInMillis = initialDateMillis
     
-    val datePickerDialog = android.app.DatePickerDialog(
-        context,
-        { _, year, month, dayOfMonth ->
-            val selectedCalendar = Calendar.getInstance()
-            selectedCalendar.set(year, month, dayOfMonth)
-            onDateSelected(selectedCalendar.timeInMillis)
-        },
-        calendar.get(Calendar.YEAR),
-        calendar.get(Calendar.MONTH),
-        calendar.get(Calendar.DAY_OF_MONTH)
-    )
-    
-    LaunchedEffect(Unit) {
+    DisposableEffect(initialDateMillis) {
+        val datePickerDialog = android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val selectedCalendar = Calendar.getInstance()
+                selectedCalendar.set(year, month, dayOfMonth)
+                onDateSelected(selectedCalendar.timeInMillis)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+        
+        datePickerDialog.setOnDismissListener {
+            onDismiss()
+        }
+        
+        datePickerDialog.setOnCancelListener {
+            onDismiss()
+        }
+        
         datePickerDialog.show()
+        
+        // Cleanup when effect is disposed
+        onDispose {
+            if (datePickerDialog.isShowing) {
+                datePickerDialog.dismiss()
+            }
+        }
     }
 }
 

@@ -786,7 +786,12 @@ fun PerformanceTrendsLineChart(gradeAggregates: List<com.smartacademictracker.da
     
     val periods = listOf("Prelim", "Midterm", "Final")
     val averages = listOf(prelimAvg, midtermAvg, finalAvg)
-    val maxValue = max(100.0, averages.maxOrNull() ?: 100.0)
+    // Calculate dynamic range based on actual data
+    val minValue = minOf(averages.minOrNull() ?: 70.0, 70.0).coerceAtLeast(0.0)
+    val maxValue = maxOf(averages.maxOrNull() ?: 100.0, 100.0)
+    // Add padding for better visualization
+    val rangeMin = minValue - 2.0
+    val rangeMax = maxValue + 5.0
     
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -824,12 +829,15 @@ fun PerformanceTrendsLineChart(gradeAggregates: List<com.smartacademictracker.da
                     )
                 }
                 
-                // Draw line chart
+                // Draw line chart using dynamic range
                 val path = Path()
+                val range = rangeMax - rangeMin
                 periods.forEachIndexed { index, _ ->
                     val x = startX + (chartWidth / (periods.size - 1)) * index
                     val value = averages[index]
-                    val y = endY - (chartHeight * (value / maxValue).toFloat())
+                    // Normalize value to range (0-1) based on dynamic min/max
+                    val normalizedValue = if (range > 0) ((value - rangeMin) / range).toFloat().coerceIn(0f, 1f) else 0.5f
+                    val y = endY - (chartHeight * normalizedValue)
                     
                     if (index == 0) {
                         path.moveTo(x, y)
@@ -864,7 +872,9 @@ fun PerformanceTrendsLineChart(gradeAggregates: List<com.smartacademictracker.da
                 periods.forEachIndexed { index, _ ->
                     val value = averages[index]
                     val chartHeight = 180.dp - 30.dp
-                    val valueRatio = (value / maxValue).toFloat()
+                    val range = rangeMax - rangeMin
+                    // Normalize value to range (0-1) based on dynamic min/max
+                    val valueRatio = if (range > 0) ((value - rangeMin) / range).toFloat().coerceIn(0f, 1f) else 0.5f
                     val labelY = chartHeight - (chartHeight * valueRatio) - 20.dp
                     
                     Box(

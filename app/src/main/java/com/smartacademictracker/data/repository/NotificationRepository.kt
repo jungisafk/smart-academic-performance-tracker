@@ -6,6 +6,9 @@ import com.smartacademictracker.data.model.Notification
 import com.smartacademictracker.data.model.NotificationPreferences
 import com.smartacademictracker.data.model.NotificationStats
 import com.smartacademictracker.data.model.NotificationType
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,9 +24,28 @@ class NotificationRepository @Inject constructor(
 
     suspend fun createNotification(notification: Notification): Result<Notification> {
         return try {
-            val docRef = notificationsCollection.add(notification).await()
+            // Convert enum to string for Firestore rules compatibility
+            val notificationMap = hashMapOf<String, Any?>(
+                "userId" to notification.userId,
+                "title" to notification.title,
+                "message" to notification.message,
+                "type" to notification.type.name, // Store enum as string
+                "priority" to notification.priority.name, // Store enum as string
+                "read" to notification.isRead,
+                "delivered" to notification.isDelivered,
+                "createdAt" to notification.createdAt,
+                "readAt" to notification.readAt,
+                "data" to notification.data,
+                "actionUrl" to notification.actionUrl,
+                "academicPeriodId" to notification.academicPeriodId
+            )
+            
+            // Create document directly with set() instead of add() then set()
+            // This ensures all fields including type are set correctly for rule evaluation
+            val docRef = notificationsCollection.document()
+            notificationMap["id"] = docRef.id
+            docRef.set(notificationMap).await()
             val createdNotification = notification.copy(id = docRef.id)
-            notificationsCollection.document(docRef.id).set(createdNotification).await()
             Result.success(createdNotification)
         } catch (e: Exception) {
             Result.failure(e)
@@ -37,8 +59,22 @@ class NotificationRepository @Inject constructor(
                 .get()
                 .await()
             val notifications = snapshot.toObjects(Notification::class.java)
+            // Fix any notifications that still have {message} placeholder
+            val fixedNotifications = notifications.map { notification ->
+                if (notification.message == "{message}" || notification.message.contains("{message}")) {
+                    android.util.Log.w("NotificationRepository", "Found notification with {message} placeholder: ${notification.id}, type: ${notification.type}")
+                    val defaultMessage = when (notification.type) {
+                        com.smartacademictracker.data.model.NotificationType.GRADE_UPDATE -> 
+                            "Your grade for ${notification.title.replace("Grade Update - ", "")} has been updated"
+                        else -> notification.message.replace("{message}", "You have a new notification")
+                    }
+                    notification.copy(message = defaultMessage)
+                } else {
+                    notification
+                }
+            }
             // Sort in memory as temporary workaround while index builds
-            val sortedNotifications = notifications.sortedByDescending { it.createdAt }
+            val sortedNotifications = fixedNotifications.sortedByDescending { it.createdAt }
             Result.success(sortedNotifications)
         } catch (e: Exception) {
             Result.failure(e)
@@ -47,47 +83,64 @@ class NotificationRepository @Inject constructor(
 
     suspend fun getUnreadNotificationsByUserId(userId: String): Result<List<Notification>> {
         return try {
+            android.util.Log.d("NotificationRepository", "getUnreadNotificationsByUserId called for userId: $userId")
             val snapshot = notificationsCollection
                 .whereEqualTo("userId", userId)
-                .whereEqualTo("isRead", false)
+                .whereEqualTo("read", false)  // Firestore uses "read" field, not "isRead"
                 .get()
                 .await()
             val notifications = snapshot.toObjects(Notification::class.java)
+            android.util.Log.d("NotificationRepository", "Found ${notifications.size} unread notifications")
             // Sort in memory as temporary workaround while index builds
             val sortedNotifications = notifications.sortedByDescending { it.createdAt }
             Result.success(sortedNotifications)
         } catch (e: Exception) {
+            android.util.Log.e("NotificationRepository", "getUnreadNotificationsByUserId failed: ${e.message}", e)
             Result.failure(e)
         }
     }
 
     suspend fun markNotificationAsRead(notificationId: String): Result<Unit> {
         return try {
-            notificationsCollection.document(notificationId).update(
-                "isRead", true,
+            android.util.Log.d("NotificationRepository", "markNotificationAsRead called for notificationId: $notificationId")
+            val updateResult = notificationsCollection.document(notificationId).update(
+                "read", true,  // Firestore uses "read" field, not "isRead"
                 "readAt", Timestamp.now()
             ).await()
+            android.util.Log.d("NotificationRepository", "markNotificationAsRead succeeded for notificationId: $notificationId")
             Result.success(Unit)
         } catch (e: Exception) {
+            android.util.Log.e("NotificationRepository", "markNotificationAsRead failed for notificationId: $notificationId, error: ${e.message}", e)
             Result.failure(e)
         }
     }
 
     suspend fun markAllNotificationsAsRead(userId: String): Result<Unit> {
         return try {
+            android.util.Log.d("NotificationRepository", "markAllNotificationsAsRead called for userId: $userId")
             val snapshot = notificationsCollection
                 .whereEqualTo("userId", userId)
-                .whereEqualTo("isRead", false)
+                .whereEqualTo("read", false)  // Firestore uses "read" field, not "isRead"
                 .get()
                 .await()
 
+            android.util.Log.d("NotificationRepository", "Found ${snapshot.documents.size} unread notifications to mark as read")
+            
+            if (snapshot.documents.isEmpty()) {
+                android.util.Log.d("NotificationRepository", "No unread notifications found")
+                return Result.success(Unit)
+            }
+
             val batch = firestore.batch()
             snapshot.documents.forEach { doc ->
-                batch.update(doc.reference, "isRead", true, "readAt", Timestamp.now())
+                android.util.Log.d("NotificationRepository", "Adding notification ${doc.id} to batch update")
+                batch.update(doc.reference, "read", true, "readAt", Timestamp.now())
             }
-            batch.commit().await()
+            val commitResult = batch.commit().await()
+            android.util.Log.d("NotificationRepository", "markAllNotificationsAsRead batch commit succeeded")
             Result.success(Unit)
         } catch (e: Exception) {
+            android.util.Log.e("NotificationRepository", "markAllNotificationsAsRead failed for userId: $userId, error: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -197,6 +250,55 @@ class NotificationRepository @Inject constructor(
             Result.success(notifications)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    fun getNotificationsByUserIdFlow(userId: String): Flow<List<Notification>> = callbackFlow {
+        android.util.Log.d("NotificationRepository", "getNotificationsByUserIdFlow called for userId: $userId")
+        val listener = notificationsCollection
+            .whereEqualTo("userId", userId)
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("NotificationRepository", "Flow listener error: ${error.message}", error)
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    android.util.Log.d("NotificationRepository", "Flow listener received ${snapshot.documents.size} documents")
+                    val notifications = snapshot.toObjects(Notification::class.java)
+                    
+                    // Log read status from Firestore for debugging
+                    notifications.forEach { notification ->
+                        // Check raw Firestore data to see what's actually stored
+                        val rawDoc = snapshot.documents.find { it.id == notification.id }
+                        val rawReadValue = rawDoc?.get("read")
+                        android.util.Log.d("NotificationRepository", "Notification from Firestore - id: ${notification.id}, isRead property: ${notification.isRead}, raw 'read' field: $rawReadValue, title: ${notification.title}")
+                    }
+                    
+                    // Fix any notifications that still have {message} placeholder
+                    val fixedNotifications = notifications.map { notification ->
+                        if (notification.message == "{message}" || notification.message.contains("{message}")) {
+                            // Try to reconstruct the message from the template
+                            android.util.Log.w("NotificationRepository", "Found notification with {message} placeholder: ${notification.id}, type: ${notification.type}")
+                            // For now, use a default message based on type
+                            val defaultMessage = when (notification.type) {
+                                com.smartacademictracker.data.model.NotificationType.GRADE_UPDATE -> 
+                                    "Your grade for ${notification.title.replace("Grade Update - ", "")} has been updated"
+                                else -> notification.message.replace("{message}", "You have a new notification")
+                            }
+                            notification.copy(message = defaultMessage)
+                        } else {
+                            notification
+                        }
+                    }
+                    android.util.Log.d("NotificationRepository", "Sending ${fixedNotifications.size} notifications through Flow")
+                    trySend(fixedNotifications)
+                }
+            }
+        awaitClose { 
+            android.util.Log.d("NotificationRepository", "Flow listener closed")
+            listener.remove() 
         }
     }
 

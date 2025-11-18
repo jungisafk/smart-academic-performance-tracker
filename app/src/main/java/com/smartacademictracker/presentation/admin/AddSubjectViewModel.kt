@@ -39,18 +39,18 @@ class AddSubjectViewModel @Inject constructor(
                 _academicPeriods.value = periods.sortedByDescending { it.createdAt }
             }.onFailure {
                 // If loading fails, still allow using active period
-                println("DEBUG: AddSubjectViewModel - Failed to load academic periods: ${it.message}")
+                
             }
         }
     }
     
     fun setCourseId(courseId: String) {
-        println("DEBUG: AddSubjectViewModel - Setting courseId: '$courseId'")
+        
         _courseId = courseId
     }
     
     fun setYearLevelId(yearLevelId: String) {
-        println("DEBUG: AddSubjectViewModel - Setting yearLevelId: '$yearLevelId'")
+        
         _yearLevelId = yearLevelId
     }
 
@@ -66,7 +66,7 @@ class AddSubjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
-            println("DEBUG: AddSubjectViewModel - Adding subject with courseId: '$_courseId', yearLevelId: '$_yearLevelId', academicPeriodId: '$selectedAcademicPeriodId'")
+            
             
             try {
                 val semester: String

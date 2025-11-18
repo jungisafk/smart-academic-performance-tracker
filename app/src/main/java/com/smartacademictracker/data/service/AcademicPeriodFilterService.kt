@@ -24,15 +24,12 @@ class AcademicPeriodFilterService @Inject constructor(
             val result = academicPeriodRepository.getActiveAcademicPeriod()
             result.onSuccess { period ->
                 _activeAcademicPeriod.value = period
-                println("DEBUG: AcademicPeriodFilterService - Active period: ${period?.name ?: "None"}")
                 return period
-            }.onFailure { exception ->
-                println("DEBUG: AcademicPeriodFilterService - Error loading active period: ${exception.message}")
+            }.onFailure {
                 return null
             }
             null
         } catch (e: Exception) {
-            println("DEBUG: AcademicPeriodFilterService - Exception loading active period: ${e.message}")
             null
         }
     }

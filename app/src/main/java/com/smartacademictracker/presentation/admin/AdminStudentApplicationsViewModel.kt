@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.admin
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.SubjectApplication
@@ -11,6 +10,8 @@ import com.smartacademictracker.data.repository.SubjectApplicationRepository
 import com.smartacademictracker.data.repository.StudentEnrollmentRepository
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.SubjectRepository
+import com.smartacademictracker.data.repository.SectionAssignmentRepository
+import com.smartacademictracker.data.manager.AdminDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +25,9 @@ class AdminStudentApplicationsViewModel @Inject constructor(
     private val studentEnrollmentRepository: StudentEnrollmentRepository,
     private val userRepository: UserRepository,
     private val subjectRepository: SubjectRepository,
-    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
+    private val sectionAssignmentRepository: SectionAssignmentRepository,
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService,
+    private val adminDataCache: AdminDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminStudentApplicationsUiState())
@@ -33,73 +36,78 @@ class AdminStudentApplicationsViewModel @Inject constructor(
     private val _applications = MutableStateFlow<List<SubjectApplication>>(emptyList())
     val applications: StateFlow<List<SubjectApplication>> = _applications.asStateFlow()
 
-    fun loadApplications() {
+    init {
+        // Load cached data immediately if available
+        val cachedApplications = adminDataCache.cachedStudentApplications.value
+        if (cachedApplications.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _applications.value = cachedApplications
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun loadApplications(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedStudentApplications.value.isNotEmpty() && adminDataCache.isCacheValid()) {
+                _applications.value = adminDataCache.cachedStudentApplications.value
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedStudentApplications.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 val result = subjectApplicationRepository.getAllApplications()
                 result.onSuccess { applicationsList ->
                     _applications.value = applicationsList
+                    adminDataCache.updateStudentApplications(applicationsList)
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    Log.d("AdminStudentApps", "Loaded ${applicationsList.size} student applications")
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to load applications"
                     )
-                    Log.e("AdminStudentApps", "Error loading applications: ${exception.message}")
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load applications"
                 )
-                Log.e("AdminStudentApps", "Exception loading applications: ${e.message}")
             }
         }
     }
 
     fun approveApplication(applicationId: String) {
         viewModelScope.launch {
-            Log.d("AdminStudentApps", "approveApplication called for ID: $applicationId")
             _uiState.value = _uiState.value.copy(
                 processingApplications = _uiState.value.processingApplications + applicationId,
                 error = null
             )
             
             try {
-                Log.d("AdminStudentApps", "Getting application details for ID: $applicationId")
-                // Get the application details
                 val applicationResult = subjectApplicationRepository.getApplicationById(applicationId)
                 applicationResult.onSuccess { application ->
-                    Log.d("AdminStudentApps", "Application found: ${application.studentName} for subject: ${application.subjectName}")
-                    Log.d("AdminStudentApps", "Updating application status to APPROVED")
-                    // Update application status to approved
                     val statusResult = subjectApplicationRepository.updateApplicationStatus(
                         applicationId, 
                         ApplicationStatus.APPROVED
                     )
                     statusResult.onSuccess {
-                        Log.d("AdminStudentApps", "Application status updated successfully, creating enrollment")
-                        // Create student enrollment
                         createStudentEnrollment(application)
                     }.onFailure { exception ->
-                        Log.e("AdminStudentApps", "Error updating application status: ${exception.message}")
                         _uiState.value = _uiState.value.copy(
                             processingApplications = _uiState.value.processingApplications - applicationId,
                             error = "Failed to update application status: ${exception.message}"
                         )
                     }
                 }.onFailure { exception ->
-                    Log.e("AdminStudentApps", "Error getting application: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         processingApplications = _uiState.value.processingApplications - applicationId,
                         error = "Failed to get application details: ${exception.message}"
                     )
                 }
             } catch (e: Exception) {
-                Log.e("AdminStudentApps", "Exception approving application: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     processingApplications = _uiState.value.processingApplications - applicationId,
                     error = "Failed to approve application: ${e.message}"
@@ -110,72 +118,131 @@ class AdminStudentApplicationsViewModel @Inject constructor(
 
     private suspend fun createStudentEnrollment(application: SubjectApplication) {
         try {
-            Log.d("AdminStudentApps", "Starting enrollment creation for application: ${application.id}")
-            Log.d("AdminStudentApps", "Application details: studentId=${application.studentId}, subjectId=${application.subjectId}, sectionName=${application.sectionName}")
-            
-            // Get student information
-            val studentResult = userRepository.getUserById(application.studentId)
-            studentResult.onSuccess { student ->
-                Log.d("AdminStudentApps", "Student found: ${student?.firstName} ${student?.lastName}")
+            // Get section assignment for this subject and section to get correct section name and teacher info
+            val sectionAssignmentsResult = sectionAssignmentRepository.getSectionAssignmentsBySubject(application.subjectId)
+            sectionAssignmentsResult.onSuccess { assignments ->
+                // Find the section assignment that matches the application's section name
+                // Handle both short names (like "A") and full names (like "PROG101A")
+                val matchingAssignment = assignments.find { assignment ->
+                    assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE &&
+                    (assignment.sectionName == application.sectionName ||
+                     assignment.sectionName.endsWith(application.sectionName) ||
+                     application.sectionName.endsWith(assignment.sectionName.takeLast(1)))
+                }
                 
-                // Get subject information
-                val subjectResult = subjectRepository.getSubjectById(application.subjectId)
-                subjectResult.onSuccess { subject ->
-                    Log.d("AdminStudentApps", "Subject found: ${subject?.name}")
-                    
-                    // Create enrollment
-                    val enrollment = StudentEnrollment(
-                        studentId = application.studentId,
-                        studentName = application.studentName,
-                        subjectId = application.subjectId,
-                        subjectName = application.subjectName,
-                        sectionName = application.sectionName,
-                        courseId = application.courseId,
-                        courseName = application.courseName,
-                        yearLevelId = application.yearLevelId,
-                        yearLevelName = application.yearLevelName,
-                        academicPeriodId = application.academicPeriodId,
-                        enrollmentDate = System.currentTimeMillis(),
-                        status = EnrollmentStatus.ACTIVE
-                    )
+                // Use the section name from the assignment if found, otherwise use the application's section name
+                val enrollmentSectionName = matchingAssignment?.sectionName ?: application.sectionName
+                val teacherId = matchingAssignment?.teacherId ?: ""
+                val teacherName = matchingAssignment?.teacherName ?: ""
+                val teacherEmail = matchingAssignment?.teacherEmail ?: ""
+                
+                // Warn if no matching assignment found (but still proceed with enrollment)
+                if (matchingAssignment == null) {
+                    android.util.Log.w("AdminStudentAppsVM", "No matching section assignment found for subject ${application.subjectId} section ${application.sectionName}. Enrollment will be created without teacher info.")
+                }
+                
+                val studentResult = userRepository.getUserById(application.studentId)
+                studentResult.onSuccess { student ->
+                    val subjectResult = subjectRepository.getSubjectById(application.subjectId)
+                    subjectResult.onSuccess { subject ->
+                        // Check if student is already enrolled to prevent duplicates
+                        val isEnrolledResult = studentEnrollmentRepository.isStudentEnrolled(
+                            application.studentId,
+                            application.subjectId,
+                            enrollmentSectionName
+                        )
+                        
+                        val isAlreadyEnrolled = isEnrolledResult.getOrNull() ?: false
+                        if (isAlreadyEnrolled) {
+                            android.util.Log.w("AdminStudentAppsVM", "Student ${application.studentId} is already enrolled in ${application.subjectId} section $enrollmentSectionName")
+                            // Still show success message since application was approved
+                            notificationSenderService.sendApplicationStatusNotification(
+                                userId = application.studentId,
+                                applicationType = "Subject Application",
+                                status = "approved",
+                                subjectName = application.subjectName
+                            )
+                            _uiState.value = _uiState.value.copy(
+                                processingApplications = _uiState.value.processingApplications - application.id
+                            )
+                            loadApplications(forceRefresh = true)
+                            return@onSuccess
+                        }
+                        
+                        val enrollment = StudentEnrollment(
+                            studentId = application.studentId,
+                            studentName = application.studentName,
+                            studentEmail = student?.email ?: "",
+                            subjectId = application.subjectId,
+                            subjectName = application.subjectName,
+                            subjectCode = subject?.code ?: "",
+                            sectionName = enrollmentSectionName, // Use section name from assignment (e.g., "PROG101A")
+                            teacherId = teacherId,
+                            teacherName = teacherName,
+                            teacherEmail = teacherEmail,
+                            courseId = application.courseId,
+                            courseName = application.courseName,
+                            yearLevelId = application.yearLevelId,
+                            yearLevelName = application.yearLevelName,
+                            semester = subject?.semester ?: com.smartacademictracker.data.model.Semester.FIRST_SEMESTER,
+                            academicYear = subject?.academicYear ?: "",
+                            academicPeriodId = matchingAssignment?.academicPeriodId ?: application.academicPeriodId,
+                            enrollmentDate = System.currentTimeMillis(),
+                            status = EnrollmentStatus.ACTIVE,
+                            enrolledBy = "admin", // TODO: Get actual admin user ID
+                            enrolledByName = "Admin",
+                            notes = "Enrolled after application approval by admin",
+                            createdAt = System.currentTimeMillis()
+                        )
 
-                    Log.d("AdminStudentApps", "Calling studentEnrollmentRepository.enrollStudent")
-                    val enrollmentResult = studentEnrollmentRepository.enrollStudent(enrollment)
-                    enrollmentResult.onSuccess { enrollmentId ->
-                        Log.d("AdminStudentApps", "Successfully created enrollment for student ${application.studentName} with ID: $enrollmentId")
-                        
-                        // Notify student that their application was approved
-                        notificationSenderService.sendApplicationStatusNotification(
-                            userId = application.studentId,
-                            applicationType = "Subject Application",
-                            status = "approved",
-                            subjectName = application.subjectName
-                        )
-                        
-                        _uiState.value = _uiState.value.copy(
-                            processingApplications = _uiState.value.processingApplications - application.id
-                        )
-                        // Reload applications to show updated status
-                        loadApplications()
+                        val enrollmentResult = studentEnrollmentRepository.enrollStudent(enrollment)
+                        enrollmentResult.onSuccess { enrollmentId ->
+                            android.util.Log.i("AdminStudentAppsVM", "Successfully created enrollment $enrollmentId for student ${application.studentId} in subject ${application.subjectId}")
+                            
+                            // Send application approved notification
+                            notificationSenderService.sendApplicationStatusNotification(
+                                userId = application.studentId,
+                                applicationType = "Subject Application",
+                                status = "approved",
+                                subjectName = application.subjectName
+                            )
+                            
+                            // Send enrollment notification
+                            notificationSenderService.sendStudentEnrolledNotification(
+                                studentId = application.studentId,
+                                subjectName = application.subjectName,
+                                sectionName = enrollmentSectionName,
+                                teacherName = teacherName.ifEmpty { "TBA" }
+                            )
+                            
+                            _uiState.value = _uiState.value.copy(
+                                processingApplications = _uiState.value.processingApplications - application.id
+                            )
+                            loadApplications(forceRefresh = true)
+                        }.onFailure { exception ->
+                            val errorMsg = "Application approved but failed to create enrollment: ${exception.message}"
+                            android.util.Log.e("AdminStudentAppsVM", errorMsg, exception)
+                            _uiState.value = _uiState.value.copy(
+                                processingApplications = _uiState.value.processingApplications - application.id,
+                                error = errorMsg
+                            )
+                        }
                     }.onFailure { exception ->
-                        Log.e("AdminStudentApps", "Error creating enrollment: ${exception.message}")
                         _uiState.value = _uiState.value.copy(
                             processingApplications = _uiState.value.processingApplications - application.id,
-                            error = "Application approved but failed to create enrollment: ${exception.message}"
+                            error = "Failed to get subject information: ${exception.message}"
                         )
                     }
                 }.onFailure { exception ->
-                    Log.e("AdminStudentApps", "Error getting subject: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         processingApplications = _uiState.value.processingApplications - application.id,
-                        error = "Failed to get subject information: ${exception.message}"
+                        error = "Failed to get student information: ${exception.message}"
                     )
                 }
             }.onFailure { exception ->
-                Log.e("AdminStudentApps", "Error getting student: ${exception.message}")
                 _uiState.value = _uiState.value.copy(
                     processingApplications = _uiState.value.processingApplications - application.id,
-                    error = "Failed to get student information: ${exception.message}"
+                    error = "Failed to get section assignments: ${exception.message}"
                 )
             }
         } catch (e: Exception) {
@@ -183,7 +250,6 @@ class AdminStudentApplicationsViewModel @Inject constructor(
                 processingApplications = _uiState.value.processingApplications - application.id,
                 error = "Failed to create enrollment: ${e.message}"
             )
-            Log.e("AdminStudentApps", "Exception creating enrollment: ${e.message}")
         }
     }
 
@@ -203,9 +269,6 @@ class AdminStudentApplicationsViewModel @Inject constructor(
                         ApplicationStatus.REJECTED
                     )
                     result.onSuccess {
-                        Log.d("AdminStudentApps", "Successfully rejected application $applicationId")
-                        
-                        // Notify student that their application was rejected
                         notificationSenderService.sendApplicationStatusNotification(
                             userId = application.studentId,
                             applicationType = "Subject Application",
@@ -214,28 +277,24 @@ class AdminStudentApplicationsViewModel @Inject constructor(
                             reason = application.remarks
                         )
                         
-                        // Reload applications to show updated status
-                        loadApplications()
+                        loadApplications(forceRefresh = true)
                     }.onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
                             processingApplications = _uiState.value.processingApplications - applicationId,
                             error = "Failed to reject application: ${exception.message}"
                         )
-                        Log.e("AdminStudentApps", "Error rejecting application: ${exception.message}")
                     }
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         processingApplications = _uiState.value.processingApplications - applicationId,
                         error = "Failed to get application details: ${exception.message}"
                     )
-                    Log.e("AdminStudentApps", "Error getting application: ${exception.message}")
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     processingApplications = _uiState.value.processingApplications - applicationId,
                     error = "Failed to reject application: ${e.message}"
                 )
-                Log.e("AdminStudentApps", "Exception rejecting application: ${e.message}")
             }
         }
     }

@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -25,9 +26,33 @@ class AuthViewModel @Inject constructor(
 
     init {
         checkAuthState()
+        setupRealtimeUserListener()
+    }
+    
+    /**
+     * Set up real-time listener for current user changes
+     * This ensures profile screens update automatically when user data changes (e.g., year level progression)
+     */
+    private fun setupRealtimeUserListener() {
+        viewModelScope.launch {
+            userRepository.getCurrentUserFlow()
+                .catch { exception ->
+                    android.util.Log.e("AuthViewModel", "Error in current user flow: ${exception.message}", exception)
+                    // Fallback to one-time query on error
+                    checkAuthState()
+                }
+                .collect { user ->
+                    _currentUser.value = user
+                    if (user != null) {
+                        _uiState.value = AuthUiState(isSignedIn = true)
+                    } else {
+                        _uiState.value = AuthUiState(isSignedIn = false)
+                    }
+                }
+        }
     }
 
-    private fun checkAuthState() {
+    fun checkAuthState() {
         viewModelScope.launch {
             try {
                 val result = userRepository.getCurrentUser()
@@ -35,12 +60,10 @@ class AuthViewModel @Inject constructor(
                     if (user != null) {
                         _currentUser.value = user
                         _uiState.value = AuthUiState(isSignedIn = true)
-                        println("DEBUG: User already signed in: ${user.email}")
                     }
                 }
             } catch (e: Exception) {
                 // Handle error silently for initial check
-                println("DEBUG: No existing user session")
             }
         }
     }
@@ -54,21 +77,17 @@ class AuthViewModel @Inject constructor(
                 result.onSuccess { user ->
                     _currentUser.value = user
                     _uiState.value = AuthUiState(isLoading = false, isSignedIn = true)
-                    println("DEBUG: Sign in successful for user: ${user.email}")
-                    println("DEBUG: Current user set: ${_currentUser.value?.email}, isSignedIn: ${_uiState.value.isSignedIn}")
                 }.onFailure { exception ->
                     _uiState.value = AuthUiState(
                         isLoading = false,
                         error = exception.message ?: "Sign in failed"
                     )
-                    println("DEBUG: Sign in failed: ${exception.message}")
                 }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState(
                     isLoading = false,
                     error = e.message ?: "Sign in failed"
                 )
-                println("DEBUG: Sign in exception: ${e.message}")
             }
         }
     }
@@ -144,20 +163,17 @@ class AuthViewModel @Inject constructor(
                 result.onSuccess { user ->
                     _currentUser.value = user
                     _uiState.value = AuthUiState(isLoading = false, isSignedIn = true)
-                    println("DEBUG: Sign in successful for user ID: $userId")
                 }.onFailure { exception ->
                     _uiState.value = AuthUiState(
                         isLoading = false,
                         error = exception.message ?: "Sign in failed"
                     )
-                    println("DEBUG: Sign in failed: ${exception.message}")
                 }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState(
                     isLoading = false,
                     error = e.message ?: "Sign in failed"
                 )
-                println("DEBUG: Sign in exception: ${e.message}")
             }
         }
     }

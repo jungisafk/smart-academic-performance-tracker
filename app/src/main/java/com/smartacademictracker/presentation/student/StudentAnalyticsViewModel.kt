@@ -1,12 +1,12 @@
 package com.smartacademictracker.presentation.student
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.model.GradeStatus
 import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.manager.StudentDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class StudentAnalyticsViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val gradeRepository: GradeRepository
+    private val gradeRepository: GradeRepository,
+    private val studentDataCache: StudentDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StudentAnalyticsUiState())
@@ -26,21 +27,49 @@ class StudentAnalyticsViewModel @Inject constructor(
     private val _gradeAggregates = MutableStateFlow<List<StudentGradeAggregate>>(emptyList())
     val gradeAggregates: StateFlow<List<StudentGradeAggregate>> = _gradeAggregates.asStateFlow()
 
-    fun loadAnalyticsData() {
+    fun loadAnalyticsData(forceRefresh: Boolean = false) {
+        // Prevent duplicate loads if already loading
+        if (_uiState.value.isLoading && !forceRefresh) {
+            return
+        }
+        
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Check cache first
+            val cachedAggregates = studentDataCache.cachedGradeAggregates.value
+            
+            // Only show loading if no cached data or cache is invalid
+            if (forceRefresh || !studentDataCache.isCacheValid() || cachedAggregates.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             
             try {
                 // Get current user
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
+                        // Use cached data immediately if available and valid
+                        if (!forceRefresh && studentDataCache.isCacheValid() && cachedAggregates.isNotEmpty()) {
+                            val userAggregates = cachedAggregates.filter { it.studentId == user.id }
+                            if (userAggregates.isNotEmpty()) {
+                                _gradeAggregates.value = userAggregates
+                                val analytics = calculateAnalytics(userAggregates)
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    overallAverage = analytics.overallAverage,
+                                    passingSubjects = analytics.passingSubjects,
+                                    atRiskSubjects = analytics.atRiskSubjects,
+                                    failingSubjects = analytics.failingSubjects
+                                )
+                            }
+                        }
+                        
                         // Try to load student's grade aggregates first
                         val aggregatesResult = gradeRepository.getStudentGradeAggregatesByStudent(user.id)
                         aggregatesResult.onSuccess { aggregatesList ->
                             if (aggregatesList.isNotEmpty()) {
                                 // Use aggregates if available
                                 _gradeAggregates.value = aggregatesList
+                                studentDataCache.updateGradeAggregates(aggregatesList)
                                 
                                 // Calculate analytics
                                 val analytics = calculateAnalytics(aggregatesList)
@@ -52,16 +81,12 @@ class StudentAnalyticsViewModel @Inject constructor(
                                     atRiskSubjects = analytics.atRiskSubjects,
                                     failingSubjects = analytics.failingSubjects
                                 )
-                                
-                                Log.d("StudentAnalytics", "Loaded ${aggregatesList.size} grade aggregates")
                             } else {
                                 // Fallback: Load individual grades and create aggregates on-the-fly
-                                Log.d("StudentAnalytics", "No aggregates found, loading individual grades")
                                 loadAnalyticsFromIndividualGrades(user.id)
                             }
                         }.onFailure { exception ->
                             // Fallback: Load individual grades if aggregates fail
-                            Log.d("StudentAnalytics", "Aggregates failed, loading individual grades: ${exception.message}")
                             loadAnalyticsFromIndividualGrades(user.id)
                         }
                     } else {
@@ -71,10 +96,22 @@ class StudentAnalyticsViewModel @Inject constructor(
                         )
                     }
                 }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Failed to load user data"
-                    )
+                    // If cache exists, use it; otherwise show error
+                    if (cachedAggregates.isNotEmpty() && studentDataCache.isCacheValid()) {
+                        val analytics = calculateAnalytics(cachedAggregates)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            overallAverage = analytics.overallAverage,
+                            passingSubjects = analytics.passingSubjects,
+                            atRiskSubjects = analytics.atRiskSubjects,
+                            failingSubjects = analytics.failingSubjects
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "Failed to load user data"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -87,11 +124,25 @@ class StudentAnalyticsViewModel @Inject constructor(
     
     private suspend fun loadAnalyticsFromIndividualGrades(studentId: String) {
         try {
-            // Load individual grades
-            val gradesResult = gradeRepository.getGradesByStudent(studentId)
+            // Check cache first
+            val cachedGrades = studentDataCache.cachedGrades.value
+            val studentGrades = if (cachedGrades.isNotEmpty() && studentDataCache.isCacheValid()) {
+                cachedGrades.filter { it.studentId == studentId }
+            } else {
+                emptyList()
+            }
+            
+            // Load individual grades if not in cache
+            val gradesResult = if (studentGrades.isEmpty()) {
+                gradeRepository.getGradesByStudent(studentId)
+            } else {
+                kotlin.Result.success(studentGrades)
+            }
+            
             gradesResult.onSuccess { gradesList ->
                 if (gradesList.isNotEmpty()) {
-                    Log.d("StudentAnalytics", "Loaded ${gradesList.size} individual grades")
+                    // Update cache
+                    studentDataCache.updateGrades(gradesList)
                     
                     // Group grades by subject and create aggregates on-the-fly
                     val subjectGroups = gradesList.groupBy { it.subjectId }
@@ -106,6 +157,7 @@ class StudentAnalyticsViewModel @Inject constructor(
                     }
                     
                     _gradeAggregates.value = aggregates
+                    studentDataCache.updateGradeAggregates(aggregates)
                     
                     // Calculate analytics
                     val analytics = calculateAnalytics(aggregates)
@@ -117,8 +169,6 @@ class StudentAnalyticsViewModel @Inject constructor(
                         atRiskSubjects = analytics.atRiskSubjects,
                         failingSubjects = analytics.failingSubjects
                     )
-                    
-                    Log.d("StudentAnalytics", "Created ${aggregates.size} aggregates from individual grades")
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -152,11 +202,12 @@ class StudentAnalyticsViewModel @Inject constructor(
         val midtermGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.MIDTERM }
         val finalGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.FINAL }
         
-        // Calculate final average
-        val validGrades = listOfNotNull(prelimGrade, midtermGrade, finalGrade)
-        val finalAverage = if (validGrades.isNotEmpty()) {
-            validGrades.map { it.percentage }.average()
-        } else null
+        // Calculate final average using weighted formula (30% prelim, 30% midterm, 40% final)
+        val finalAverage = com.smartacademictracker.data.utils.GradeCalculationEngine.calculateFinalAverage(
+            prelimGrade?.percentage,
+            midtermGrade?.percentage,
+            finalGrade?.percentage
+        )
         
         // Determine status
         val status = when {
@@ -186,7 +237,7 @@ class StudentAnalyticsViewModel @Inject constructor(
     }
 
     fun refreshData() {
-        loadAnalyticsData()
+        loadAnalyticsData(forceRefresh = true)
     }
 
     fun clearError() {

@@ -92,48 +92,90 @@ class EnhancedTeacherGradeInputViewModel @Inject constructor(
                 // Load enrollments (prefer section-based student_enrollments)
                 val currentUser = userRepository.getCurrentUser().getOrNull()
                 val teacherId = currentUser?.id ?: ""
-                println("DEBUG: EnhancedTeacherGradeInputViewModel - Loading students for subject: $subjectId, teacher: $teacherId")
                 
                 val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
                 if (studentEnrollmentsResult.isSuccess) {
                     val seList = studentEnrollmentsResult.getOrNull().orEmpty()
-                    println("DEBUG: EnhancedTeacherGradeInputViewModel - Found ${seList.size} student enrollments for subject $subjectId")
-                    // Determine teacher's section
-                    var teacherSection: String? = null
+                    // Get ALL sections the teacher is assigned to for this subject
                     if (teacherId.isNotEmpty()) {
                         sectionAssignmentRepository.getSectionAssignmentsByTeacher(teacherId).onSuccess { assignments ->
-                            teacherSection = assignments.firstOrNull { it.subjectId == subjectId }?.sectionName
+                            // Get all section names for this subject
+                            val teacherAssignedSections = assignments
+                                .filter { it.subjectId == subjectId && it.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE }
+                                .map { it.sectionName }
+                                .toSet()
+                            
+                            // Filter students: show those in teacher's assigned sections OR those with matching teacherId
+                            // This ensures students enrolled without teacherId still show up if they're in the teacher's section
+                            val filtered = when {
+                                teacherAssignedSections.isNotEmpty() -> {
+                                    // Show students in any of the teacher's assigned sections, regardless of teacherId
+                                    seList.filter { 
+                                        it.sectionName in teacherAssignedSections || 
+                                        (teacherId.isNotEmpty() && it.teacherId == teacherId)
+                                    }
+                                }
+                                teacherId.isNotEmpty() -> seList.filter { it.teacherId == teacherId }
+                                else -> seList
+                            }
+                            
+                            val mapped = filtered.map { se ->
+                                Enrollment(
+                                    id = se.id,
+                                    studentId = se.studentId,
+                                    studentName = se.studentName,
+                                    subjectId = se.subjectId,
+                                    subjectName = se.subjectName,
+                                    subjectCode = se.subjectCode,
+                                    enrolledAt = se.enrollmentDate,
+                                    semester = se.semester.name,
+                                    academicYear = se.academicYear,
+                                    active = se.status.name == "ACTIVE"
+                                )
+                            }
+                            _enrollments.value = mapped
+                        }.onFailure {
+                            // If we can't get section assignments, fall back to filtering by teacherId
+                            val filtered = if (teacherId.isNotEmpty()) {
+                                seList.filter { it.teacherId == teacherId }
+                            } else {
+                                seList
+                            }
+                            val mapped = filtered.map { se ->
+                                Enrollment(
+                                    id = se.id,
+                                    studentId = se.studentId,
+                                    studentName = se.studentName,
+                                    subjectId = se.subjectId,
+                                    subjectName = se.subjectName,
+                                    subjectCode = se.subjectCode,
+                                    enrolledAt = se.enrollmentDate,
+                                    semester = se.semester.name,
+                                    academicYear = se.academicYear,
+                                    active = se.status.name == "ACTIVE"
+                                )
+                            }
+                            _enrollments.value = mapped
                         }
+                    } else {
+                        // No teacher ID, show all students
+                        val mapped = seList.map { se ->
+                            Enrollment(
+                                id = se.id,
+                                studentId = se.studentId,
+                                studentName = se.studentName,
+                                subjectId = se.subjectId,
+                                subjectName = se.subjectName,
+                                subjectCode = se.subjectCode,
+                                enrolledAt = se.enrollmentDate,
+                                semester = se.semester.name,
+                                academicYear = se.academicYear,
+                                active = se.status.name == "ACTIVE"
+                            )
+                        }
+                        _enrollments.value = mapped
                     }
-                    seList.forEach { se ->
-                        println("DEBUG: StudentEnrollment - Student: ${se.studentName}, TeacherId: ${se.teacherId}, Section: ${se.sectionName}, Status: ${se.status}")
-                    }
-                    
-                    val filtered = when {
-                        teacherSection != null -> seList.filter { it.sectionName == teacherSection }
-                        teacherId.isNotEmpty() -> seList.filter { it.teacherId == teacherId }
-                        else -> seList
-                    }
-                    println("DEBUG: EnhancedTeacherGradeInputViewModel - After filtering (section=$teacherSection teacher=$teacherId): ${filtered.size} students")
-                    
-                    val mapped = filtered.map { se ->
-                        Enrollment(
-                            id = se.id,
-                            studentId = se.studentId,
-                            studentName = se.studentName,
-                            subjectId = se.subjectId,
-                            subjectName = se.subjectName,
-                            subjectCode = se.subjectCode,
-                            enrolledAt = se.enrollmentDate,
-                            semester = se.semester.name,
-                            academicYear = se.academicYear,
-                            active = se.status.name == "ACTIVE"
-                        )
-                    }
-                    println("DEBUG: EnhancedTeacherGradeInputViewModel - Final mapped enrollments: ${mapped.size}")
-                    _enrollments.value = mapped
                 } else {
-                    println("DEBUG: EnhancedTeacherGradeInputViewModel - Error loading student enrollments: ${studentEnrollmentsResult.exceptionOrNull()?.message}")
                     val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
                     enrollmentsResult.onSuccess { enrollments ->
                         _enrollments.value = enrollments

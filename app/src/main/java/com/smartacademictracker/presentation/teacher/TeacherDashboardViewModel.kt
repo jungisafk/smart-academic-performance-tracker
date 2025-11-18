@@ -2,10 +2,12 @@ package com.smartacademictracker.presentation.teacher
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartacademictracker.data.manager.TeacherDataCache
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.EnrollmentRepository
 import com.smartacademictracker.data.repository.StudentEnrollmentRepository
+import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,54 +21,50 @@ class TeacherDashboardViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val subjectRepository: SubjectRepository,
     private val enrollmentRepository: EnrollmentRepository,
-    private val studentEnrollmentRepository: StudentEnrollmentRepository
+    private val studentEnrollmentRepository: StudentEnrollmentRepository,
+    private val sectionAssignmentRepository: SectionAssignmentRepository,
+    private val teacherDataCache: TeacherDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherDashboardUiState())
     val uiState: StateFlow<TeacherDashboardUiState> = _uiState.asStateFlow()
 
     private val _teacherId = MutableStateFlow<String?>(null)
-    private val _subjects = MutableStateFlow<List<com.smartacademictracker.data.model.Subject>>(emptyList())
+    private val _sectionAssignments = MutableStateFlow<List<com.smartacademictracker.data.model.SectionAssignment>>(emptyList())
     private val _enrollments = MutableStateFlow<List<com.smartacademictracker.data.model.Enrollment>>(emptyList())
 
     init {
         // Set up real-time data flow
         viewModelScope.launch {
-            combine(_teacherId, _subjects, _enrollments) { teacherId, subjects, enrollments ->
-                println("DEBUG: TeacherDashboardViewModel - Combine triggered: teacherId=$teacherId, subjects=${subjects.size}, enrollments=${enrollments.size}, isLoading=${_uiState.value.isLoading}")
-                
+            combine(_teacherId, _sectionAssignments, _enrollments) { teacherId, assignments, enrollments ->
                 if (teacherId != null) {
-                    val teacherSubjects = subjects.filter { it.teacherId == teacherId && it.active }
-                    val subjectIds = teacherSubjects.map { it.id }
-                    val teacherEnrollments = enrollments.filter { it.subjectId in subjectIds }
+                    // Count unique subjects from section assignments (not from subject.teacherId)
+                    val assignedSubjectIds = assignments.map { it.subjectId }.toSet()
+                    val activeSubjectsCount = assignedSubjectIds.size
+                    
+                    // Get enrollments for assigned subjects
+                    val teacherEnrollments = enrollments.filter { it.subjectId in assignedSubjectIds }
                     val totalStudents = teacherEnrollments.distinctBy { it.studentId }.size
                     
-                    val previousState = _uiState.value
-                    val newState = previousState.copy(
-                        activeSubjects = teacherSubjects.size,
+                    _uiState.value = _uiState.value.copy(
+                        activeSubjects = activeSubjectsCount,
                         totalStudents = totalStudents,
                         isLoading = false
                     )
-                    
-                    println("DEBUG: TeacherDashboardViewModel - Real-time update:")
-                    println("  - Previous state: activeSubjects=${previousState.activeSubjects}, totalStudents=${previousState.totalStudents}")
-                    println("  - New state: activeSubjects=${newState.activeSubjects}, totalStudents=${newState.totalStudents}")
-                    println("  - Teacher subjects: ${teacherSubjects.size} (IDs: ${teacherSubjects.map { it.id }})")
-                    println("  - Subject IDs: $subjectIds")
-                    println("  - Teacher enrollments: ${teacherEnrollments.size}")
-                    println("  - Unique students: $totalStudents")
-                    
-                    _uiState.value = newState
-                } else {
-                    println("DEBUG: TeacherDashboardViewModel - Skipping update: teacherId is null")
                 }
             }.collect { }
         }
     }
 
-    fun loadDashboardData() {
+    fun loadDashboardData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Check cache first
+            val cachedEnrollments = teacherDataCache.cachedEnrollments.value
+            
+            // Only show loading if no cached data or cache is invalid
+            if (forceRefresh || !teacherDataCache.isCacheValid() || cachedEnrollments.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             
             try {
                 // Get current user (teacher)
@@ -74,36 +72,45 @@ class TeacherDashboardViewModel @Inject constructor(
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
                         _teacherId.value = user.id
-                        println("DEBUG: TeacherDashboardViewModel - Loading data for teacher: ${user.id}")
                         
-                        // Load subjects and enrollments in parallel
-                        val subjectsResult = subjectRepository.getAllSubjects()
-                        // Use new student_enrollments collection for counts
-                        val studentEnrollmentsResult = studentEnrollmentRepository.getActiveEnrollmentsByTeacher(user.id)
-                        
-                        // Process subjects
-                        subjectsResult.onSuccess { subjectsList ->
-                            println("DEBUG: TeacherDashboardViewModel - SubjectRepository returned ${subjectsList.size} subjects")
-                            _subjects.value = subjectsList
-                            println("DEBUG: TeacherDashboardViewModel - Updated _subjects StateFlow with ${subjectsList.size} subjects")
-                            
-                            // Calculate teacher-specific data
-                            val teacherSubjects = subjectsList.filter { it.teacherId == user.id && it.active }
-                            println("DEBUG: TeacherDashboardViewModel - Teacher has ${teacherSubjects.size} active subjects")
-                            println("DEBUG: TeacherDashboardViewModel - Active subject details: ${teacherSubjects.map { "${it.name} (${it.id})" }}")
-                        }.onFailure { exception ->
-                            println("DEBUG: TeacherDashboardViewModel - Error loading subjects: ${exception.message}")
-                            println("DEBUG: TeacherDashboardViewModel - Exception: ${exception.stackTraceToString()}")
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = exception.message ?: "Failed to load subjects"
-                            )
+                        // Use cached data immediately if available and valid
+                        if (!forceRefresh && teacherDataCache.isCacheValid() && cachedEnrollments.isNotEmpty()) {
+                            val legacyMapped = cachedEnrollments.map { e ->
+                                com.smartacademictracker.data.model.Enrollment(
+                                    id = e.id,
+                                    studentId = e.studentId,
+                                    studentName = e.studentName,
+                                    subjectId = e.subjectId,
+                                    subjectName = e.subjectName,
+                                    subjectCode = e.subjectCode,
+                                    enrolledAt = e.enrollmentDate,
+                                    semester = e.semester.name,
+                                    academicYear = e.academicYear,
+                                    active = e.status.name == "ACTIVE"
+                                )
+                            }
+                            _enrollments.value = legacyMapped
+                            _uiState.value = _uiState.value.copy(isLoading = false)
                         }
                         
-                        // Process enrollments - use new StudentEnrollmentRepository
+                        // Load fresh data in background
+                        // Load section assignments to get teacher's assigned subjects
+                        val assignmentsResult = sectionAssignmentRepository.getSectionAssignmentsByTeacher(user.id)
+                        val studentEnrollmentsResult = studentEnrollmentRepository.getActiveEnrollmentsByTeacher(user.id)
+                        
+                        assignmentsResult.onSuccess { assignments ->
+                            _sectionAssignments.value = assignments
+                        }.onFailure { exception ->
+                            if (!teacherDataCache.isCacheValid()) {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = exception.message ?: "Failed to load section assignments"
+                                )
+                            }
+                        }
+                        
                         if (studentEnrollmentsResult.isSuccess) {
                             val se = studentEnrollmentsResult.getOrNull().orEmpty()
-                            println("DEBUG: TeacherDashboardViewModel - StudentEnrollmentRepository returned ${se.size} enrollments")
                             val legacyMapped = se.map { e ->
                                 com.smartacademictracker.data.model.Enrollment(
                                     id = e.id,
@@ -119,19 +126,16 @@ class TeacherDashboardViewModel @Inject constructor(
                                 )
                             }
                             _enrollments.value = legacyMapped
-                            println("DEBUG: TeacherDashboardViewModel - Updated _enrollments StateFlow with ${legacyMapped.size} enrollments")
-                            println("DEBUG: TeacherDashboardViewModel - Enrollment details: ${legacyMapped.map { "${it.studentName} -> ${it.subjectName}" }}")
+                            teacherDataCache.updateEnrollments(se)
                         } else {
-                            // If student enrollments fail to load, set empty list
-                            _enrollments.value = emptyList()
-                            val error = studentEnrollmentsResult.exceptionOrNull()
-                            println("DEBUG: TeacherDashboardViewModel - Error loading enrollments (student_enrollments): ${error?.message}")
-                            println("DEBUG: TeacherDashboardViewModel - Exception: ${error?.stackTraceToString()}")
+                            if (!teacherDataCache.isCacheValid()) {
+                                _enrollments.value = emptyList()
+                            }
                         }
                         
-                        // Set loading to false after both operations complete
-                        _uiState.value = _uiState.value.copy(isLoading = false)
-                        
+                        if (!teacherDataCache.isCacheValid()) {
+                            _uiState.value = _uiState.value.copy(isLoading = false)
+                        }
                     } else {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -139,14 +143,12 @@ class TeacherDashboardViewModel @Inject constructor(
                         )
                     }
                 }.onFailure { exception ->
-                    println("DEBUG: TeacherDashboardViewModel - Error loading user: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to load user data"
                     )
                 }
             } catch (e: Exception) {
-                println("DEBUG: TeacherDashboardViewModel - Error loading dashboard data: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load dashboard data"
@@ -156,17 +158,15 @@ class TeacherDashboardViewModel @Inject constructor(
     }
 
     fun refreshData() {
-        loadDashboardData()
+        loadDashboardData(forceRefresh = true)
     }
     
     fun updateEnrollments(enrollments: List<com.smartacademictracker.data.model.Enrollment>) {
         _enrollments.value = enrollments
-        println("DEBUG: TeacherDashboardViewModel - Updated enrollments: ${enrollments.size} total")
     }
     
-    fun updateSubjects(subjects: List<com.smartacademictracker.data.model.Subject>) {
-        _subjects.value = subjects
-        println("DEBUG: TeacherDashboardViewModel - Updated subjects: ${subjects.size} total")
+    fun updateSectionAssignments(assignments: List<com.smartacademictracker.data.model.SectionAssignment>) {
+        _sectionAssignments.value = assignments
     }
 }
 

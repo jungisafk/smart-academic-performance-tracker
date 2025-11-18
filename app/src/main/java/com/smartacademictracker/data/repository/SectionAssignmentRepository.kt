@@ -88,14 +88,20 @@ class SectionAssignmentRepository @Inject constructor(
 
     suspend fun getSectionAssignmentsByTeacher(teacherId: String): Result<List<SectionAssignment>> {
         return try {
+            android.util.Log.d("SectionAssignmentRepository", "getSectionAssignmentsByTeacher called - teacherId: $teacherId")
             val snapshot = sectionAssignmentsCollection
                 .whereEqualTo("teacherId", teacherId)
                 .whereEqualTo("status", AssignmentStatus.ACTIVE.name)
                 .get()
                 .await()
             val assignments = snapshot.toObjects(SectionAssignment::class.java)
+            android.util.Log.d("SectionAssignmentRepository", "Found ${assignments.size} active assignments for teacher $teacherId")
+            assignments.forEach { assignment ->
+                android.util.Log.d("SectionAssignmentRepository", "Assignment - id: ${assignment.id}, subjectId: ${assignment.subjectId}, sectionName: ${assignment.sectionName}, teacherId: ${assignment.teacherId}, status: ${assignment.status}")
+            }
             Result.success(assignments)
         } catch (e: Exception) {
+            android.util.Log.e("SectionAssignmentRepository", "Error getting section assignments: ${e.message}", e)
             Result.failure(e)
         }
     }

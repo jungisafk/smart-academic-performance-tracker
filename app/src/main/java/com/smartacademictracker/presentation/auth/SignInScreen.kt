@@ -32,6 +32,7 @@ fun SignInScreen(
     onNavigateToActivation: () -> Unit = {},
     onSignInSuccess: () -> Unit,
     onNavigateToDashboard: (String) -> Unit = {},
+    onNavigateToForgotPassword: (com.smartacademictracker.data.model.UserRole) -> Unit = {},
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     var userId by remember { mutableStateOf("") }
@@ -57,7 +58,6 @@ fun SignInScreen(
     LaunchedEffect(currentUser, uiState.isSignedIn) {
         currentUser?.let { user ->
             if (uiState.isSignedIn) {
-                println("DEBUG: SignInScreen - User signed in, calling onSignInSuccess")
                 onSignInSuccess()
                 
                 // Also try direct navigation as backup
@@ -67,7 +67,6 @@ fun SignInScreen(
                     "ADMIN" -> "admin_dashboard"
                     else -> "student_dashboard"
                 }
-                println("DEBUG: SignInScreen - Direct navigation to: $destination")
                 onNavigateToDashboard(destination)
             }
         }
@@ -365,7 +364,9 @@ fun SignInScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(
-                            onClick = { /* TODO: Implement forgot password */ },
+                            onClick = { 
+                                onNavigateToForgotPassword(selectedUserType)
+                            },
                             enabled = !uiState.isLoading
                         ) {
                             Text(

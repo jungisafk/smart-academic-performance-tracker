@@ -1,6 +1,8 @@
 package com.smartacademictracker.presentation.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.Course
@@ -35,6 +38,7 @@ fun HierarchicalAcademicManagementScreen(
     onNavigateToEditYearLevel: (String) -> Unit = {},
     onNavigateToEditSubject: (String) -> Unit = {},
     onNavigateToAcademicPeriods: () -> Unit = {},
+    modifier: Modifier = Modifier,
     viewModel: HierarchicalAcademicManagementViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -50,80 +54,13 @@ fun HierarchicalAcademicManagementScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Enhanced Header Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        ) {
-                            Icon(
-                                Icons.Default.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Academic Structure",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Manage courses, year levels, and subjects",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                        
-                        // Action Buttons
-                        IconButton(
-                            onClick = { 
-                                viewModel.refreshData()
-                                println("DEBUG: Manual refresh triggered")
-                            },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh, 
-                                contentDescription = "Refresh",
-                                tint = Color.White
-                            )
-                        }
-                    }
-                }
-            }
-            
             // Content Section
             Column(
                 modifier = Modifier
@@ -140,26 +77,17 @@ fun HierarchicalAcademicManagementScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
+                        Text(
+                            text = "Academic Structure",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333),
                             modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Academic Structure",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF333333)
-                            )
-                            Text(
-                                text = "Organize your academic programs and subjects",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF666666),
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
+                        )
                         
                         Button(
                             onClick = onNavigateToAddCourse,
@@ -204,10 +132,6 @@ fun HierarchicalAcademicManagementScreen(
                             // Courses Section (MAJOR subjects)
                             items(courses) { course ->
                                 val filteredYearLevels = yearLevels.filter { it.courseId == course.id }
-                                println("DEBUG: Course ${course.name} (${course.id}) has ${filteredYearLevels.size} year levels")
-                                filteredYearLevels.forEach { yearLevel ->
-                                    println("DEBUG: Year Level for ${course.name}: ${yearLevel.name} (${yearLevel.id})")
-                                }
                                 EnhancedCourseHierarchyCard(
                                     course = course,
                                     yearLevels = filteredYearLevels,
@@ -215,16 +139,15 @@ fun HierarchicalAcademicManagementScreen(
                                     subjects = subjects.filter { 
                                         it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR 
                                     },
-                                    onEditCourse = { onNavigateToEditCourse(course.id) },
                                     onDeleteCourse = { viewModel.deleteCourse(course.id) },
                                     onAddYearLevel = { 
-                                        println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add year level for course: '${course.id}'")
+                                        
                                         onNavigateToAddYearLevel(course.id) 
                                     },
                                     onEditYearLevel = onNavigateToEditYearLevel,
                                     onDeleteYearLevel = { viewModel.deleteYearLevel(it) },
                                     onAddSubject = { yearLevelId -> 
-                                        println("DEBUG: HierarchicalAcademicManagementScreen - Navigating to add subject for course: '${course.id}', yearLevel: '$yearLevelId'")
+                                        
                                         onNavigateToAddSubject(course.id, yearLevelId) 
                                     },
                                     onEditSubject = onNavigateToEditSubject,
@@ -282,7 +205,7 @@ fun HierarchicalAcademicManagementScreen(
                                     // Create a map of level number to a representative year level (for display)
                                     val yearLevelByNumber = yearLevels.associateBy { it.level }
                                     
-                                    uniqueYearLevelNumbers.forEach { levelNumber ->
+                                    uniqueYearLevelNumbers.forEachIndexed { index, levelNumber ->
                                         val representativeYearLevel = yearLevelByNumber[levelNumber]
                                         if (representativeYearLevel != null) {
                                             // Get all MINOR subjects for this year level number (across all courses)
@@ -291,6 +214,9 @@ fun HierarchicalAcademicManagementScreen(
                                             // Use the first year level ID with this level number for adding subjects
                                             val firstYearLevelWithNumber = yearLevels.firstOrNull { it.level == levelNumber }
                                             if (firstYearLevelWithNumber != null) {
+                                                if (index > 0) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                }
                                                 MinorSubjectYearLevelCard(
                                                     yearLevel = representativeYearLevel,
                                                     subjects = yearLevelMinorSubjects,
@@ -439,7 +365,6 @@ fun EnhancedCourseHierarchyCard(
     course: Course,
     yearLevels: List<YearLevel>,
     subjects: List<Subject>,
-    onEditCourse: () -> Unit,
     onDeleteCourse: () -> Unit,
     onAddYearLevel: () -> Unit,
     onEditYearLevel: (String) -> Unit,
@@ -451,6 +376,7 @@ fun EnhancedCourseHierarchyCard(
     // Use remember with key to persist state across recompositions
     // Default to false (collapsed) so cards don't auto-expand when scrolling
     var expanded by remember(course.id) { mutableStateOf(false) }
+    var isCourseNameExpanded by remember(course.id) { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -463,15 +389,16 @@ fun EnhancedCourseHierarchyCard(
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            // Enhanced Course Header
+            // Course Header - Fixed Rows Layout
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
+                // Left side: Course info
                 Row(
                     modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     // Course Icon
                     Box(
@@ -491,39 +418,64 @@ fun EnhancedCourseHierarchyCard(
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 0.dp)
+                    ) {
+                        // Row 1 & 2: Course Name (clickable to expand)
                         Text(
                             text = course.name,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
+                            color = Color(0xFF333333),
+                            maxLines = if (isCourseNameExpanded) Int.MAX_VALUE else 2,
+                            overflow = if (isCourseNameExpanded) TextOverflow.Visible else TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isCourseNameExpanded = !isCourseNameExpanded }
                         )
-                        Text(
-                            text = "Code: ${course.code}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF666666)
-                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Row 3: Details (Code and Year Levels) - Fixed layout to prevent cutoff
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Default.Class,
-                                contentDescription = "Year Levels",
-                                modifier = Modifier.size(16.dp),
-                                tint = Color(0xFF4CAF50)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${yearLevels.size} year level(s)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF4CAF50),
-                                fontWeight = FontWeight.Medium
+                                text = "Code: ${course.code}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF666666),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Icon(
+                                    Icons.Default.Class,
+                                    contentDescription = "Year Levels",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF4CAF50)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${yearLevels.size} year level(s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Visible
+                                )
+                            }
                         }
                     }
                 }
                 
-                // Action Buttons
+                // Right side: Action Buttons (only expand/collapse and delete)
                 Row {
                     IconButton(
                         onClick = { expanded = !expanded },
@@ -536,22 +488,6 @@ fun EnhancedCourseHierarchyCard(
                             if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             contentDescription = if (expanded) "Collapse" else "Expand",
                             tint = Color(0xFF666666)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    IconButton(
-                        onClick = onEditCourse,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE3F2FD))
-                    ) {
-                        Icon(
-                            Icons.Default.Edit, 
-                            contentDescription = "Edit Course",
-                            tint = Color(0xFF2196F3)
                         )
                     }
                     
@@ -624,7 +560,10 @@ fun EnhancedCourseHierarchyCard(
                     }
                 } else {
                     // Year Levels List
-                    yearLevels.sortedBy { it.level }.forEach { yearLevel ->
+                    yearLevels.sortedBy { it.level }.forEachIndexed { index, yearLevel ->
+                        if (index > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                         YearLevelHierarchyCard(
                             yearLevel = yearLevel,
                             // Only show MAJOR subjects in courses (filter out MINOR subjects)
@@ -657,9 +596,28 @@ fun YearLevelHierarchyCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
+    // Color scheme based on year level for distinction
+    val yearLevelColors = listOf(
+        Color(0xFFE3F2FD) to Color(0xFF1976D2), // Year 1 - Light Blue
+        Color(0xFFF3E5F5) to Color(0xFF7B1FA2), // Year 2 - Light Purple
+        Color(0xFFFFF3E0) to Color(0xFFE65100), // Year 3 - Light Orange
+        Color(0xFFE8F5E9) to Color(0xFF388E3C), // Year 4 - Light Green
+        Color(0xFFFFEBEE) to Color(0xFFC62828), // Year 5+ - Light Red
+    )
+    
+    val (backgroundColor, accentColor) = yearLevelColors.getOrElse((yearLevel.level - 1).coerceIn(0, yearLevelColors.size - 1)) {
+        Color(0xFFF5F5F5) to Color(0xFF757575) // Default gray
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(
+            width = 1.dp,
+            color = accentColor.copy(alpha = 0.3f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -676,31 +634,65 @@ fun YearLevelHierarchyCard(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { expanded = !expanded }) {
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.size(40.dp)
+                    ) {
                         Icon(
                             if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (expanded) "Collapse" else "Expand"
+                            contentDescription = if (expanded) "Collapse" else "Expand",
+                            tint = accentColor
                         )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
                             text = "Year ${yearLevel.level} - ${yearLevel.name}",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333)
                         )
-                        Text(
-                            text = "${subjects.size} subject(s)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Book,
+                                contentDescription = "Subjects",
+                                modifier = Modifier.size(14.dp),
+                                tint = accentColor
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${subjects.size} subject(s)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = accentColor,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
                 Row {
-                    IconButton(onClick = onEditYearLevel) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Year Level", modifier = Modifier.size(16.dp))
+                    IconButton(
+                        onClick = onEditYearLevel,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit Year Level",
+                            modifier = Modifier.size(18.dp),
+                            tint = accentColor
+                        )
                     }
-                    IconButton(onClick = onDeleteYearLevel) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete Year Level", modifier = Modifier.size(16.dp))
+                    IconButton(
+                        onClick = onDeleteYearLevel,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete Year Level",
+                            modifier = Modifier.size(18.dp),
+                            tint = Color(0xFFD32F2F)
+                        )
                     }
                 }
             }
@@ -779,9 +771,28 @@ fun MinorSubjectYearLevelCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
+    // Color scheme based on year level for distinction (same as major subjects)
+    val yearLevelColors = listOf(
+        Color(0xFFE3F2FD) to Color(0xFF1976D2), // Year 1 - Light Blue
+        Color(0xFFF3E5F5) to Color(0xFF7B1FA2), // Year 2 - Light Purple
+        Color(0xFFFFF3E0) to Color(0xFFE65100), // Year 3 - Light Orange
+        Color(0xFFE8F5E9) to Color(0xFF388E3C), // Year 4 - Light Green
+        Color(0xFFFFEBEE) to Color(0xFFC62828), // Year 5+ - Light Red
+    )
+    
+    val (backgroundColor, accentColor) = yearLevelColors.getOrElse((yearLevel.level - 1).coerceIn(0, yearLevelColors.size - 1)) {
+        Color(0xFFF5F5F5) to Color(0xFF757575) // Default gray
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(
+            width = 1.dp,
+            color = accentColor.copy(alpha = 0.3f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -798,13 +809,17 @@ fun MinorSubjectYearLevelCard(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { expanded = !expanded }) {
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.size(40.dp)
+                    ) {
                         Icon(
                             if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             contentDescription = if (expanded) "Collapse" else "Expand",
-                            tint = Color(0xFFFF9800)
+                            tint = accentColor
                         )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
                             text = "Year ${yearLevel.level}",
@@ -812,11 +827,23 @@ fun MinorSubjectYearLevelCard(
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF333333)
                         )
-                        Text(
-                            text = "${subjects.size} minor subject(s)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Book,
+                                contentDescription = "Minor Subjects",
+                                modifier = Modifier.size(14.dp),
+                                tint = accentColor
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${subjects.size} minor subject(s)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = accentColor,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -839,7 +866,7 @@ fun MinorSubjectYearLevelCard(
                     Button(
                         onClick = onAddSubject,
                         modifier = Modifier.height(28.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "Add Minor Subject", modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -852,7 +879,7 @@ fun MinorSubjectYearLevelCard(
                 if (subjects.isEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0).copy(alpha = 0.5f))
+                        colors = CardDefaults.cardColors(containerColor = backgroundColor.copy(alpha = 0.5f))
                     ) {
                         Column(
                             modifier = Modifier
@@ -863,12 +890,12 @@ fun MinorSubjectYearLevelCard(
                             Text(
                                 text = "No minor subjects",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666)
+                                color = accentColor
                             )
                             Text(
                                 text = "Add cross-departmental subjects for this year level",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666)
+                                color = accentColor.copy(alpha = 0.7f)
                             )
                         }
                     }

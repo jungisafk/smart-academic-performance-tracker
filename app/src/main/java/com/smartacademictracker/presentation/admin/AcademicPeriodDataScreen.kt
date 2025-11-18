@@ -25,6 +25,8 @@ import com.smartacademictracker.presentation.common.LoadingStateCard
 @Composable
 fun AcademicPeriodDataScreen(
     onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = {},
     viewModel: AcademicPeriodDataViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -36,34 +38,11 @@ fun AcademicPeriodDataScreen(
         viewModel.loadAcademicPeriodsAndSummaries()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Academic Period Data") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { 
-                            viewModel.loadAcademicPeriodsAndSummaries()
-                        },
-                        enabled = !uiState.isLoading
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
             // Loading State
             if (uiState.isLoading) {
                 LoadingStateCard(
@@ -106,7 +85,6 @@ fun AcademicPeriodDataScreen(
                 }
             }
         }
-    }
 }
 
 @Composable

@@ -10,6 +10,7 @@ import com.smartacademictracker.data.utils.GradeCalculationEngine
 import com.smartacademictracker.data.validation.GradeValidationService
 import com.smartacademictracker.data.audit.SecurityAuditLogger
 import com.smartacademictracker.data.service.AcademicPeriodFilterService
+import com.smartacademictracker.data.notification.NotificationSenderService
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -23,7 +24,8 @@ class GradeRepository @Inject constructor(
     private val auditTrailRepository: AuditTrailRepository,
     private val gradeValidationService: GradeValidationService,
     private val securityAuditLogger: SecurityAuditLogger,
-    private val academicPeriodFilterService: AcademicPeriodFilterService
+    private val academicPeriodFilterService: AcademicPeriodFilterService,
+    private val notificationSenderService: NotificationSenderService
 ) {
     private val gradesCollection = firestore.collection("grades")
     private val gradeAggregatesCollection = firestore.collection("grade_aggregates")
@@ -32,7 +34,7 @@ class GradeRepository @Inject constructor(
         return createGrade(grade, "system", "SYSTEM")
     }
     
-    suspend fun createGrade(grade: Grade, userId: String, userRole: String): Result<Grade> {
+    suspend fun createGrade(grade: Grade, userId: String, userRole: String, skipNotification: Boolean = false): Result<Grade> {
         return try {
             // Get active academic period context
             val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
@@ -135,6 +137,18 @@ class GradeRepository @Inject constructor(
                     academicYear = createdGrade.academicYear
                 )
             } catch (_: Exception) { /* no-op */ }
+            
+            // Notify student about the new grade (skip for CSV imports - handled in ViewModel)
+            if (!skipNotification) {
+                notificationSenderService.sendGradeUpdateNotification(
+                    userId = createdGrade.studentId,
+                    subjectName = createdGrade.subjectName,
+                    grade = createdGrade.letterGrade,
+                    period = createdGrade.gradePeriod.displayName,
+                    score = createdGrade.score,
+                    maxScore = createdGrade.maxScore
+                )
+            }
 
             Result.success(createdGrade)
         } catch (e: Exception) {
@@ -143,10 +157,14 @@ class GradeRepository @Inject constructor(
     }
 
     suspend fun updateGrade(grade: Grade): Result<Unit> {
-        return updateGrade(grade, "system", "SYSTEM")
+        val result = updateGrade(grade, "system", "SYSTEM")
+        return result.fold(
+            onSuccess = { Result.success(Unit) },
+            onFailure = { Result.failure(it) }
+        )
     }
     
-    suspend fun updateGrade(grade: Grade, userId: String, userRole: String): Result<Unit> {
+    suspend fun updateGrade(grade: Grade, userId: String, userRole: String, skipNotification: Boolean = false): Result<Grade> {
         return try {
             // Get the old grade for audit trail and lock check
             val oldGradeDoc = gradesCollection.document(grade.id).get().await()
@@ -258,8 +276,20 @@ class GradeRepository @Inject constructor(
                     academicYear = updatedGrade.academicYear
                 )
             } catch (_: Exception) { /* no-op */ }
+            
+            // Notify student about the grade update (only if grade actually changed and not skipping)
+            if (!skipNotification && (oldGrade?.score != updatedGrade.score || oldGrade?.gradePeriod != updatedGrade.gradePeriod)) {
+                notificationSenderService.sendGradeUpdateNotification(
+                    userId = updatedGrade.studentId,
+                    subjectName = updatedGrade.subjectName,
+                    grade = updatedGrade.letterGrade,
+                    period = updatedGrade.gradePeriod.displayName,
+                    score = updatedGrade.score,
+                    maxScore = updatedGrade.maxScore
+                )
+            }
 
-            Result.success(Unit)
+            Result.success(updatedGrade)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -401,6 +431,42 @@ class GradeRepository @Inject constructor(
         awaitClose {
             println("DEBUG: GradeRepository.getGradesBySubjectFlow - Removing real-time listener for subject: $subjectId")
             listenerRegistration.remove()
+        }
+    }
+    
+    /**
+     * Get real-time flow of grades for a specific student
+     */
+    fun getGradesByStudentFlow(studentId: String): Flow<List<Grade>> = callbackFlow {
+        try {
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                trySend(emptyList())
+                close()
+                return@callbackFlow
+            }
+            
+            val listener = gradesCollection
+                .whereEqualTo("studentId", studentId)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    
+                    if (snapshot != null) {
+                        val grades = snapshot.toObjects(Grade::class.java)
+                        val sortedGrades = grades.sortedByDescending { it.dateRecorded }
+                        trySend(sortedGrades)
+                    }
+                }
+            
+            awaitClose {
+                listener.remove()
+            }
+        } catch (e: Exception) {
+            close(e)
         }
     }
 
@@ -706,6 +772,33 @@ class GradeRepository @Inject constructor(
     }
     
     /**
+     * Reject/decline a grade edit request (Admin only)
+     * This clears the editRequested flag without unlocking the grade
+     */
+    suspend fun rejectGradeEditRequest(gradeId: String, adminId: String): Result<Unit> {
+        return try {
+            val gradeDoc = gradesCollection.document(gradeId).get().await()
+            val grade = gradeDoc.toObject(Grade::class.java)
+                ?: return Result.failure(Exception("Grade not found"))
+            
+            if (!grade.editRequested) {
+                return Result.failure(Exception("No edit request found for this grade"))
+            }
+            
+            // Clear the editRequested flag without unlocking the grade
+            gradesCollection.document(gradeId).update(
+                mapOf(
+                    "editRequested" to false
+                )
+            ).await()
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get all grades with edit requests (for admin)
      */
     suspend fun getGradesWithEditRequests(): Result<List<Grade>> {
@@ -852,6 +945,46 @@ class GradeRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get all grades that have been unlocked (edit request history)
+     * These are grades that were previously requested and approved
+     */
+    suspend fun getUnlockedGradesHistory(limit: Int = 50): Result<List<Grade>> {
+        return try {
+            // Query for grades with unlockedAt field (which is set when unlocked)
+            // We'll filter in memory to ensure we only get unlocked grades
+            val snapshot = gradesCollection
+                .whereGreaterThan("unlockedAt", 0L)
+                .orderBy("unlockedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(limit.toLong())
+                .get()
+                .await()
+            
+            val grades = snapshot.toObjects(Grade::class.java)
+                .filter { it.unlockedBy != null && it.unlockedAt != null }
+            Result.success(grades)
+        } catch (e: Exception) {
+            // If the query fails (e.g., no index), try alternative approach
+            try {
+                // Fallback: Get all grades and filter in memory (less efficient but works)
+                val allSnapshot = gradesCollection
+                    .limit(1000) // Get a reasonable batch
+                    .get()
+                    .await()
+                
+                val allGrades = allSnapshot.toObjects(Grade::class.java)
+                val unlockedGrades = allGrades
+                    .filter { it.unlockedBy != null && it.unlockedAt != null }
+                    .sortedByDescending { it.unlockedAt }
+                    .take(limit)
+                
+                Result.success(unlockedGrades)
+            } catch (fallbackError: Exception) {
+                Result.failure(e) // Return original error
+            }
         }
     }
 }

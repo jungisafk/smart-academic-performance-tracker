@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.TrendingUp
@@ -35,13 +34,20 @@ import com.smartacademictracker.presentation.common.SubjectPerformanceCard
 @Composable
 fun StudentAnalyticsScreen(
     onNavigateBack: () -> Unit,
-    viewModel: StudentAnalyticsViewModel = hiltViewModel()
+    viewModel: StudentAnalyticsViewModel = hiltViewModel(),
+    isEmbedded: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val gradeAggregates by viewModel.gradeAggregates.collectAsState()
     
-    LaunchedEffect(Unit) {
-        viewModel.loadAnalyticsData()
+    // Note: Data loading is handled by StudentGradesTabScreen when embedded
+    // Only load if this screen is used standalone (not embedded in tab screen)
+    if (!isEmbedded) {
+        LaunchedEffect(viewModel) {
+            if (gradeAggregates.isEmpty() && !uiState.isLoading) {
+                viewModel.loadAnalyticsData()
+            }
+        }
     }
     
     Box(
@@ -55,46 +61,6 @@ fun StudentAnalyticsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header Section
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.Default.ArrowBack, 
-                                contentDescription = "Back",
-                                tint = Color(0xFF666666)
-                            )
-                        }
-                        Text(
-                            text = "Performance Analytics",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = { viewModel.refreshData() },
-                        enabled = !uiState.isLoading
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh, 
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                }
-            }
-            
             // Summary Card
             if (!uiState.isLoading && gradeAggregates.isNotEmpty()) {
                 item {
@@ -295,7 +261,8 @@ fun StudentAnalyticsScreen(
                         PerformanceDistributionChart(
                             passingCount = uiState.passingSubjects,
                             atRiskCount = uiState.atRiskSubjects,
-                            failingCount = uiState.failingSubjects
+                            failingCount = uiState.failingSubjects,
+                            gradeAggregates = filteredAggregates
                         )
                     }
                 }
@@ -419,6 +386,7 @@ fun PerformanceDistributionChart(
     passingCount: Int,
     atRiskCount: Int,
     failingCount: Int,
+    gradeAggregates: List<com.smartacademictracker.data.model.StudentGradeAggregate> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -454,6 +422,35 @@ fun PerformanceDistributionChart(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Calculate grade range counts
+                    // 75 Below: includes all grades below 75 (74, 73, 72, etc.) - single row
+                    val below75Count = gradeAggregates.count { (it.finalAverage ?: 0.0) < 75 }
+                    // 75 Up: includes all grades 75 and above - single row
+                    val above75Count = gradeAggregates.count { (it.finalAverage ?: 0.0) >= 75 }
+                    val gradeRangeTotal = below75Count + above75Count
+                    
+                    // 75 Below - single row for all grades below 75 (74, 73, 72, etc.)
+                    if (gradeRangeTotal > 0) {
+                        PerformanceBarItem(
+                            label = "75 Below",
+                            count = below75Count,
+                            total = gradeRangeTotal,
+                            color = Color(0xFFF44336) // Red for below 75
+                        )
+                    }
+                    
+                    // 75 Up - single row for all grades 75 and above
+                    if (gradeRangeTotal > 0) {
+                        PerformanceBarItem(
+                            label = "75 Up",
+                            count = above75Count,
+                            total = gradeRangeTotal,
+                            color = Color(0xFF4CAF50) // Green for 75 and above
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
                     // Passing
                     PerformanceBarItem(
                         label = "Passing",

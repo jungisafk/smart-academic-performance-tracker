@@ -6,6 +6,12 @@ import com.smartacademictracker.data.model.Semester
 import com.smartacademictracker.data.model.YearLevel
 import com.smartacademictracker.data.model.Course
 import com.smartacademictracker.data.service.AcademicPeriodFilterService
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -109,8 +115,6 @@ class SubjectRepository @Inject constructor(
                     courseCode = getCourseCode(subject.courseId)
                 )
             }
-            
-            println("DEBUG: SubjectRepository - Loaded ${subjectsWithComputedFields.size} subjects for ${academicContext.academicYear} ${academicContext.semester}")
             
             Result.success(subjectsWithComputedFields)
         } catch (e: Exception) {
@@ -399,6 +403,162 @@ class SubjectRepository @Inject constructor(
             Result.success(corruptedCount)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get real-time flow of all subjects
+     */
+    fun getAllSubjectsFlow(): Flow<List<Subject>> = callbackFlow {
+        try {
+            // Get active academic period context
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                trySend(emptyList())
+                close()
+                return@callbackFlow
+            }
+            
+            // Convert semester string to Semester enum for filtering
+            val currentSemester = convertStringToSemester(academicContext.semester)
+            
+            // Create a coroutine scope for suspend operations
+            val job = SupervisorJob()
+            val scope = CoroutineScope(job)
+            
+            val listener = subjectsCollection
+                .whereEqualTo("active", true)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .whereEqualTo("semester", currentSemester)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    
+                    if (snapshot != null) {
+                        val subjects = mutableListOf<Subject>()
+                        for (document in snapshot.documents) {
+                            try {
+                                val subject = document.toObject(Subject::class.java)
+                                if (subject != null) {
+                                    subjects.add(subject)
+                                }
+                            } catch (e: Exception) {
+                                // Skip corrupted subjects
+                            }
+                        }
+                        
+                        // Populate computed fields using coroutine scope
+                        scope.launch {
+                            try {
+                                val subjectsWithComputedFields = subjects.map { subject ->
+                                    subject.copy(
+                                        yearLevelName = getYearLevelName(subject.yearLevelId),
+                                        courseName = getCourseName(subject.courseId),
+                                        courseCode = getCourseCode(subject.courseId)
+                                    )
+                                }
+                                trySend(subjectsWithComputedFields)
+                            } catch (e: Exception) {
+                                // If computed fields fail, send subjects without them
+                                trySend(subjects)
+                            }
+                        }
+                    }
+                }
+            
+            awaitClose {
+                listener.remove()
+                job.cancel()
+            }
+        } catch (e: Exception) {
+            close(e)
+        }
+    }
+    
+    /**
+     * Get real-time flow of subjects by teacher
+     */
+    fun getSubjectsByTeacherFlow(teacherId: String): Flow<List<Subject>> = callbackFlow {
+        try {
+            android.util.Log.d("SubjectRepository", "getSubjectsByTeacherFlow called - teacherId: $teacherId")
+            val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
+            if (!academicContext.isActive) {
+                android.util.Log.w("SubjectRepository", "No active academic period")
+                trySend(emptyList())
+                close()
+                return@callbackFlow
+            }
+            
+            val currentSemester = convertStringToSemester(academicContext.semester)
+            android.util.Log.d("SubjectRepository", "Academic period: ${academicContext.periodId}, semester: $currentSemester")
+            
+            // Create a coroutine scope for suspend operations
+            val job = SupervisorJob()
+            val scope = CoroutineScope(job)
+            
+            // NOTE: This query only returns subjects where teacherId field is set on the Subject document
+            // However, teachers are assigned via section_assignments, so this might not return all assigned subjects
+            // The ViewModel's loadMySubjects function correctly uses section_assignments to find all assigned subjects
+            val listener = subjectsCollection
+                .whereEqualTo("active", true)
+                .whereEqualTo("academicPeriodId", academicContext.periodId)
+                .whereEqualTo("semester", currentSemester)
+                .whereEqualTo("teacherId", teacherId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("SubjectRepository", "Flow listener error: ${error.message}", error)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    
+                    if (snapshot != null) {
+                        android.util.Log.d("SubjectRepository", "Flow listener received ${snapshot.documents.size} subjects with teacherId=$teacherId")
+                        val subjects = mutableListOf<Subject>()
+                        for (document in snapshot.documents) {
+                            try {
+                                val subject = document.toObject(Subject::class.java)
+                                if (subject != null) {
+                                    android.util.Log.d("SubjectRepository", "Subject from Flow - id: ${subject.id}, name: ${subject.name}, teacherId: ${subject.teacherId}")
+                                    subjects.add(subject)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("SubjectRepository", "Error parsing subject document: ${e.message}", e)
+                                // Skip corrupted subjects
+                            }
+                        }
+                        
+                        android.util.Log.d("SubjectRepository", "Parsed ${subjects.size} subjects from Flow")
+                        
+                        // Populate computed fields using coroutine scope
+                        scope.launch {
+                            try {
+                                val subjectsWithComputedFields = subjects.map { subject ->
+                                    subject.copy(
+                                        yearLevelName = getYearLevelName(subject.yearLevelId),
+                                        courseName = getCourseName(subject.courseId),
+                                        courseCode = getCourseCode(subject.courseId)
+                                    )
+                                }
+                                android.util.Log.d("SubjectRepository", "Sending ${subjectsWithComputedFields.size} subjects through Flow")
+                                trySend(subjectsWithComputedFields)
+                            } catch (e: Exception) {
+                                android.util.Log.e("SubjectRepository", "Error populating computed fields: ${e.message}", e)
+                                trySend(subjects)
+                            }
+                        }
+                    }
+                }
+            
+            awaitClose {
+                android.util.Log.d("SubjectRepository", "Flow listener closed")
+                listener.remove()
+                job.cancel()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SubjectRepository", "Exception in getSubjectsByTeacherFlow: ${e.message}", e)
+            close(e)
         }
     }
 }

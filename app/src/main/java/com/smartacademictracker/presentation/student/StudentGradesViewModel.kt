@@ -7,18 +7,22 @@ import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.manager.StudentDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class StudentGradesViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val gradeRepository: GradeRepository
+    private val gradeRepository: GradeRepository,
+    private val studentDataCache: StudentDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StudentGradesUiState())
@@ -31,27 +35,35 @@ class StudentGradesViewModel @Inject constructor(
     val gradeAggregates: StateFlow<List<StudentGradeAggregate>> = _gradeAggregates.asStateFlow()
 
     private val _studentId = MutableStateFlow<String?>(null)
+    private var gradesFlowJob: Job? = null
 
     init {
-        // Set up real-time data flow for grade updates
-        viewModelScope.launch {
-            combine(_studentId, _grades, _gradeAggregates) { studentId, grades, aggregates ->
-                if (studentId != null && !_uiState.value.isLoading) {
-                    val studentGrades = grades.filter { it.studentId == studentId }
-                    val studentAggregates = aggregates.filter { it.studentId == studentId }
-                    
-                    _grades.value = studentGrades
-                    _gradeAggregates.value = studentAggregates
-                    
-                    println("DEBUG: StudentGradesViewModel - Real-time update: ${studentGrades.size} grades, ${studentAggregates.size} aggregates")
-                }
-            }.collect { }
+        // Load cached data immediately if available
+        val cachedGrades = studentDataCache.cachedGrades.value
+        val cachedAggregates = studentDataCache.cachedGradeAggregates.value
+        if (cachedGrades.isNotEmpty() && studentDataCache.isCacheValid()) {
+            _grades.value = cachedGrades
+        }
+        if (cachedAggregates.isNotEmpty() && studentDataCache.isCacheValid()) {
+            _gradeAggregates.value = cachedAggregates
         }
     }
 
-    fun loadGrades() {
+    fun loadGrades(forceRefresh: Boolean = false) {
+        // Prevent duplicate loads if already loading
+        if (_uiState.value.isLoading && !forceRefresh) {
+            return
+        }
+        
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Check cache first
+            val cachedGrades = studentDataCache.cachedGrades.value
+            val cachedAggregates = studentDataCache.cachedGradeAggregates.value
+            
+            // Only show loading if no cached data or cache is invalid
+            if (forceRefresh || !studentDataCache.isCacheValid() || cachedGrades.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             
             try {
                 // Get current user
@@ -60,23 +72,43 @@ class StudentGradesViewModel @Inject constructor(
                     if (user != null) {
                         _studentId.value = user.id
                         
-                        // Load student's individual grades
-                        val gradesResult = gradeRepository.getGradesByStudent(user.id)
-                        gradesResult.onSuccess { gradesList ->
-                            _grades.value = gradesList
-                            println("DEBUG: StudentGradesViewModel - Loaded ${gradesList.size} individual grades")
+                        // Use cached data immediately if available and valid
+                        if (!forceRefresh && studentDataCache.isCacheValid() && cachedGrades.isNotEmpty()) {
+                            _grades.value = cachedGrades.filter { it.studentId == user.id }
+                            if (cachedAggregates.isNotEmpty()) {
+                                _gradeAggregates.value = cachedAggregates.filter { it.studentId == user.id }
+                            }
+                            _uiState.value = _uiState.value.copy(isLoading = false)
+                        }
+                        
+                        // Cancel any existing flow job
+                        gradesFlowJob?.cancel()
+                        
+                        // Set up real-time listener for grades
+                        gradesFlowJob = viewModelScope.launch {
+                            gradeRepository.getGradesByStudentFlow(user.id)
+                                .catch { exception ->
+                                    _uiState.value = _uiState.value.copy(
+                                        error = exception.message ?: "Failed to load grades"
+                                    )
+                                }
+                                .collect { gradesList ->
+                                    _grades.value = gradesList
+                                    studentDataCache.updateGrades(gradesList)
+                                }
                         }
                         
                         // Load student's grade aggregates (calculated averages per subject)
                         val aggregatesResult = gradeRepository.getStudentGradeAggregatesByStudent(user.id)
                         aggregatesResult.onSuccess { aggregatesList ->
                             _gradeAggregates.value = aggregatesList
-                            println("DEBUG: StudentGradesViewModel - Loaded ${aggregatesList.size} grade aggregates")
+                            studentDataCache.updateGradeAggregates(aggregatesList)
                             _uiState.value = _uiState.value.copy(isLoading = false)
                         }.onFailure { exception ->
                             // If aggregates fail, still show individual grades
-                            println("DEBUG: StudentGradesViewModel - Failed to load aggregates: ${exception.message}")
-                            _uiState.value = _uiState.value.copy(isLoading = false)
+                            if (!studentDataCache.isCacheValid()) {
+                                _uiState.value = _uiState.value.copy(isLoading = false)
+                            }
                         }
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -85,10 +117,19 @@ class StudentGradesViewModel @Inject constructor(
                         )
                     }
                 }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Failed to load user data"
-                    )
+                    // If cache exists, use it; otherwise show error
+                    if (cachedGrades.isNotEmpty() && studentDataCache.isCacheValid()) {
+                        _grades.value = cachedGrades
+                        if (cachedAggregates.isNotEmpty()) {
+                            _gradeAggregates.value = cachedAggregates
+                        }
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "Failed to load user data"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -114,7 +155,7 @@ class StudentGradesViewModel @Inject constructor(
     }
 
     fun refreshGrades() {
-        loadGrades()
+        loadGrades(forceRefresh = true)
     }
 
     fun clearError() {
@@ -123,12 +164,12 @@ class StudentGradesViewModel @Inject constructor(
     
     fun updateGrades(grades: List<Grade>) {
         _grades.value = grades
-        println("DEBUG: StudentGradesViewModel - Updated grades: ${grades.size} total")
+        studentDataCache.updateGrades(grades)
     }
     
     fun updateGradeAggregates(aggregates: List<StudentGradeAggregate>) {
         _gradeAggregates.value = aggregates
-        println("DEBUG: StudentGradesViewModel - Updated grade aggregates: ${aggregates.size} total")
+        studentDataCache.updateGradeAggregates(aggregates)
     }
 }
 

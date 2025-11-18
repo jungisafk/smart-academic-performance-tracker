@@ -59,7 +59,7 @@ fun AddSubjectScreen(
     }
 
     LaunchedEffect(courseId, yearLevelId) {
-        println("DEBUG: AddSubjectScreen - Received courseId: '$courseId', yearLevelId: '$yearLevelId'")
+        
         // Automatically set subject type based on courseId
         subjectType = if (courseId.isEmpty()) {
             com.smartacademictracker.data.model.SubjectType.MINOR

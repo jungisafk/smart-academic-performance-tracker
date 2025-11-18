@@ -6,6 +6,7 @@ import com.smartacademictracker.data.model.TeacherApplication
 import com.smartacademictracker.data.model.ApplicationStatus
 import com.smartacademictracker.data.repository.TeacherApplicationRepository
 import com.smartacademictracker.data.repository.SubjectRepository
+import com.smartacademictracker.data.manager.AdminDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,8 @@ import javax.inject.Inject
 class AdminApplicationsViewModel @Inject constructor(
     private val teacherApplicationRepository: TeacherApplicationRepository,
     private val subjectRepository: SubjectRepository,
-    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService,
+    private val adminDataCache: AdminDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminApplicationsUiState())
@@ -26,43 +28,63 @@ class AdminApplicationsViewModel @Inject constructor(
     private val _applications = MutableStateFlow<List<TeacherApplication>>(emptyList())
     val applications: StateFlow<List<TeacherApplication>> = _applications.asStateFlow()
 
-    fun loadApplications() {
+    init {
+        // Load cached data immediately if available
+        val cachedApplications = adminDataCache.cachedTeacherApplications.value
+        if (cachedApplications.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _applications.value = cachedApplications
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+        
+        // Set up real-time listener
+        setupRealtimeListeners()
+    }
+
+    private fun setupRealtimeListeners() {
         viewModelScope.launch {
-            android.util.Log.d("AdminApplicationsVM", "=== loadApplications START ===")
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                teacherApplicationRepository.getAllApplicationsFlow()
+                    .collect { applications ->
+                        _applications.value = applications
+                        adminDataCache.updateTeacherApplications(applications)
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to setup real-time listeners"
+                )
+            }
+        }
+    }
+
+    fun loadApplications(forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedTeacherApplications.value.isNotEmpty() && adminDataCache.isCacheValid()) {
+                _applications.value = adminDataCache.cachedTeacherApplications.value
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedTeacherApplications.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
-                android.util.Log.d("AdminApplicationsVM", "Calling teacherApplicationRepository.getAllApplications()")
                 val result = teacherApplicationRepository.getAllApplications()
                 
                 result.onSuccess { applicationsList ->
-                    android.util.Log.d("AdminApplicationsVM", "Success: Loaded ${applicationsList.size} applications")
-                    
-                    // Log each application
-                    applicationsList.forEachIndexed { index, app ->
-                        android.util.Log.d("AdminApplicationsVM", "App[$index]: ${app.teacherName} -> ${app.subjectName} (${app.status})")
-                    }
-                    
                     _applications.value = applicationsList
+                    adminDataCache.updateTeacherApplications(applicationsList)
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    android.util.Log.d("AdminApplicationsVM", "=== loadApplications SUCCESS ===")
                 }.onFailure { exception ->
-                    android.util.Log.e("AdminApplicationsVM", "=== loadApplications FAILURE ===")
-                    android.util.Log.e("AdminApplicationsVM", "Exception type: ${exception.javaClass.simpleName}")
-                    android.util.Log.e("AdminApplicationsVM", "Exception message: ${exception.message}")
-                    android.util.Log.e("AdminApplicationsVM", "Exception cause: ${exception.cause?.message}")
-                    
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to load applications"
                     )
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AdminApplicationsVM", "=== loadApplications EXCEPTION ===")
-                android.util.Log.e("AdminApplicationsVM", "Exception type: ${e.javaClass.simpleName}")
-                android.util.Log.e("AdminApplicationsVM", "Exception message: ${e.message}")
-                android.util.Log.e("AdminApplicationsVM", "Exception stack trace:", e)
-                
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load applications"
@@ -89,7 +111,7 @@ class AdminApplicationsViewModel @Inject constructor(
                             application.teacherName
                         )
                         assignResult.onSuccess {
-                            println("DEBUG: AdminApplicationsViewModel - Teacher assigned to subject successfully")
+                            
                             
                             // Notify teacher that their application was approved
                             notificationSenderService.sendApplicationStatusNotification(
@@ -99,17 +121,17 @@ class AdminApplicationsViewModel @Inject constructor(
                                 subjectName = application.subjectName
                             )
                             
-                            // Reload applications after status update
-                            loadApplications()
+                            // Real-time listener will automatically update UI, no need to reload
+                            _uiState.value = _uiState.value.copy(isLoading = false)
                         }.onFailure { exception ->
-                            println("DEBUG: AdminApplicationsViewModel - Failed to assign teacher: ${exception.message}")
+                            
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 error = "Application approved but failed to assign teacher: ${exception.message}"
                             )
                         }
                     }.onFailure { exception ->
-                        println("DEBUG: AdminApplicationsViewModel - Failed to update application status: ${exception.message}")
+                        
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = exception.message ?: "Failed to approve application"
@@ -150,7 +172,7 @@ class AdminApplicationsViewModel @Inject constructor(
                         )
                         
                         // Reload applications after status update
-                        loadApplications()
+                        loadApplications(forceRefresh = true)
                     }.onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,

@@ -8,6 +8,7 @@ import com.smartacademictracker.data.repository.StudentEnrollmentRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.CourseRepository
 import com.smartacademictracker.data.repository.YearLevelRepository
+import com.smartacademictracker.data.manager.AdminDataCache
 import com.smartacademictracker.data.model.GradeStatus
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.model.Grade
@@ -26,7 +27,8 @@ class AdminGradeMonitoringViewModel @Inject constructor(
     private val studentEnrollmentRepository: StudentEnrollmentRepository,
     private val subjectRepository: SubjectRepository,
     private val courseRepository: CourseRepository,
-    private val yearLevelRepository: YearLevelRepository
+    private val yearLevelRepository: YearLevelRepository,
+    private val adminDataCache: AdminDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminGradeMonitoringUiState())
@@ -44,9 +46,43 @@ class AdminGradeMonitoringViewModel @Inject constructor(
     // Cache courses to map course display name to course ID
     private val _cachedCourses = MutableStateFlow<List<com.smartacademictracker.data.model.Course>>(emptyList())
 
-    fun loadGradeData() {
+    init {
+        // Load cached data immediately if available
+        val cachedEnrollments = adminDataCache.cachedEnrollments.value
+        val cachedSubjects = adminDataCache.cachedSubjects.value
+        val cachedCourses = adminDataCache.cachedCourses.value
+        
+        if (cachedEnrollments.isNotEmpty() && cachedSubjects.isNotEmpty() && 
+            cachedCourses.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _cachedEnrollments.value = cachedEnrollments
+            _cachedSubjects.value = cachedSubjects
+            _cachedCourses.value = cachedCourses
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun loadGradeData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedEnrollments.value.isNotEmpty() && 
+                adminDataCache.cachedSubjects.value.isNotEmpty() &&
+                adminDataCache.cachedCourses.value.isNotEmpty() &&
+                adminDataCache.isCacheValid()) {
+                _cachedEnrollments.value = adminDataCache.cachedEnrollments.value
+                _cachedSubjects.value = adminDataCache.cachedSubjects.value
+                _cachedCourses.value = adminDataCache.cachedCourses.value
+                // Only show loading if we don't have cached data
+                if (_allGradeAggregates.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedEnrollments.value.isEmpty() || 
+                    adminDataCache.cachedSubjects.value.isEmpty() ||
+                    adminDataCache.cachedCourses.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
 
             try {
                 // Load filter options first
@@ -60,11 +96,13 @@ class AdminGradeMonitoringViewModel @Inject constructor(
                     enrollmentsResult.onSuccess { enrollmentsList ->
                         // Cache enrollments for fast filtering
                         _cachedEnrollments.value = enrollmentsList
+                        adminDataCache.updateEnrollments(enrollmentsList)
                         
                         // Cache subjects for fast filtering
                         val subjectsResult = subjectRepository.getAllSubjects()
                         subjectsResult.onSuccess { subjects ->
                             _cachedSubjects.value = subjects
+                            adminDataCache.updateSubjects(subjects)
                             // Update filtered options after caching subjects
                             updateFilteredOptions()
                         }
@@ -76,7 +114,7 @@ class AdminGradeMonitoringViewModel @Inject constructor(
                         // Apply filters
                         applyFilters()
 
-                        println("DEBUG: AdminGradeMonitoringViewModel - Loaded ${aggregates.size} grade aggregates")
+                        
                     }.onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -99,18 +137,33 @@ class AdminGradeMonitoringViewModel @Inject constructor(
     }
     
     private suspend fun loadFilterOptions() {
-        // Load courses
-        courseRepository.getAllCourses().onSuccess { courses ->
-            // Cache courses for ID lookup
-            _cachedCourses.value = courses
-            val courseNames = courses.map { "${it.code} - ${it.name}" }.distinct().sorted()
+        // Load courses from cache first if available
+        if (adminDataCache.cachedCourses.value.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _cachedCourses.value = adminDataCache.cachedCourses.value
+            val courseNames = _cachedCourses.value.map { "${it.code} - ${it.name}" }.distinct().sorted()
             _uiState.value = _uiState.value.copy(availableCourses = courseNames)
+        } else {
+            // Load courses
+            courseRepository.getAllCourses().onSuccess { courses ->
+                // Cache courses for ID lookup
+                _cachedCourses.value = courses
+                adminDataCache.updateCourses(courses)
+                val courseNames = courses.map { "${it.code} - ${it.name}" }.distinct().sorted()
+                _uiState.value = _uiState.value.copy(availableCourses = courseNames)
+            }
         }
         
-        // Load year levels
-        yearLevelRepository.getAllYearLevels().onSuccess { yearLevels ->
-            val yearLevelNames = yearLevels.map { it.name }.distinct().sorted()
+        // Load year levels from cache first if available
+        if (adminDataCache.cachedYearLevels.value.isNotEmpty() && adminDataCache.isCacheValid()) {
+            val yearLevelNames = adminDataCache.cachedYearLevels.value.map { it.name }.distinct().sorted()
             _uiState.value = _uiState.value.copy(availableYearLevels = yearLevelNames)
+        } else {
+            // Load year levels
+            yearLevelRepository.getAllYearLevels().onSuccess { yearLevels ->
+                adminDataCache.updateYearLevels(yearLevels)
+                val yearLevelNames = yearLevels.map { it.name }.distinct().sorted()
+                _uiState.value = _uiState.value.copy(availableYearLevels = yearLevelNames)
+            }
         }
         
         // Note: Subjects and sections will be set by updateFilteredOptions() after caching
@@ -383,7 +436,7 @@ class AdminGradeMonitoringViewModel @Inject constructor(
     }
 
     fun refreshGradeData() {
-        loadGradeData()
+        loadGradeData(forceRefresh = true)
     }
 
     fun clearError() {

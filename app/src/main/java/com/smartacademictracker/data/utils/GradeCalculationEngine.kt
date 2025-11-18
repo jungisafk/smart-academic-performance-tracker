@@ -8,15 +8,43 @@ import com.smartacademictracker.data.model.StudentGradeAggregate
 /**
  * Centralized grade calculation engine for academic performance tracking
  * Implements the standard academic formula: Prelim (30%) + Midterm (30%) + Final (40%)
+ * 
+ * IMPORTANT: Individual period grades (Prelim, Midterm, Final) are stored with full decimal precision
+ * and are NOT rounded. Only the final average calculation result is rounded.
+ * 
+ * Rounding rule: Final average with decimal >= 0.5 rounds up (e.g., 78.7 -> 79, 74.5 -> 75)
+ * Example: Prelim=78.5, Midterm=75.3, Final=82.7
+ *   Calculation: (78.5 × 0.30) + (75.3 × 0.30) + (82.7 × 0.40) = 78.7 -> rounded to 79
  */
 object GradeCalculationEngine {
     
     /**
+     * Round final average: if decimal is >= 0.5, round up to next whole number
+     * @param average Calculated average
+     * @return Rounded average
+     */
+    private fun roundFinalAverage(average: Double): Double {
+        val wholePart = average.toInt()
+        val decimalPart = average - wholePart
+        
+        // If decimal is >= 0.5, round up to next whole number
+        // Use tolerance of 0.001 to handle floating point precision issues
+        return if (decimalPart >= 0.5 - 0.001) {
+            (wholePart + 1).toDouble()
+        } else {
+            wholePart.toDouble()
+        }
+    }
+    
+    /**
      * Calculate final average using the standard academic formula
-     * @param prelimGrade Preliminary grade (0-100)
-     * @param midtermGrade Midterm grade (0-100)
-     * @param finalGrade Final grade (0-100)
-     * @return Final average or null if any grade is missing
+     * Individual period grades are used with full decimal precision (not rounded).
+     * Only the final average result is rounded.
+     * 
+     * @param prelimGrade Preliminary grade (0-100, can have decimals)
+     * @param midtermGrade Midterm grade (0-100, can have decimals)
+     * @param finalGrade Final grade (0-100, can have decimals)
+     * @return Final average (rounded: >= 0.5 rounds up, < 0.5 rounds down) or null if any grade is missing
      */
     fun calculateFinalAverage(
         prelimGrade: Double?,
@@ -24,9 +52,10 @@ object GradeCalculationEngine {
         finalGrade: Double?
     ): Double? {
         return if (prelimGrade != null && midtermGrade != null && finalGrade != null) {
-            (prelimGrade * GradePeriod.PRELIM.weight) + 
-            (midtermGrade * GradePeriod.MIDTERM.weight) + 
-            (finalGrade * GradePeriod.FINAL.weight)
+            val calculated = (prelimGrade * GradePeriod.PRELIM.weight) + 
+                            (midtermGrade * GradePeriod.MIDTERM.weight) + 
+                            (finalGrade * GradePeriod.FINAL.weight)
+            roundFinalAverage(calculated)
         } else null
     }
     

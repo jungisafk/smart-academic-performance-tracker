@@ -316,19 +316,31 @@ class PreRegisteredRepository @Inject constructor(
      */
     suspend fun addPreRegisteredStudent(student: PreRegisteredStudent): Result<String> {
         return try {
+            // Format the student ID (zero-pad sequence number if 1-2 digits, keep as-is if 3-5 digits)
+            val formattedId = com.smartacademictracker.util.IdValidator.formatStudentId(student.studentId)
+            if (formattedId == null) {
+                return Result.failure(Exception("Invalid Student ID format. Expected format: YYYY-SEQUENCE (e.g., 2024-001, 2025-123, 2030-1000). Maximum sequence: 99999"))
+            }
+            
+            // Validate the formatted ID
+            val validationResult = com.smartacademictracker.util.IdValidator.validateStudentId(formattedId)
+            if (!validationResult.isValid) {
+                return Result.failure(Exception(validationResult.errorMessage ?: "Invalid Student ID format"))
+            }
+            
             // Check if student ID already exists
             val existing = studentsCollection
-                .whereEqualTo("studentId", student.studentId)
+                .whereEqualTo("studentId", formattedId)
                 .limit(1)
                 .get()
                 .await()
             
             if (!existing.isEmpty) {
-                return Result.failure(Exception("Student ID ${student.studentId} already exists"))
+                return Result.failure(Exception("ID already exists. Please use a different sequence number."))
             }
             
             val docRef = studentsCollection.document()
-            val studentWithId = student.copy(id = docRef.id)
+            val studentWithId = student.copy(id = docRef.id, studentId = formattedId)
             docRef.set(studentWithId).await()
             
             Result.success(docRef.id)
@@ -419,21 +431,37 @@ class PreRegisteredRepository @Inject constructor(
                 
                 chunk.forEach { student ->
                     try {
+                        // Format the student ID (zero-pad sequence number if 1-2 digits, keep as-is if 3-5 digits)
+                        val formattedId = com.smartacademictracker.util.IdValidator.formatStudentId(student.studentId)
+                        if (formattedId == null) {
+                            failureCount++
+                            errors.add("Invalid Student ID format for ${student.studentId}. Expected: YYYY-SEQUENCE (e.g., 2024-001, 2025-123, 2030-1000). Maximum sequence: 99999")
+                            return@forEach
+                        }
+                        
+                        // Validate the formatted ID
+                        val validationResult = com.smartacademictracker.util.IdValidator.validateStudentId(formattedId)
+                        if (!validationResult.isValid) {
+                            failureCount++
+                            errors.add("Invalid Student ID for ${student.studentId}: ${validationResult.errorMessage}")
+                            return@forEach
+                        }
+                        
                         // Check for duplicate student ID
                         val existing = studentsCollection
-                            .whereEqualTo("studentId", student.studentId)
+                            .whereEqualTo("studentId", formattedId)
                             .limit(1)
                             .get()
                             .await()
                         
                         if (existing.isEmpty) {
                             val docRef = studentsCollection.document()
-                            val studentWithId = student.copy(id = docRef.id)
+                            val studentWithId = student.copy(id = docRef.id, studentId = formattedId)
                             batch.set(docRef, studentWithId)
                             successCount++
                         } else {
                             failureCount++
-                            errors.add("Duplicate student ID: ${student.studentId}")
+                            errors.add("ID already exists: $formattedId. Please use a different sequence number.")
                         }
                     } catch (e: Exception) {
                         failureCount++

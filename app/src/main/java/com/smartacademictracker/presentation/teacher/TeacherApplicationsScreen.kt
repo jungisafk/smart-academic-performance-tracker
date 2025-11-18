@@ -37,13 +37,6 @@ fun TeacherApplicationsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val applications by viewModel.applications.collectAsState()
 
-    // Debug logging
-    LaunchedEffect(applications) {
-        println("DEBUG: TeacherApplicationsScreen - Applications updated: ${applications.size}")
-        applications.forEach { app ->
-            println("DEBUG: TeacherApplicationsScreen - Application: ${app.subjectName} - ${app.status}")
-        }
-    }
 
     LaunchedEffect(Unit) {
         viewModel.loadApplications()

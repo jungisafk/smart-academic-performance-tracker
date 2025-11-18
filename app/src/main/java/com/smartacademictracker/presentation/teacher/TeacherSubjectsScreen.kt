@@ -37,9 +37,10 @@ import com.smartacademictracker.presentation.common.EmptyState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TeacherSubjectsScreen(
-    onNavigateBack: () -> Unit,
+    onNavigateBack: () -> Unit = {},
     onNavigateToGradeInput: (String) -> Unit = {},
-    viewModel: TeacherSubjectsViewModel = hiltViewModel()
+    viewModel: TeacherSubjectsViewModel = hiltViewModel(),
+    showBackButton: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val availableSubjects by viewModel.availableSubjects.collectAsState()
@@ -48,14 +49,10 @@ fun TeacherSubjectsScreen(
     val applications by viewModel.applications.collectAsState()
     val approvedApplications by viewModel.approvedApplications.collectAsState()
 
-    // Debug logging
-    LaunchedEffect(uiState) {
-        println("DEBUG: TeacherSubjectsScreen - UI State changed: isLoading=${uiState.isLoading}, error=${uiState.error}, successMessage=${uiState.successMessage}, applyingSubjects=${uiState.applyingSubjects}")
-    }
 
-    // Load subjects only once when screen is first composed
-    LaunchedEffect(Unit) {
-        viewModel.loadSubjects()
+    // Load subjects when screen is composed, using ViewModel as key to prevent unnecessary reloads
+    LaunchedEffect(viewModel) {
+        viewModel.loadSubjects(forceRefresh = false)
     }
 
     // Clear success message after 3 seconds
@@ -83,12 +80,14 @@ fun TeacherSubjectsScreen(
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        Icons.Default.ArrowBack, 
-                        contentDescription = "Back",
-                        tint = Color(0xFF666666)
-                    )
+                if (showBackButton) {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.Default.ArrowBack, 
+                            contentDescription = "Back",
+                            tint = Color(0xFF666666)
+                        )
+                    }
                 }
                 Text(
                     text = "My Subjects",
@@ -213,7 +212,7 @@ fun TeacherSubjectsScreen(
                             onClick = { selectedTab = 0 },
                             text = { 
                                 Text(
-                                    "My Subjects (${mySubjects.size})",
+                                    "My Subjects",
                                     color = if (selectedTab == 0) Color(0xFF2196F3) else Color(0xFF666666),
                                     fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
                                 )
@@ -224,7 +223,7 @@ fun TeacherSubjectsScreen(
                             onClick = { selectedTab = 1 },
                             text = { 
                                 Text(
-                                    "Applied (${applications.size})",
+                                    "Applied",
                                     color = if (selectedTab == 1) Color(0xFF2196F3) else Color(0xFF666666),
                                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
                                 )
@@ -235,7 +234,7 @@ fun TeacherSubjectsScreen(
                             onClick = { selectedTab = 2 },
                             text = { 
                                 Text(
-                                    "Available (${availableSubjects.size})",
+                                    "Available",
                                     color = if (selectedTab == 2) Color(0xFF2196F3) else Color(0xFF666666),
                                     fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal
                                 )
@@ -250,7 +249,18 @@ fun TeacherSubjectsScreen(
                 when (selectedTab) {
                     0 -> {
                         // My Subjects - Only show actually assigned subjects
-                        if (mySubjects.isEmpty()) {
+                        if (uiState.isLoading) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = Color(0xFF2196F3)
+                                )
+                            }
+                        } else if (mySubjects.isEmpty()) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
@@ -416,7 +426,6 @@ fun TeacherSubjectsScreen(
                                 AvailableSubjectCard(
                                     subject = subject,
                                     onApply = { 
-                                        println("DEBUG: TeacherSubjectsScreen - Apply button clicked for subject: ${subject.name}")
                                         viewModel.applyForSubject(subject.id) 
                                     },
                                     isApplying = uiState.applyingSubjects.contains(subject.id),
@@ -899,7 +908,6 @@ fun AvailableSubjectCard(
                 // Show apply button
                 Button(
                     onClick = {
-                        println("DEBUG: AvailableSubjectCard - Button clicked for subject: ${subject.name}")
                         onApply()
                     },
                     enabled = !isApplying,

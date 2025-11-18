@@ -81,7 +81,7 @@ class AddAcademicPeriodViewModel @Inject constructor(
     }
 
     fun setAsActive(isActive: Boolean) {
-        println("DEBUG: AddAcademicPeriodViewModel - Setting isActive to: $isActive")
+        
         _uiState.value = _uiState.value.copy(isActive = isActive)
     }
 
@@ -116,8 +116,8 @@ class AddAcademicPeriodViewModel @Inject constructor(
                     createdByName = "${currentUser?.firstName ?: ""} ${currentUser?.lastName ?: ""}".trim().ifEmpty { "Unknown" }
                 )
                 
-                println("DEBUG: AddAcademicPeriodViewModel - Creating academic period: ${academicPeriod.name}")
-                println("DEBUG: AddAcademicPeriodViewModel - isActive flag: ${academicPeriod.isActive}")
+                
+                
                 
                 val createResult = academicPeriodRepository.createAcademicPeriod(academicPeriod)
                 createResult.onSuccess {
@@ -125,7 +125,7 @@ class AddAcademicPeriodViewModel @Inject constructor(
                         isLoading = false,
                         isSuccess = true
                     )
-                    println("DEBUG: AddAcademicPeriodViewModel - Academic period created successfully")
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

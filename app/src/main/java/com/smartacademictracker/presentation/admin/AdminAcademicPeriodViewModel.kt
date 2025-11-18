@@ -16,7 +16,8 @@ import javax.inject.Inject
 @HiltViewModel
 class AdminAcademicPeriodViewModel @Inject constructor(
     private val academicPeriodRepository: AcademicPeriodRepository,
-    private val academicPeriodFilterService: AcademicPeriodFilterService
+    private val academicPeriodFilterService: AcademicPeriodFilterService,
+    private val yearLevelProgressionService: com.smartacademictracker.data.service.YearLevelProgressionService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminAcademicPeriodUiState())
@@ -42,9 +43,9 @@ class AdminAcademicPeriodViewModel @Inject constructor(
                 // Load all academic periods
                 academicPeriodRepository.getAllAcademicPeriods().onSuccess { periods ->
                     _academicPeriods.value = periods
-                    println("DEBUG: AdminAcademicPeriodViewModel - Loaded ${periods.size} academic periods")
+                    
                 }.onFailure { exception ->
-                    println("DEBUG: AdminAcademicPeriodViewModel - Error loading academic periods: ${exception.message}")
+                    
                     if (exception.message?.contains("PERMISSION_DENIED") == true) {
                         _uiState.value = _uiState.value.copy(
                             error = "Permission denied. Please check Firestore security rules for academic_periods collection."
@@ -59,17 +60,17 @@ class AdminAcademicPeriodViewModel @Inject constructor(
                 // Load active period
                 academicPeriodRepository.getActiveAcademicPeriod().onSuccess { activePeriod ->
                     _activePeriod.value = activePeriod
-                    println("DEBUG: AdminAcademicPeriodViewModel - Active period: ${activePeriod?.name ?: "None"}")
+                    
                 }.onFailure { exception ->
-                    println("DEBUG: AdminAcademicPeriodViewModel - Error loading active period: ${exception.message}")
+                    
                 }
 
                 // Load summary
                 academicPeriodRepository.getAcademicPeriodSummary().onSuccess { summary ->
                     _summary.value = summary
-                    println("DEBUG: AdminAcademicPeriodViewModel - Summary: ${summary.totalPeriods} periods, active: ${summary.activePeriod?.name}")
+                    
                 }.onFailure { exception ->
-                    println("DEBUG: AdminAcademicPeriodViewModel - Error loading summary: ${exception.message}")
+                    
                 }
 
                 _uiState.value = _uiState.value.copy(isLoading = false)
@@ -87,16 +88,60 @@ class AdminAcademicPeriodViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
+                // Get the previous active period to check if this is a new period
+                val previousActivePeriod = _activePeriod.value
+                
                 academicPeriodRepository.setActivePeriod(periodId).onSuccess {
                     // Refresh the academic period filter service to update all subject queries
                     academicPeriodFilterService.refreshActiveAcademicPeriod()
                     
-                    // Reload data after setting active period
-                    loadAcademicPeriods()
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        successMessage = "Academic period activated successfully. Subjects will now show for this semester."
-                    )
+                    // Get the new period to check if we should trigger progression
+                    val newPeriodResult = academicPeriodRepository.getAcademicPeriodById(periodId)
+                    val newPeriod = newPeriodResult.getOrNull()
+                    
+                    // Process year level progression ONLY when:
+                    // 1. There was a previous active period (not first time setup)
+                    // 2. Previous period was SUMMER_CLASS
+                    // 3. New period is FIRST_SEMESTER
+                    // 4. New period's academic year is different (new academic year)
+                    val shouldProceed = previousActivePeriod != null && 
+                                       previousActivePeriod.id != periodId &&
+                                       newPeriod != null &&
+                                       previousActivePeriod.semester == com.smartacademictracker.data.model.Semester.SUMMER_CLASS &&
+                                       newPeriod.semester == com.smartacademictracker.data.model.Semester.FIRST_SEMESTER &&
+                                       previousActivePeriod.academicYear != newPeriod.academicYear
+                    
+                    if (shouldProceed) {
+                        android.util.Log.d("AdminAcademicPeriodViewModel", "Transitioning from ${previousActivePeriod.academicYear} ${previousActivePeriod.semester.displayName} to ${newPeriod.academicYear} ${newPeriod.semester.displayName} - processing year level progression")
+                        val progressionResult = yearLevelProgressionService.processYearLevelProgression(periodId)
+                        progressionResult.onSuccess { result ->
+                            android.util.Log.d("AdminAcademicPeriodViewModel", "Year level progression completed: ${result.getSummaryMessage()}")
+                            // Reload data after setting active period
+                            loadAcademicPeriods()
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                successMessage = "Academic period activated successfully. ${result.advanced} student(s) advanced to next year level. Subjects will now show for this semester."
+                            )
+                        }.onFailure { exception ->
+                            android.util.Log.e("AdminAcademicPeriodViewModel", "Year level progression failed: ${exception.message}", exception)
+                            // Still reload data even if progression failed
+                            loadAcademicPeriods()
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                successMessage = "Academic period activated successfully, but year level progression encountered issues: ${exception.message}. Subjects will now show for this semester."
+                            )
+                        }
+                    } else {
+                        // Not a progression trigger point - just reload
+                        if (previousActivePeriod != null && newPeriod != null) {
+                            android.util.Log.d("AdminAcademicPeriodViewModel", "Academic period changed but not a progression trigger point. Previous: ${previousActivePeriod.academicYear} ${previousActivePeriod.semester.displayName}, New: ${newPeriod.academicYear} ${newPeriod.semester.displayName}")
+                        }
+                        loadAcademicPeriods()
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            successMessage = "Academic period activated successfully. Subjects will now show for this semester."
+                        )
+                    }
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -149,6 +194,61 @@ class AdminAcademicPeriodViewModel @Inject constructor(
 
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+    
+    fun updateAcademicPeriod(
+        periodId: String,
+        name: String,
+        description: String,
+        isActive: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                // Get the current period
+                val periodResult = academicPeriodRepository.getAcademicPeriodById(periodId)
+                val currentPeriod = periodResult.getOrNull()
+                    ?: run {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Academic period not found"
+                        )
+                        return@launch
+                    }
+                
+                // Update only the allowed fields: name, description, and isActive
+                val updatedPeriod = currentPeriod.copy(
+                    name = name.trim(),
+                    description = description.trim(),
+                    isActive = isActive
+                )
+                
+                academicPeriodRepository.updateAcademicPeriod(updatedPeriod).onSuccess {
+                    // If setting as active, refresh the filter service
+                    if (isActive) {
+                        academicPeriodFilterService.refreshActiveAcademicPeriod()
+                    }
+                    
+                    // Reload data after update
+                    loadAcademicPeriods()
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        successMessage = "Academic period updated successfully"
+                    )
+                }.onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Failed to update period: ${exception.message}"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to update period: ${e.message}"
+                )
+            }
+        }
     }
 }
 

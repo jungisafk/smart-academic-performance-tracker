@@ -118,14 +118,38 @@ data class StudentGradeAggregate(
     val lastUpdated: Long = System.currentTimeMillis()
 ) {
     /**
+     * Round final average: if decimal is >= 0.5, round up to next whole number
+     * @param average Calculated average
+     * @return Rounded average
+     */
+    private fun roundFinalAverage(average: Double): Double {
+        val wholePart = average.toInt()
+        val decimalPart = average - wholePart
+        
+        // If decimal is >= 0.5, round up to next whole number
+        // Use tolerance of 0.001 to handle floating point precision issues
+        return if (decimalPart >= 0.5 - 0.001) {
+            (wholePart + 1).toDouble()
+        } else {
+            wholePart.toDouble()
+        }
+    }
+    
+    /**
      * Calculate final average using standard academic formula:
      * Prelim (30%) + Midterm (30%) + Final (40%)
+     * 
+     * IMPORTANT: Individual period grades (prelimGrade, midtermGrade, finalGrade) are used
+     * with full decimal precision and are NOT rounded. Only the final average result is rounded.
+     * 
+     * Rounding rule: Final average with decimal >= 0.5 rounds up (e.g., 78.7 -> 79, 74.5 -> 75)
      */
     fun calculateFinalAverage(): Double? {
         return if (prelimGrade != null && midtermGrade != null && finalGrade != null) {
-            (prelimGrade * GradePeriod.PRELIM.weight) + 
-            (midtermGrade * GradePeriod.MIDTERM.weight) + 
-            (finalGrade * GradePeriod.FINAL.weight)
+            val calculated = (prelimGrade * GradePeriod.PRELIM.weight) + 
+                            (midtermGrade * GradePeriod.MIDTERM.weight) + 
+                            (finalGrade * GradePeriod.FINAL.weight)
+            roundFinalAverage(calculated)
         } else null
     }
     

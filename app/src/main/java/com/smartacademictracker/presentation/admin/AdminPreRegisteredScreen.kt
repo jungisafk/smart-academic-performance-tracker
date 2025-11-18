@@ -20,6 +20,7 @@ fun AdminPreRegisteredScreen(
     onNavigateBack: () -> Unit,
     onNavigateToStudentBulkImport: () -> Unit = {},
     onNavigateToTeacherBulkImport: () -> Unit = {},
+    modifier: Modifier = Modifier,
     studentsViewModel: AdminPreRegisteredStudentsViewModel = hiltViewModel(),
     teachersViewModel: AdminPreRegisteredTeachersViewModel = hiltViewModel()
 ) {
@@ -40,51 +41,12 @@ fun AdminPreRegisteredScreen(
         teachersViewModel.loadPreRegisteredTeachers(null)
     }
     
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Pre-Register") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            if (selectedTab == 0) {
-                                onNavigateToStudentBulkImport()
-                            } else {
-                                onNavigateToTeacherBulkImport()
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Default.Upload, "Bulk Import", tint = Color.White)
-                    }
-                    IconButton(
-                        onClick = {
-                            refreshTrigger++
-                        }
-                    ) {
-                        Icon(Icons.Default.Refresh, "Refresh", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF2196F3),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                )
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(Color(0xFFF8F9FA))
-        ) {
-            // Tab Row
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8F9FA))
+    ) {
+        // Tab Row
             TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = Color.White,
@@ -136,21 +98,20 @@ fun AdminPreRegisteredScreen(
                 )
             }
             
-            // Tab Content
-            when (selectedTab) {
-                0 -> AdminPreRegisteredStudentsScreen(
-                    onNavigateBack = onNavigateBack,
-                    onNavigateToBulkImport = onNavigateToStudentBulkImport,
-                    viewModel = studentsViewModel,
-                    showTopBar = false
-                )
-                1 -> AdminPreRegisteredTeachersScreen(
-                    onNavigateBack = onNavigateBack,
-                    onNavigateToBulkImport = onNavigateToTeacherBulkImport,
-                    viewModel = teachersViewModel,
-                    showTopBar = false
-                )
-            }
+        // Tab Content
+        when (selectedTab) {
+            0 -> AdminPreRegisteredStudentsScreen(
+                onNavigateBack = onNavigateBack,
+                onNavigateToBulkImport = onNavigateToStudentBulkImport,
+                viewModel = studentsViewModel,
+                showTopBar = false
+            )
+            1 -> AdminPreRegisteredTeachersScreen(
+                onNavigateBack = onNavigateBack,
+                onNavigateToBulkImport = onNavigateToTeacherBulkImport,
+                viewModel = teachersViewModel,
+                showTopBar = false
+            )
         }
     }
 }

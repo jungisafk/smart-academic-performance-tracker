@@ -1,6 +1,8 @@
 package com.smartacademictracker.presentation.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.User
@@ -27,6 +30,7 @@ import com.smartacademictracker.presentation.common.LoadingStateCard
 @Composable
 fun ManageUsersScreen(
     onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: ManageUsersViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -35,342 +39,353 @@ fun ManageUsersScreen(
     val studentEnrollments by viewModel.studentEnrollments.collectAsState()
     var selectedRole by remember { mutableStateOf<UserRole?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var showSearchBar by remember { mutableStateOf(false) }
 
     // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
         viewModel.loadUsers()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
-    ) {
-        // Show loading state with label
-        if (uiState.isLoading && users.isEmpty()) {
-            LoadingStateCard(
-                title = "Loading Users",
-                message = "Please wait while we load user accounts and their information"
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Manage Users") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF2196F3),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                ),
+                modifier = Modifier.border(
+                    width = 2.dp,
+                    color = Color.Red,
+                    shape = RoundedCornerShape(0.dp)
+                )
             )
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
-            // Enhanced Header Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
-            ) {
+        }
+    ) { padding ->
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(
+                    top = 0.dp,
+                    bottom = padding.calculateBottomPadding(),
+                    start = padding.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                    end = padding.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
+                )
+                .background(Color(0xFFF8F9FA))
+        ) {
+            // Show loading state with label
+            if (uiState.isLoading && users.isEmpty()) {
+                LoadingStateCard(
+                    title = "Loading Users",
+                    message = "Please wait while we load user accounts and their information"
+                )
+            } else {
                 Column(
-                    modifier = Modifier.padding(20.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Row(
+                    // Reduced space and compact layout
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Compact Search and Filter Section - moved closer to header
+                    Card(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        ) {
-                            Icon(
-                                Icons.Default.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
                         Column(
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                         ) {
-                            Text(
-                                text = "Manage Users",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "View and manage user accounts",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                        
-                        // User Management Icon
-                        Box(
-                            modifier = Modifier
-                                .size(60.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFC107)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-                }
-            }
-            
-            // Content Section
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp)
-            ) {
-
-                // Enhanced Search and Filter Section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "Search & Filter",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-                        
-                        // Enhanced Search Bar
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            label = { Text("Search users...") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF2196F3),
-                                unfocusedBorderColor = Color(0xFFE0E0E0)
-                            ),
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = "Search",
-                                    tint = Color(0xFF666666)
-                                )
-                            }
-                        )
-
-                        // Enhanced Role Filter
-                        Text(
-                            text = "Filter by Role:",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp)
-                        ) {
-                            item {
-                                EnhancedFilterChip(
-                                    onClick = { selectedRole = null },
-                                    label = "All",
-                                    selected = selectedRole == null,
-                                    icon = Icons.Default.People,
-                                    color = Color(0xFF4CAF50)
-                                )
-                            }
-                            item {
-                                EnhancedFilterChip(
-                                    onClick = { selectedRole = UserRole.STUDENT },
-                                    label = "Students",
-                                    selected = selectedRole == UserRole.STUDENT,
-                                    icon = Icons.Default.School,
-                                    color = Color(0xFF2196F3)
-                                )
-                            }
-                            item {
-                                EnhancedFilterChip(
-                                    onClick = { selectedRole = UserRole.TEACHER },
-                                    label = "Teachers",
-                                    selected = selectedRole == UserRole.TEACHER,
-                                    icon = Icons.Default.Work,
-                                    color = Color(0xFFFF9800)
-                                )
-                            }
-                            item {
-                                EnhancedFilterChip(
-                                    onClick = { selectedRole = UserRole.ADMIN },
-                                    label = "Admins",
-                                    selected = selectedRole == UserRole.ADMIN,
-                                    icon = Icons.Default.Security,
-                                    color = Color(0xFF9C27B0)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Enhanced Loading State
-                if (uiState.isLoading) {
-                    LoadingStateCard(
-                        title = "Loading Users",
-                        message = "Please wait while we load user accounts and their information"
-                    )
-                } else {
-                    // Users List
-                    val filteredUsers = users.filter { user ->
-                        val matchesSearch = searchQuery.isEmpty() ||
-                                user.firstName.contains(searchQuery, ignoreCase = true) ||
-                                user.lastName.contains(searchQuery, ignoreCase = true) ||
-                                user.email.contains(searchQuery, ignoreCase = true)
-
-                        // Create a local variable for selectedRole
-                        val currentSelectedRole = selectedRole
-                        val matchesRole = currentSelectedRole == null ||
-                                user.role == currentSelectedRole.name // Now use currentSelectedRole
-
-                        matchesSearch && matchesRole
-                    }
-
-                    if (filteredUsers.isEmpty()) {
-                        // Enhanced Empty State
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8))
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            // Search Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Icon with background
-                                Box(
-                                    modifier = Modifier
-                                        .size(80.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF4CAF50).copy(alpha = 0.1f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = "No Users",
-                                        modifier = Modifier.size(40.dp),
-                                        tint = Color(0xFF4CAF50)
+                                if (showSearchBar) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        placeholder = { Text("Search users...") },
+                                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                                        trailingIcon = {
+                                            IconButton(onClick = {
+                                                showSearchBar = false
+                                                searchQuery = ""
+                                            }) {
+                                                Icon(Icons.Default.Close, "Close")
+                                            }
+                                        },
+                                        textStyle = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
                                     )
-                                }
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                Text(
-                                    text = "No users found",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF333333)
-                                )
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                Text(
-                                    text = if (searchQuery.isNotEmpty() || selectedRole != null)
-                                        "Try adjusting your search or filters"
-                                    else
-                                        "Users will appear here once they register",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color(0xFF666666),
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(filteredUsers) { user ->
-                                var showEditDialog by remember { mutableStateOf(false) }
-                                
-                                EnhancedUserCard(
-                                    user = user,
-                                    teacherAssignments = if (user.role == "TEACHER") {
-                                        teacherAssignments[user.id] ?: emptyList()
-                                    } else {
-                                        emptyList()
-                                    },
-                                    studentEnrollments = if (user.role == "STUDENT") {
-                                        studentEnrollments[user.id] ?: emptyList()
-                                    } else {
-                                        emptyList()
-                                    },
-                                    onEdit = { 
-                                        if (user.role == "TEACHER") {
-                                            showEditDialog = true
+                                } else {
+                                    IconButton(
+                                        onClick = { showSearchBar = true },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Search,
+                                            contentDescription = "Search",
+                                            tint = Color(0xFF666666),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    // Show filter chips inline when search is not active
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        item {
+                                            EnhancedFilterChip(
+                                                onClick = { selectedRole = null },
+                                                label = "All",
+                                                selected = selectedRole == null,
+                                                icon = Icons.Default.People,
+                                                color = Color(0xFF4CAF50)
+                                            )
+                                        }
+                                        item {
+                                            EnhancedFilterChip(
+                                                onClick = { selectedRole = UserRole.STUDENT },
+                                                label = "Students",
+                                                selected = selectedRole == UserRole.STUDENT,
+                                                icon = Icons.Default.School,
+                                                color = Color(0xFF2196F3)
+                                            )
+                                        }
+                                        item {
+                                            EnhancedFilterChip(
+                                                onClick = { selectedRole = UserRole.TEACHER },
+                                                label = "Teachers",
+                                                selected = selectedRole == UserRole.TEACHER,
+                                                icon = Icons.Default.Work,
+                                                color = Color(0xFFFF9800)
+                                            )
+                                        }
+                                        item {
+                                            EnhancedFilterChip(
+                                                onClick = { selectedRole = UserRole.ADMIN },
+                                                label = "Admins",
+                                                selected = selectedRole == UserRole.ADMIN,
+                                                icon = Icons.Default.Security,
+                                                color = Color(0xFF9C27B0)
+                                            )
                                         }
                                     }
-                                )
-                                
-                                if (showEditDialog && user.role == "TEACHER") {
-                                    EditTeacherDepartmentDialog(
-                                        user = user,
-                                        courses = viewModel.courses.collectAsState().value,
-                                        onDismiss = { showEditDialog = false },
-                                        onSave = { departmentCourseId ->
-                                            viewModel.updateTeacherDepartment(user.id, departmentCourseId)
-                                            showEditDialog = false
-                                        },
-                                        isProcessing = user.id in viewModel.uiState.collectAsState().value.processingUsers
-                                    )
+                                }
+                            }
+
+                            // Show filter chips below search when search is active
+                            if (showSearchBar) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    item {
+                                        EnhancedFilterChip(
+                                            onClick = { selectedRole = null },
+                                            label = "All",
+                                            selected = selectedRole == null,
+                                            icon = Icons.Default.People,
+                                            color = Color(0xFF4CAF50)
+                                        )
+                                    }
+                                    item {
+                                        EnhancedFilterChip(
+                                            onClick = { selectedRole = UserRole.STUDENT },
+                                            label = "Students",
+                                            selected = selectedRole == UserRole.STUDENT,
+                                            icon = Icons.Default.School,
+                                            color = Color(0xFF2196F3)
+                                        )
+                                    }
+                                    item {
+                                        EnhancedFilterChip(
+                                            onClick = { selectedRole = UserRole.TEACHER },
+                                            label = "Teachers",
+                                            selected = selectedRole == UserRole.TEACHER,
+                                            icon = Icons.Default.Work,
+                                            color = Color(0xFFFF9800)
+                                        )
+                                    }
+                                    item {
+                                        EnhancedFilterChip(
+                                            onClick = { selectedRole = UserRole.ADMIN },
+                                            label = "Admins",
+                                            selected = selectedRole == UserRole.ADMIN,
+                                            icon = Icons.Default.Security,
+                                            color = Color(0xFF9C27B0)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                // Enhanced Error Message
-                uiState.error?.let { error ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFFEBEE)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Enhanced Loading State
+                    if (uiState.isLoading) {
+                        LoadingStateCard(
+                            title = "Loading Users",
+                            message = "Please wait while we load user accounts and their information"
+                        )
+                    } else {
+                        // Users List
+                        val filteredUsers = users.filter { user ->
+                            val matchesSearch = searchQuery.isEmpty() ||
+                                    user.firstName.contains(searchQuery, ignoreCase = true) ||
+                                    user.lastName.contains(searchQuery, ignoreCase = true) ||
+                                    user.email.contains(searchQuery, ignoreCase = true)
+
+                            // Create a local variable for selectedRole
+                            val currentSelectedRole = selectedRole
+                            val matchesRole = currentSelectedRole == null ||
+                                    user.role == currentSelectedRole.name // Now use currentSelectedRole
+
+                            matchesSearch && matchesRole
+                        }
+
+                        if (filteredUsers.isEmpty()) {
+                            // Enhanced Empty State
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E8))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    // Icon with background
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4CAF50).copy(alpha = 0.1f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Person,
+                                            contentDescription = "No Users",
+                                            modifier = Modifier.size(40.dp),
+                                            tint = Color(0xFF4CAF50)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(20.dp))
+
+                                    Text(
+                                        text = "No users found",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333333)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        text = if (searchQuery.isNotEmpty() || selectedRole != null)
+                                            "Try adjusting your search or filters"
+                                        else
+                                            "Users will appear here once they register",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color(0xFF666666),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(filteredUsers) { user ->
+                                    var showEditDialog by remember { mutableStateOf(false) }
+
+                                    EnhancedUserCard(
+                                        user = user,
+                                        teacherAssignments = if (user.role == "TEACHER") {
+                                            teacherAssignments[user.id] ?: emptyList()
+                                        } else {
+                                            emptyList()
+                                        },
+                                        studentEnrollments = if (user.role == "STUDENT") {
+                                            studentEnrollments[user.id] ?: emptyList()
+                                        } else {
+                                            emptyList()
+                                        },
+                                        onEdit = {
+                                            if (user.role == "TEACHER") {
+                                                showEditDialog = true
+                                            }
+                                        }
+                                    )
+
+                                    if (showEditDialog && user.role == "TEACHER") {
+                                        EditTeacherDepartmentDialog(
+                                            user = user,
+                                            courses = viewModel.courses.collectAsState().value,
+                                            onDismiss = { showEditDialog = false },
+                                            onSave = { departmentCourseId ->
+                                                viewModel.updateTeacherDepartment(user.id, departmentCourseId)
+                                                showEditDialog = false
+                                            },
+                                            isProcessing = user.id in viewModel.uiState.collectAsState().value.processingUsers
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Enhanced Error Message
+                    uiState.error?.let { error ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFEBEE)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Error,
-                                contentDescription = "Error",
-                                tint = Color(0xFFD32F2F),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = error,
-                                color = Color(0xFFD32F2F),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Error,
+                                    contentDescription = "Error",
+                                    tint = Color(0xFFD32F2F),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = error,
+                                    color = Color(0xFFD32F2F),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
                 }
-            }
             }
         }
     }
@@ -416,7 +431,7 @@ fun EnhancedFilterChip(
             labelColor = color
         ),
         shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.height(40.dp)
+        modifier = Modifier.height(36.dp)
     )
 }
 
@@ -431,12 +446,12 @@ fun EnhancedUserCard(
     var showEnrollments by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -450,7 +465,7 @@ fun EnhancedUserCard(
                     // User Avatar
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(getRoleColor(user.role).copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
@@ -458,28 +473,28 @@ fun EnhancedUserCard(
                         Icon(
                             imageVector = getRoleIcon(user.role),
                             contentDescription = "User Role",
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(20.dp),
                             tint = getRoleColor(user.role)
                         )
                     }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
                     Column {
                         Text(
                             text = "${user.firstName} ${user.lastName}",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF333333)
                         )
                         Text(
                             text = user.email,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF666666)
                         )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         // Enhanced Role Badge
                         Surface(
                             color = getRoleColor(user.role).copy(alpha = 0.1f),
@@ -513,7 +528,7 @@ fun EnhancedUserCard(
                 IconButton(
                     onClick = onEdit,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFE3F2FD))
                 ) {
@@ -521,21 +536,21 @@ fun EnhancedUserCard(
                         Icons.Default.Edit,
                         contentDescription = "Edit User",
                         tint = Color(0xFF2196F3),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
             // Additional Info
             if (user.courseName != null || user.yearLevelName != null || user.departmentCourseName != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (user.courseName != null || user.yearLevelName != null) {
@@ -605,14 +620,14 @@ fun EnhancedUserCard(
 
             // Show assigned subjects/sections for teachers
             if (user.role == "TEACHER" && teacherAssignments.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -648,7 +663,7 @@ fun EnhancedUserCard(
                                 )
                             }
                         }
-                        
+
                         if (showAssignments) {
                             Spacer(modifier = Modifier.height(8.dp))
                             teacherAssignments.forEach { assignment ->
@@ -660,7 +675,7 @@ fun EnhancedUserCard(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(12.dp),
+                                        modifier = Modifier.padding(8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
@@ -712,14 +727,14 @@ fun EnhancedUserCard(
 
             // Show enrollments for students (only if enrolled)
             if (user.role == "STUDENT" && studentEnrollments.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -755,7 +770,7 @@ fun EnhancedUserCard(
                                 )
                             }
                         }
-                        
+
                         if (showEnrollments) {
                             Spacer(modifier = Modifier.height(8.dp))
                             studentEnrollments.forEach { enrollment ->
@@ -767,7 +782,7 @@ fun EnhancedUserCard(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(12.dp),
+                                        modifier = Modifier.padding(8.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Row(
@@ -794,7 +809,7 @@ fun EnhancedUserCard(
                                                 )
                                             }
                                         }
-                                        
+
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -839,7 +854,7 @@ fun EnhancedUserCard(
             }
 
             // Enhanced Status
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -890,7 +905,7 @@ fun EditTeacherDepartmentDialog(
 ) {
     var selectedCourseId by remember { mutableStateOf(user.departmentCourseId ?: "") }
     var expandedCourse by remember { mutableStateOf(false) }
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -908,13 +923,13 @@ fun EditTeacherDepartmentDialog(
                     text = "Teacher: ${user.firstName} ${user.lastName}",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                
+
                 Text(
                     text = "Select the department/course this teacher belongs to. This determines which MAJOR subjects they can see and apply for.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF666666)
                 )
-                
+
                 ExposedDropdownMenuBox(
                     expanded = expandedCourse,
                     onExpandedChange = { expandedCourse = !expandedCourse },
@@ -931,7 +946,7 @@ fun EditTeacherDepartmentDialog(
                             .menuAnchor(),
                         supportingText = {
                             Text(
-                                text = if (selectedCourseId.isEmpty()) 
+                                text = if (selectedCourseId.isEmpty())
                                     "Required: Teachers need a department to see MAJOR subjects"
                                 else
                                     "MINOR subjects are visible to all teachers regardless of department"

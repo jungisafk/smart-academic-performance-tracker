@@ -5,7 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.smartacademictracker.MainActivity
@@ -27,26 +30,52 @@ class LocalNotificationService @Inject constructor(
         private const val CHANNEL_NAME = "Local Notifications"
         private const val CHANNEL_DESCRIPTION = "Local app notifications"
         private const val NOTIFICATION_ID_BASE = 3000
+        private val DEFAULT_VIBRATION_PATTERN = longArrayOf(0, 250, 250, 250)
+        private val HIGH_PRIORITY_VIBRATION_PATTERN = longArrayOf(0, 500, 200, 500)
     }
     
     private val notificationManager = NotificationManagerCompat.from(context)
+    private val defaultSoundUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
     
     init {
+        Log.d("LocalNotificationService", "Initializing LocalNotificationService")
         createNotificationChannel()
     }
     
     private fun createNotificationChannel() {
+        Log.d("LocalNotificationService", "createNotificationChannel called, SDK_INT: ${Build.VERSION.SDK_INT}")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = CHANNEL_DESCRIPTION
+            try {
+                // Create channel with HIGH importance to ensure sound and visibility
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = CHANNEL_DESCRIPTION
+                    enableVibration(true)
+                    vibrationPattern = HIGH_PRIORITY_VIBRATION_PATTERN
+                    setSound(defaultSoundUri, null)
+                    enableLights(true)
+                    setShowBadge(true)
+                }
+                
+                val systemNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                systemNotificationManager.createNotificationChannel(channel)
+                Log.d("LocalNotificationService", "Notification channel created successfully: $CHANNEL_ID")
+                
+                // Verify channel was created
+                val createdChannel = systemNotificationManager.getNotificationChannel(CHANNEL_ID)
+                if (createdChannel != null) {
+                    Log.d("LocalNotificationService", "Channel verified - Importance: ${createdChannel.importance}, Sound: ${createdChannel.sound}, Vibration: ${createdChannel.shouldVibrate()}")
+                } else {
+                    Log.e("LocalNotificationService", "ERROR: Channel was not created properly!")
+                }
+            } catch (e: Exception) {
+                Log.e("LocalNotificationService", "ERROR creating notification channel: ${e.message}", e)
             }
-            
-            val systemNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            systemNotificationManager.createNotificationChannel(channel)
+        } else {
+            Log.d("LocalNotificationService", "Android version < O, skipping channel creation")
         }
     }
     
@@ -58,39 +87,97 @@ class LocalNotificationService @Inject constructor(
         actionUrl: String? = null,
         data: Map<String, String> = emptyMap()
     ) {
-        if (!notificationManager.areNotificationsEnabled()) {
+        Log.d("LocalNotificationService", "showNotification called - Title: $title, Type: $type, Priority: $priority")
+        
+        val areNotificationsEnabled = notificationManager.areNotificationsEnabled()
+        Log.d("LocalNotificationService", "Notifications enabled: $areNotificationsEnabled")
+        
+        if (!areNotificationsEnabled) {
+            Log.w("LocalNotificationService", "Notifications are DISABLED - notification will not be shown")
             return
         }
         
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            actionUrl?.let { putExtra("action_url", it) }
-            data.forEach { (key, value) -> putExtra(key, value) }
-        }
-        
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            type.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(getNotificationIcon(type))
-            .setContentTitle(title)
-            .setContentText(message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(getNotificationPriority(priority))
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setCategory(getNotificationCategory(type))
-            .build()
-        
-        val notificationId = NOTIFICATION_ID_BASE + type.hashCode()
         try {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                actionUrl?.let { putExtra("action_url", it) }
+                data.forEach { (key, value) -> putExtra(key, value) }
+            }
+            
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                type.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            Log.d("LocalNotificationService", "PendingIntent created successfully")
+            
+            val iconResId = getNotificationIcon(type)
+            Log.d("LocalNotificationService", "Notification icon: $iconResId")
+            
+            // Verify icon resource exists
+            try {
+                val iconDrawable = context.getDrawable(iconResId)
+                if (iconDrawable == null) {
+                    Log.e("LocalNotificationService", "ERROR: Icon resource $iconResId does not exist! Using default icon.")
+                }
+            } catch (e: Exception) {
+                Log.e("LocalNotificationService", "ERROR: Failed to load icon resource $iconResId: ${e.message}")
+            }
+            
+            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(iconResId)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setPriority(getNotificationPriority(priority))
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setCategory(getNotificationCategory(type))
+                .setDefaults(NotificationCompat.DEFAULT_ALL) // Enable sound, vibration, and lights
+                .setSound(defaultSoundUri) // Explicitly set sound
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Show on lock screen
+            
+            // Add vibration based on priority
+            when (priority) {
+                NotificationPriority.HIGH, NotificationPriority.URGENT -> {
+                    notificationBuilder.setVibrate(HIGH_PRIORITY_VIBRATION_PATTERN)
+                    Log.d("LocalNotificationService", "High priority vibration pattern set")
+                }
+                NotificationPriority.NORMAL -> {
+                    notificationBuilder.setVibrate(DEFAULT_VIBRATION_PATTERN)
+                    Log.d("LocalNotificationService", "Normal priority vibration pattern set")
+                }
+                NotificationPriority.LOW -> {
+                    Log.d("LocalNotificationService", "Low priority - no vibration")
+                }
+            }
+            
+            val notification = notificationBuilder.build()
+            Log.d("LocalNotificationService", "Notification built successfully")
+            
+            val notificationId = NOTIFICATION_ID_BASE + type.hashCode()
+            Log.d("LocalNotificationService", "Posting notification with ID: $notificationId, Channel: $CHANNEL_ID")
+            
+            // Verify channel exists before posting
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val systemNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val channel = systemNotificationManager.getNotificationChannel(CHANNEL_ID)
+                if (channel == null) {
+                    Log.e("LocalNotificationService", "ERROR: Notification channel does not exist! Recreating...")
+                    createNotificationChannel()
+                } else {
+                    Log.d("LocalNotificationService", "Channel verified - Importance: ${channel.importance}")
+                }
+            }
+            
             notificationManager.notify(notificationId, notification)
+            Log.d("LocalNotificationService", "Notification posted successfully with ID: $notificationId")
         } catch (e: SecurityException) {
-            // Handle permission denied gracefully
+            Log.e("LocalNotificationService", "SecurityException posting notification: ${e.message}", e)
+        } catch (e: Exception) {
+            Log.e("LocalNotificationService", "Exception posting notification: ${e.message}", e)
+            e.printStackTrace()
         }
     }
     

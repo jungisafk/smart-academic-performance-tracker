@@ -1,6 +1,7 @@
 package com.smartacademictracker.presentation.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +37,7 @@ data class YearLevelGroup(
 @Composable
 fun TeacherSectionAssignmentScreen(
     onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: TeacherSectionAssignmentViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -50,7 +52,7 @@ fun TeacherSectionAssignmentScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
@@ -64,71 +66,6 @@ fun TeacherSectionAssignmentScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Enhanced Header Sectionteacher
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = onNavigateBack,
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.2f))
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.width(16.dp))
-                            
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = "Teacher Section Assignments",
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "Manage teacher assignments to subject sections",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.9f)
-                                )
-                            }
-                            
-                            // Assignment Icon
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFFC107)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Assignment,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                
                 // Content Section
                 Column(
                     modifier = Modifier
@@ -406,13 +343,15 @@ fun EnhancedSubjectSectionCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Enhanced Subject Header
             Row(
@@ -422,7 +361,7 @@ fun EnhancedSubjectSectionCard(
                 // Subject Icon
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF2196F3).copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
@@ -430,25 +369,25 @@ fun EnhancedSubjectSectionCard(
                     Icon(
                         Icons.Default.MenuBook,
                         contentDescription = "Subject",
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(20.dp),
                         tint = Color(0xFF2196F3)
                     )
                 }
                 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = subject.name,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333333)
                     )
                     Text(
                         text = "Code: ${subject.code} | Sections: ${subject.numberOfSections}",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF666666)
                     )
                 }
@@ -459,10 +398,12 @@ fun EnhancedSubjectSectionCard(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically
@@ -470,19 +411,19 @@ fun EnhancedSubjectSectionCard(
                             Icon(
                                 Icons.Default.PersonAdd,
                                 contentDescription = "Applications",
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(16.dp),
                                 tint = Color(0xFF666666)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Teacher Applications (${teacherApplications.size})",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF333333)
                             )
                         }
                         
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         
                         teacherApplications.forEach { application ->
                             EnhancedTeacherApplicationCard(
@@ -693,15 +634,17 @@ fun EnhancedTeacherApplicationCard(
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFFF0F8FF)
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -715,7 +658,7 @@ fun EnhancedTeacherApplicationCard(
                     // Teacher Avatar
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFFF9800).copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
@@ -723,12 +666,12 @@ fun EnhancedTeacherApplicationCard(
                         Icon(
                             Icons.Default.Person,
                             contentDescription = "Teacher",
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(18.dp),
                             tint = Color(0xFFFF9800)
                         )
                     }
                     
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     
                     Column(
                         modifier = Modifier
@@ -737,14 +680,13 @@ fun EnhancedTeacherApplicationCard(
                     ) {
                         Text(
                             text = application.teacherName,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF333333),
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            softWrap = false
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -752,7 +694,7 @@ fun EnhancedTeacherApplicationCard(
                             Icon(
                                 Icons.Default.Email,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(12.dp),
                                 tint = Color(0xFF666666)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -762,14 +704,13 @@ fun EnhancedTeacherApplicationCard(
                                 color = Color(0xFF666666),
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                softWrap = false,
-                                modifier = Modifier.weight(1f, fill = false)
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
                 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 
                 // Enhanced Status Chip
                 EnhancedApplicationStatusChip(status = application.status)
@@ -780,11 +721,11 @@ fun EnhancedTeacherApplicationCard(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(14.dp)
+                        modifier = Modifier.padding(10.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically
@@ -792,21 +733,21 @@ fun EnhancedTeacherApplicationCard(
                             Icon(
                                 Icons.Default.Info,
                                 contentDescription = "Reason",
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(14.dp),
                                 tint = Color(0xFF2196F3)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Application Reason",
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF333333)
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = application.applicationReason,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF333333)
                         )
                     }
@@ -818,15 +759,16 @@ fun EnhancedTeacherApplicationCard(
                 ApplicationStatus.APPROVED -> {
                     Button(
                         onClick = { showSectionDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4CAF50)
                         ),
                         shape = RoundedCornerShape(8.dp),
                         enabled = availableSections.isNotEmpty()
                     ) {
-                        Icon(Icons.Default.Assignment, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Assign to Section", fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Assignment, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Assign to Section", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 ApplicationStatus.PENDING -> {
@@ -1116,23 +1058,23 @@ fun EnhancedApplicationStatusChip(status: ApplicationStatus) {
     
     Surface(
         color = backgroundColor,
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(8.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(12.dp),
                 tint = contentColor
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = status.displayName,
                 color = contentColor,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -1316,105 +1258,119 @@ fun CollapsibleCourseCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column {
-            // Course Header (Expandable)
-            Card(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            // Course Header - Fixed Rows Layout (matching academic structure)
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50))
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
+                // Left side: Course info
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { isExpanded = !isExpanded }
-                        .padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    // Course name and info - can shrink if needed
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Course Icon
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2196F3).copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        // Course Icon
-                        Box(
+                        Icon(
+                            Icons.Default.School,
+                            contentDescription = "Course",
+                            modifier = Modifier.size(24.dp),
+                            tint = Color(0xFF2196F3)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 0.dp)
+                    ) {
+                        // Row 1 & 2: Course Name (clickable to expand)
+                        Text(
+                            text = courseName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333),
+                            maxLines = if (isCourseNameExpanded) Int.MAX_VALUE else 2,
+                            overflow = if (isCourseNameExpanded) androidx.compose.ui.text.style.TextOverflow.Visible else androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFC107)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.School,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .clickable { isCourseNameExpanded = !isCourseNameExpanded }
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Row 3: Details (Year Levels) - Fixed layout to prevent cutoff
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = courseName,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = if (isCourseNameExpanded) Int.MAX_VALUE else 2,
-                                overflow = if (isCourseNameExpanded) androidx.compose.ui.text.style.TextOverflow.Visible else androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
                             Text(
                                 text = "${yearLevelGroups.size} year level${if (yearLevelGroups.size != 1) "s" else ""}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
+                                color = Color(0xFF666666),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Icon(
+                                    Icons.Default.Book,
+                                    contentDescription = "Subjects",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF4CAF50)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "$totalSubjects subject${if (totalSubjects != 1) "s" else ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Visible
+                                )
+                            }
                         }
                     }
-                    
-                    // Badge and Dropdown - Fixed width, always visible
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        // Subject Count Badge - Always show, even if 0
-                        Surface(
-                            color = Color.White.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Text(
-                                text = "$totalSubjects subject${if (totalSubjects != 1) "s" else ""}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(12.dp))
-                        
-                        // Dropdown Icon - Always show
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (isExpanded) "Collapse" else "Expand",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                }
+                
+                // Expand/Collapse Icon
+                IconButton(
+                    onClick = { isExpanded = !isExpanded },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
             
             // Collapsible Content - Year Levels
             if (isExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     yearLevelGroups.forEach { yearLevelGroup ->
                         CollapsibleYearLevelCard(
@@ -1445,77 +1401,94 @@ fun CollapsibleYearLevelCard(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     
+    // Extract year level number from name (e.g., "Year 1" -> 1)
+    val yearLevelNumber = yearLevelName.replace("Year ", "").replace("No Year Level", "0").toIntOrNull() ?: 0
+    
+    // Color scheme based on year level for distinction (matching academic structure)
+    val yearLevelColors = listOf(
+        Color(0xFFE3F2FD) to Color(0xFF1976D2), // Year 1 - Light Blue
+        Color(0xFFF3E5F5) to Color(0xFF7B1FA2), // Year 2 - Light Purple
+        Color(0xFFFFF3E0) to Color(0xFFE65100), // Year 3 - Light Orange
+        Color(0xFFE8F5E9) to Color(0xFF388E3C), // Year 4 - Light Green
+        Color(0xFFFFEBEE) to Color(0xFFC62828), // Year 5+ - Light Red
+    )
+    
+    val (backgroundColor, accentColor) = if (yearLevelNumber > 0) {
+        yearLevelColors.getOrElse((yearLevelNumber - 1).coerceIn(0, yearLevelColors.size - 1)) {
+            Color(0xFFF5F5F5) to Color(0xFF757575) // Default gray
+        }
+    } else {
+        Color(0xFFF5F5F5) to Color(0xFF757575) // Default gray for "No Year Level"
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(
+            width = 1.dp,
+            color = accentColor.copy(alpha = 0.3f)
+        )
     ) {
-        Column {
-            // Year Level Header (Expandable)
-            Card(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // Year Level Header
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF66BB6A))
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { isExpanded = !isExpanded }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                    IconButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        // Year Level Icon
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFC107)),
-                            contentAlignment = Alignment.Center
+                        Icon(
+                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) "Collapse" else "Expand",
+                            tint = accentColor
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = yearLevelName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333333)
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                Icons.Default.Book,
+                                contentDescription = "Subjects",
+                                modifier = Modifier.size(14.dp),
+                                tint = accentColor
                             )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(12.dp))
-                        
-                        Column {
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = yearLevelName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "${subjects.size} subject${if (subjects.size != 1) "s" else ""}",
+                                text = "${subjects.size} subject(s)",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.9f)
+                                color = accentColor,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
-                    
-                    // Dropdown Icon
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
                 }
             }
             
             // Collapsible Content - Subjects (each subject is also collapsible)
             if (isExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Column(
-                    modifier = Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     subjects.forEach { subject ->

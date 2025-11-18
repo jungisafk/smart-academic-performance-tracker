@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.admin
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.Course
@@ -43,7 +42,6 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
         viewModelScope.launch {
             courseRepository.getAllCourses().onSuccess { courses ->
                 _courses.value = courses
-                Log.d("BulkImportVM", "Loaded ${courses.size} courses")
             }
         }
     }
@@ -55,11 +53,9 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
             try {
                 val parseResult = when {
                     fileName.endsWith(".csv", ignoreCase = true) -> {
-                        Log.d("BulkImportVM", "Starting CSV file parsing...")
                         CsvParser.parseStudentCsv(inputStream)
                     }
                     fileName.endsWith(".xlsx", ignoreCase = true) || fileName.endsWith(".xls", ignoreCase = true) -> {
-                        Log.d("BulkImportVM", "Starting Excel file parsing...")
                         ExcelParser.parseStudentExcel(inputStream, fileName)
                     }
                     else -> {
@@ -68,14 +64,9 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
                 }
                 
                 parseResult.onSuccess { studentRows ->
-                    Log.d("BulkImportVM", "File parsing successful: ${studentRows.size} rows parsed")
-                    
-                    // Convert CSV rows to PreRegisteredStudent objects
                     val students = studentRows.mapNotNull { studentRow ->
                         convertCsvRowToStudent(studentRow)
                     }
-                    
-                    Log.d("BulkImportVM", "Converted ${students.size} students from ${studentRows.size} rows")
                     
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -83,14 +74,12 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
                         csvRows = studentRows
                     )
                 }.onFailure { exception ->
-                    Log.e("BulkImportVM", "File parsing failed", exception)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to parse file. Please check the file format."
                     )
                 }
             } catch (e: Exception) {
-                Log.e("BulkImportVM", "Exception during file parsing", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Error reading file: ${e.message ?: "Unknown error"}"
@@ -99,7 +88,7 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
                 try {
                     inputStream.close()
                 } catch (e: Exception) {
-                    Log.w("BulkImportVM", "Error closing input stream", e)
+                    // Ignore close errors
                 }
             }
         }
@@ -153,12 +142,22 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
             // Get current enrollment year if not provided
             val enrollmentYear = csvRow.enrollmentYear ?: "2024-2025"
             
+            // Validate email is required
+            if (csvRow.email.isNullOrBlank()) {
+                throw Exception("Email is required for student ${csvRow.studentId} (${csvRow.firstName} ${csvRow.lastName})")
+            }
+            
+            // Validate email format
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(csvRow.email.trim()).matches()) {
+                throw Exception("Invalid email format for student ${csvRow.studentId}: ${csvRow.email}")
+            }
+            
             PreRegisteredStudent(
                 studentId = csvRow.studentId,
                 firstName = csvRow.firstName,
                 lastName = csvRow.lastName,
                 middleName = csvRow.middleName,
-                email = csvRow.email,
+                email = csvRow.email.trim(),
                 courseId = course?.id ?: "",
                 courseName = course?.name ?: "",
                 courseCode = course?.code ?: csvRow.courseCode ?: "",
@@ -174,7 +173,7 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
                 isRegistered = false
             )
         } catch (e: Exception) {
-            Log.e("BulkImportVM", "Error converting CSV row to student: ${e.message}", e)
+            // Error converting row, skip it
             null
         }
     }
@@ -207,7 +206,6 @@ class AdminBulkImportStudentsViewModel @Inject constructor(
                         importResult = importResult,
                         successMessage = successMsg
                     )
-                    Log.d("BulkImportVM", "Import completed: ${importResult.successCount} success, ${importResult.failureCount} failures")
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isImporting = false,

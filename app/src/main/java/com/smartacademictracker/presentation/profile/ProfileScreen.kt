@@ -1,5 +1,7 @@
 package com.smartacademictracker.presentation.profile
 
+import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -18,7 +20,8 @@ import com.smartacademictracker.presentation.auth.AuthViewModel
 fun ProfileScreen(
     onNavigateBack: () -> Unit,
     onSignOut: () -> Unit,
-    onNavigateToNotificationTest: () -> Unit = {},
+    onNavigateToChangePassword: () -> Unit = {},
+    showBackButton: Boolean = true,
     authViewModel: AuthViewModel = hiltViewModel(),
     profileViewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -34,8 +37,11 @@ fun ProfileScreen(
             TopAppBar(
                 title = { Text("Profile") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    // Only show back button if showBackButton is true
+                    if (showBackButton) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 }
             )
@@ -46,7 +52,8 @@ fun ProfileScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 80.dp) // Add bottom padding for bottom nav
         ) {
             item {
                 // Profile Header Card
@@ -114,14 +121,34 @@ fun ProfileScreen(
             }
             
             item {
+                val user = currentUser
+                val personalInfoItems = mutableListOf<Pair<String, String>>(
+                    "First Name" to (user?.firstName ?: "Not provided"),
+                    "Last Name" to (user?.lastName ?: "Not provided"),
+                    "Email" to (user?.email ?: "Not provided"),
+                    "Role" to (user?.role ?: "Not provided")
+                )
+                
+                // Add course and year level for students
+                if (user?.role == "STUDENT") {
+                    val courseCode = user.courseCode
+                    val courseInfo = courseCode ?: "Not provided"
+                    personalInfoItems.add("Course" to courseInfo)
+                    
+                    val yearLevelInfo = user.yearLevelName ?: "Not provided"
+                    personalInfoItems.add("Year Level" to yearLevelInfo)
+                }
+                
+                // Add department/course for teachers
+                if (user?.role == "TEACHER") {
+                    val departmentCode = user.departmentCourseCode
+                    val departmentInfo = departmentCode ?: "Not provided"
+                    personalInfoItems.add("Department" to departmentInfo)
+                }
+                
                 ProfileInfoCard(
                     title = "Personal Information",
-                    items = listOf(
-                        "First Name" to (currentUser?.firstName ?: "Not provided"),
-                        "Last Name" to (currentUser?.lastName ?: "Not provided"),
-                        "Email" to (currentUser?.email ?: "Not provided"),
-                        "Role" to (currentUser?.role ?: "Not provided")
-                    )
+                    items = personalInfoItems
                 )
             }
             
@@ -135,46 +162,15 @@ fun ProfileScreen(
             
             item {
                 ProfileActionCard(
-                    title = "Edit Profile",
-                    description = "Update your personal information",
-                    icon = Icons.Default.Edit,
-                    onClick = { /* TODO: Navigate to edit profile */ }
-                )
-            }
-            
-            item {
-                ProfileActionCard(
                     title = "Change Password",
                     description = "Update your account password",
                     icon = Icons.Default.Lock,
-                    onClick = { /* TODO: Navigate to change password */ }
-                )
-            }
-            
-            item {
-                ProfileActionCard(
-                    title = "Privacy Settings",
-                    description = "Manage your privacy preferences",
-                    icon = Icons.Default.Security,
-                    onClick = { /* TODO: Navigate to privacy settings */ }
-                )
-            }
-            
-            item {
-                ProfileActionCard(
-                    title = "Help & Support",
-                    description = "Get help and contact support",
-                    icon = Icons.Default.Help,
-                    onClick = { /* TODO: Navigate to help */ }
-                )
-            }
-            
-            item {
-                ProfileActionCard(
-                    title = "Notification Testing",
-                    description = "Test notification system functionality",
-                    icon = Icons.Default.Notifications,
-                    onClick = onNavigateToNotificationTest
+                    onClick = {
+                        Log.d("ProfileScreen", "Change Password button clicked")
+                        Log.d("ProfileScreen", "onNavigateToChangePassword callback: ${onNavigateToChangePassword::class.java.name}")
+                        onNavigateToChangePassword()
+                        Log.d("ProfileScreen", "onNavigateToChangePassword callback executed")
+                    }
                 )
             }
             
@@ -255,8 +251,18 @@ fun ProfileActionCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable {
+                Log.d("ProfileActionCard", "Card clicked for: $title")
+                Log.d("ProfileActionCard", "onClick lambda: ${onClick::class.java.name}")
+                try {
+                    onClick()
+                    Log.d("ProfileActionCard", "onClick executed successfully for: $title")
+                } catch (e: Exception) {
+                    Log.e("ProfileActionCard", "Error executing onClick for $title", e)
+                }
+            }
     ) {
         Row(
             modifier = Modifier

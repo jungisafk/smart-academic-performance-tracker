@@ -1,6 +1,7 @@
 package com.smartacademictracker.presentation.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,7 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,62 +39,53 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
     private val courseRepository: CourseRepository,
     private val yearLevelRepository: YearLevelRepository
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(PreRegStudentsUiState())
     val uiState: StateFlow<PreRegStudentsUiState> = _uiState.asStateFlow()
-    
+
     private val _courses = MutableStateFlow<List<Course>>(emptyList())
     val courses: StateFlow<List<Course>> = _courses.asStateFlow()
-    
+
     private val _yearLevels = MutableStateFlow<List<YearLevel>>(emptyList())
     val yearLevels: StateFlow<List<YearLevel>> = _yearLevels.asStateFlow()
-    
+
     init {
         loadPreRegisteredStudents()
         loadCourses()
     }
-    
+
     fun loadPreRegisteredStudents(filterRegistered: Boolean? = null) {
         viewModelScope.launch {
-            android.util.Log.d("PreRegisteredVM", "=== loadPreRegisteredStudents ===")
-            android.util.Log.d("PreRegisteredVM", "filterRegistered parameter: $filterRegistered")
-            
             _uiState.value = _uiState.value.copy(isLoading = true)
-            
+
             try {
-                val result = if (filterRegistered != null) {
-                    android.util.Log.d("PreRegisteredVM", "Calling getPreRegisteredStudentsByStatus($filterRegistered)")
-                    preRegisteredRepository.getPreRegisteredStudentsByStatus(filterRegistered)
-                } else {
-                    android.util.Log.d("PreRegisteredVM", "Calling getAllPreRegisteredStudents()")
-                    preRegisteredRepository.getAllPreRegisteredStudents()
-                }
-                
-                result.onSuccess { students ->
-                    android.util.Log.d("PreRegisteredVM", "Success: Loaded ${students.size} students")
-                    android.util.Log.d("PreRegisteredVM", "Students breakdown:")
-                    students.forEach { student ->
-                        android.util.Log.d("PreRegisteredVM", "  - ${student.studentId}: isRegistered=${student.isRegistered}, firebaseUserId=${student.firebaseUserId}")
+                // Always load ALL students first
+                val allStudentsResult = preRegisteredRepository.getAllPreRegisteredStudents()
+
+                allStudentsResult.onSuccess { allStudents ->
+                    val registeredCount = allStudents.count { it.isRegistered }
+                    val pendingCount = allStudents.count { !it.isRegistered }
+
+                    // Apply filter to filteredStudents only, keep all students in students
+                    val filtered = if (filterRegistered != null) {
+                        allStudents.filter { it.isRegistered == filterRegistered }
+                    } else {
+                        allStudents
                     }
-                    
-                    val registeredCount = students.count { it.isRegistered }
-                    val pendingCount = students.count { !it.isRegistered }
-                    android.util.Log.d("PreRegisteredVM", "Summary: Total=${students.size}, Registered=$registeredCount, Pending=$pendingCount")
-                    
+
                     _uiState.value = _uiState.value.copy(
-                        students = students,
-                        filteredStudents = students,
+                        students = allStudents, // Always keep full list for statistics
+                        filteredStudents = filtered, // Filtered list for display
+                        searchFilteredStudents = allStudents, // Reset search results when reloading
                         isLoading = false
                     )
                 }.onFailure { e ->
-                    android.util.Log.e("PreRegisteredVM", "Error loading students: ${e.message}", e)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = e.message ?: "Failed to load students"
                     )
                 }
             } catch (e: Exception) {
-                android.util.Log.e("PreRegisteredVM", "Exception loading students: ${e.message}", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load students"
@@ -99,7 +93,7 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
             }
         }
     }
-    
+
     private fun loadCourses() {
         viewModelScope.launch {
             courseRepository.getAllCourses().onSuccess { courseList ->
@@ -107,7 +101,7 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun loadYearLevelsForCourse(courseId: String) {
         viewModelScope.launch {
             yearLevelRepository.getYearLevelsByCourse(courseId).onSuccess { levels ->
@@ -115,11 +109,11 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun addPreRegisteredStudent(student: PreRegisteredStudent) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            
+
             try {
                 val result = preRegisteredRepository.addPreRegisteredStudent(student)
                 result.onSuccess {
@@ -142,7 +136,7 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun deleteStudent(docId: String) {
         viewModelScope.launch {
             preRegisteredRepository.deletePreRegisteredStudent(docId).onSuccess {
@@ -150,25 +144,45 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun filterStudents(query: String) {
-        val filtered = if (query.isBlank()) {
+        val searchFiltered = if (query.isBlank()) {
             _uiState.value.students
         } else {
             _uiState.value.students.filter {
                 it.studentId.contains(query, ignoreCase = true) ||
-                it.firstName.contains(query, ignoreCase = true) ||
-                it.lastName.contains(query, ignoreCase = true) ||
-                it.courseName.contains(query, ignoreCase = true)
+                        it.firstName.contains(query, ignoreCase = true) ||
+                        it.lastName.contains(query, ignoreCase = true) ||
+                        it.courseName.contains(query, ignoreCase = true)
             }
+        }
+        // Store search results separately and apply current status filter
+        _uiState.value = _uiState.value.copy(
+            searchFilteredStudents = searchFiltered,
+            filteredStudents = searchFiltered // Will be filtered by status if needed
+        )
+    }
+    
+    fun applyStatusFilter(filterRegistered: Boolean?, searchQuery: String) {
+        val baseList = if (searchQuery.isNotBlank()) {
+            // Use search-filtered results as base
+            _uiState.value.searchFilteredStudents
+        } else {
+            // Use all students as base
+            _uiState.value.students
+        }
+        val filtered = if (filterRegistered != null) {
+            baseList.filter { it.isRegistered == filterRegistered }
+        } else {
+            baseList
         }
         _uiState.value = _uiState.value.copy(filteredStudents = filtered)
     }
-    
+
     fun setShowAddDialog(show: Boolean) {
         _uiState.value = _uiState.value.copy(showAddDialog = show)
     }
-    
+
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
@@ -177,6 +191,7 @@ class AdminPreRegisteredStudentsViewModel @Inject constructor(
 data class PreRegStudentsUiState(
     val students: List<PreRegisteredStudent> = emptyList(),
     val filteredStudents: List<PreRegisteredStudent> = emptyList(),
+    val searchFilteredStudents: List<PreRegisteredStudent> = emptyList(), // Base search results
     val isLoading: Boolean = false,
     val error: String? = null,
     val showAddDialog: Boolean = false
@@ -187,29 +202,38 @@ data class PreRegStudentsUiState(
 fun AdminPreRegisteredStudentsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToBulkImport: () -> Unit = {},
+    modifier: Modifier = Modifier,
     viewModel: AdminPreRegisteredStudentsViewModel = hiltViewModel(),
     showTopBar: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val courses by viewModel.courses.collectAsState()
     val yearLevels by viewModel.yearLevels.collectAsState()
-    
+
     var searchQuery by remember { mutableStateOf("") }
     var filterRegistered by remember { mutableStateOf<Boolean?>(null) }
-    
+    var showAddMenu by remember { mutableStateOf(false) }
+    var showSearchBar by remember { mutableStateOf(false) }
+
     LaunchedEffect(searchQuery) {
         viewModel.filterStudents(searchQuery)
+        // Re-apply status filter if one is active
+        viewModel.applyStatusFilter(filterRegistered, searchQuery)
     }
-    
-        LaunchedEffect(filterRegistered) {
-            android.util.Log.d("AdminPreRegisteredScreen", "=== LaunchedEffect filterRegistered ===")
-            android.util.Log.d("AdminPreRegisteredScreen", "filterRegistered value: $filterRegistered")
+
+    LaunchedEffect(filterRegistered) {
+        if (searchQuery.isNotBlank()) {
+            // If search is active, apply filter to search results without reloading
+            viewModel.applyStatusFilter(filterRegistered, searchQuery)
+        } else {
+            // If no search, reload from database with filter
             viewModel.loadPreRegisteredStudents(filterRegistered)
         }
-    
-    Scaffold(
-        topBar = {
-            if (showTopBar) {
+    }
+
+    if (showTopBar) {
+        Scaffold(
+            topBar = {
                 TopAppBar(
                     title = { Text("Pre-Registered Students") },
                     navigationIcon = {
@@ -221,9 +245,6 @@ fun AdminPreRegisteredStudentsScreen(
                         IconButton(onClick = { viewModel.loadPreRegisteredStudents(filterRegistered) }) {
                             Icon(Icons.Default.Refresh, "Refresh")
                         }
-                        IconButton(onClick = onNavigateToBulkImport) {
-                            Icon(Icons.Default.Upload, "Bulk Import")
-                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color(0xFF2196F3),
@@ -232,169 +253,567 @@ fun AdminPreRegisteredStudentsScreen(
                         actionIconContentColor = Color.White
                     )
                 )
-            }
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.setShowAddDialog(true) },
-                containerColor = Color(0xFF4CAF50)
+            },
+        ) { padding ->
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
-                Icon(Icons.Default.Add, "Add Student", tint = Color.White)
-            }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Search and Filter Bar
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        label = { Text("Search") },
-                        placeholder = { Text("Student ID, Name, Course...") },
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // Filter Chips
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = filterRegistered == null,
-                            onClick = { filterRegistered = null },
-                            label = { Text("All") },
-                            leadingIcon = if (filterRegistered == null) {
-                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                        FilterChip(
-                            selected = filterRegistered == false,
-                            onClick = { 
-                                android.util.Log.d("AdminPreRegisteredScreen", "Pending filter clicked")
-                                filterRegistered = false 
-                            },
-                            label = { Text("Pending") },
-                            leadingIcon = if (filterRegistered == false) {
-                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFFFFC107)
-                            )
-                        )
-                        FilterChip(
-                            selected = filterRegistered == true,
-                            onClick = { 
-                                android.util.Log.d("AdminPreRegisteredScreen", "Activated filter clicked")
-                                filterRegistered = true 
-                            },
-                            label = { Text("Activated") },
-                            leadingIcon = if (filterRegistered == true) {
-                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
-                            } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF4CAF50)
-                            )
-                        )
-                    }
-                }
-            }
-            
-            // Statistics Card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
-            ) {
-                Row(
+                // Search and Filter Bar
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    StatItem(
-                        title = "Total",
-                        value = uiState.students.size.toString(),
-                        icon = Icons.Default.People,
-                        color = Color(0xFF2196F3)
-                    )
-                    StatItem(
-                        title = "Pending",
-                        value = uiState.students.count { !it.isRegistered }.toString(),
-                        icon = Icons.Default.HourglassEmpty,
-                        color = Color(0xFFFFC107)
-                    )
-                    StatItem(
-                        title = "Activated",
-                        value = uiState.students.count { it.isRegistered }.toString(),
-                        icon = Icons.Default.CheckCircle,
-                        color = Color(0xFF4CAF50)
-                    )
-                }
-            }
-            
-            // Students List
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else if (uiState.filteredStudents.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.PersonOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("No students found", color = Color.Gray)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (showSearchBar) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Student ID, Name, Course...") },
+                                leadingIcon = { Icon(Icons.Default.Search, null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        showSearchBar = false
+                                        searchQuery = ""
+                                    }) {
+                                        Icon(Icons.Default.Close, "Close")
+                                    }
+                                },
+                                textStyle = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+
+                            // Add Students Button (Icon only when search is active)
+                            Box {
+                                IconButton(
+                                    onClick = { showAddMenu = true },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Add Students",
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showAddMenu,
+                                    onDismissRequest = { showAddMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PersonAdd,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Add Student")
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setShowAddDialog(true)
+                                            showAddMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Upload,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Import Students")
+                                            }
+                                        },
+                                        onClick = {
+                                            onNavigateToBulkImport()
+                                            showAddMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            // Search Icon Button
+                            IconButton(
+                                onClick = { showSearchBar = true }
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Refresh Button (only shown when search is not active)
+                            IconButton(
+                                onClick = { viewModel.loadPreRegisteredStudents(filterRegistered) }
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Refresh",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Add Students Button with Dropdown Menu (full button when search is not active)
+                            Box {
+                                Button(
+                                    onClick = { showAddMenu = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Add Students",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Add Students")
+                                }
+                                DropdownMenu(
+                                    expanded = showAddMenu,
+                                    onDismissRequest = { showAddMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PersonAdd,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Add Student")
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setShowAddDialog(true)
+                                            showAddMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Upload,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Import Students")
+                                            }
+                                        },
+                                        onClick = {
+                                            onNavigateToBulkImport()
+                                            showAddMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            } else {
-                LazyColumn(
+
+                // Statistics Card (Clickable Filter)
+                Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
                 ) {
-                    items(uiState.filteredStudents) { student ->
-                        StudentCard(
-                            student = student,
-                            onDelete = { viewModel.deleteStudent(student.id) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Use search-filtered students if search is active (for consistent stats),
+                        // otherwise use all students
+                        val studentsForStats = if (searchQuery.isNotBlank()) {
+                            uiState.searchFilteredStudents
+                        } else {
+                            uiState.students
+                        }
+                        
+                        StatItem(
+                            title = "Total",
+                            value = studentsForStats.size.toString(),
+                            icon = Icons.Default.People,
+                            color = Color(0xFF2196F3),
+                            onClick = { filterRegistered = null },
+                            isSelected = filterRegistered == null,
+                            modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        StatItem(
+                            title = "Pending",
+                            value = studentsForStats.count { !it.isRegistered }.toString(),
+                            icon = Icons.Default.HourglassEmpty,
+                            color = Color(0xFFFFC107),
+                            onClick = { filterRegistered = false },
+                            isSelected = filterRegistered == false,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatItem(
+                            title = "Activated",
+                            value = studentsForStats.count { it.isRegistered }.toString(),
+                            icon = Icons.Default.CheckCircle,
+                            color = Color(0xFF4CAF50),
+                            onClick = { filterRegistered = true },
+                            isSelected = filterRegistered == true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Students List
+                if (uiState.isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (uiState.filteredStudents.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.PersonOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("No students found", color = Color.Gray)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f)
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        items(uiState.filteredStudents) { student ->
+                            StudentCard(
+                                student = student,
+                                onDelete = { viewModel.deleteStudent(student.id) }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Content without Scaffold (when wrapped with bottom nav)
+        Scaffold { padding ->
+            Column(
+                modifier = modifier.fillMaxSize()
+            ) {
+                // Search and Filter Bar
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (showSearchBar) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("ID, Name, Course") },
+                                leadingIcon = { Icon(Icons.Default.Search, null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        showSearchBar = false
+                                        searchQuery = ""
+                                    }) {
+                                        Icon(Icons.Default.Close, "Close")
+                                    }
+                                },
+                                textStyle = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+
+                            // Add Students Button (Icon only when search is active)
+                            Box {
+                                IconButton(
+                                    onClick = { showAddMenu = true },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Add Students",
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showAddMenu,
+                                    onDismissRequest = { showAddMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PersonAdd,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Add Student")
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setShowAddDialog(true)
+                                            showAddMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Upload,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Import Students")
+                                            }
+                                        },
+                                        onClick = {
+                                            onNavigateToBulkImport()
+                                            showAddMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            // Search Icon Button
+                            IconButton(
+                                onClick = { showSearchBar = true }
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Refresh Button (only shown when search is not active)
+                            IconButton(
+                                onClick = { viewModel.loadPreRegisteredStudents(filterRegistered) }
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Refresh",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Add Students Button with Dropdown Menu (full button when search is not active)
+                            Box {
+                                Button(
+                                    onClick = { showAddMenu = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Add Students",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Add Students")
+                                }
+                                DropdownMenu(
+                                    expanded = showAddMenu,
+                                    onDismissRequest = { showAddMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PersonAdd,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Add Student")
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setShowAddDialog(true)
+                                            showAddMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Upload,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Text("Import Students")
+                                            }
+                                        },
+                                        onClick = {
+                                            onNavigateToBulkImport()
+                                            showAddMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Statistics Card (Clickable Filter)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Use search-filtered students if search is active (for consistent stats),
+                        // otherwise use all students
+                        val studentsForStats = if (searchQuery.isNotBlank()) {
+                            uiState.searchFilteredStudents
+                        } else {
+                            uiState.students
+                        }
+                        
+                        StatItem(
+                            title = "Total",
+                            value = studentsForStats.size.toString(),
+                            icon = Icons.Default.People,
+                            color = Color(0xFF2196F3),
+                            onClick = { filterRegistered = null },
+                            isSelected = filterRegistered == null,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatItem(
+                            title = "Pending",
+                            value = studentsForStats.count { !it.isRegistered }.toString(),
+                            icon = Icons.Default.HourglassEmpty,
+                            color = Color(0xFFFFC107),
+                            onClick = { filterRegistered = false },
+                            isSelected = filterRegistered == false,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatItem(
+                            title = "Activated",
+                            value = studentsForStats.count { it.isRegistered }.toString(),
+                            icon = Icons.Default.CheckCircle,
+                            color = Color(0xFF4CAF50),
+                            onClick = { filterRegistered = true },
+                            isSelected = filterRegistered == true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Students List
+                if (uiState.isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (uiState.filteredStudents.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.PersonOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("No students found", color = Color.Gray)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f)
+                    ) {
+                        items(uiState.filteredStudents) { student ->
+                            StudentCard(
+                                student = student,
+                                onDelete = { viewModel.deleteStudent(student.id) },
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                     }
                 }
             }
         }
     }
-    
+
     // Add Student Dialog
     if (uiState.showAddDialog) {
         AddStudentDialog(
@@ -405,7 +824,7 @@ fun AdminPreRegisteredStudentsScreen(
             onConfirm = { student -> viewModel.addPreRegisteredStudent(student) }
         )
     }
-    
+
     // Error Snackbar
     uiState.error?.let { error ->
         LaunchedEffect(error) {
@@ -430,22 +849,38 @@ fun StatItem(
     title: String,
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color
+    color: Color,
+    onClick: () -> Unit,
+    isSelected: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(32.dp))
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-        Text(
-            title,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
-        )
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) color.copy(alpha = 0.1f) else Color.Transparent,
+        border = if (isSelected) BorderStroke(2.dp, color) else null
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Text(
+                title,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                fontSize = 11.sp
+            )
+        }
     }
 }
 
@@ -453,21 +888,13 @@ fun StatItem(
 @Composable
 fun StudentCard(
     student: PreRegisteredStudent,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    
-    // DEBUG: Log student status
-    LaunchedEffect(student.studentId) {
-        android.util.Log.d("StudentCard", "=== Rendering StudentCard ===")
-        android.util.Log.d("StudentCard", "Student ID: ${student.studentId}")
-        android.util.Log.d("StudentCard", "isRegistered: ${student.isRegistered}")
-        android.util.Log.d("StudentCard", "firebaseUserId: ${student.firebaseUserId}")
-        android.util.Log.d("StudentCard", "Will show status: ${if (student.isRegistered) "Activated" else "Awaiting Activation"}")
-    }
-    
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (student.isRegistered) Color(0xFFE8F5E9) else Color.White
         ),
@@ -504,7 +931,7 @@ fun StudentCard(
                         fontWeight = FontWeight.Medium
                     )
                 }
-                
+
                 Box {
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, "Menu")
@@ -526,32 +953,56 @@ fun StudentCard(
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 InfoChip(
                     icon = Icons.Default.School,
                     text = "${student.courseCode} - ${student.yearLevelName}"
                 )
-            }
-            
-            if (!student.isRegistered) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    color = Color(0xFFFFF3E0),
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    Text(
-                        "Awaiting Activation",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFF57C00),
-                        fontWeight = FontWeight.Medium
-                    )
+
+                if (!student.isRegistered) {
+                    Surface(
+                        color = Color(0xFFFFF3E0),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(
+                            "Awaiting Activation",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFF57C00),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    Surface(
+                        color = Color(0xFFE8F5E9),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = Color(0xFF4CAF50)
+                            )
+                            Text(
+                                "Activated",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -597,6 +1048,7 @@ fun AddStudentDialog(
     onConfirm: (PreRegisteredStudent) -> Unit
 ) {
     var studentId by remember { mutableStateOf("") }
+    var idError by remember { mutableStateOf<String?>(null) }
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var middleName by remember { mutableStateOf("") }
@@ -604,11 +1056,11 @@ fun AddStudentDialog(
     var selectedCourse by remember { mutableStateOf<Course?>(null) }
     var selectedYearLevel by remember { mutableStateOf<YearLevel?>(null) }
     var enrollmentYear by remember { mutableStateOf("2024-2025") }
-    
+
     LaunchedEffect(selectedCourse) {
         selectedCourse?.let { onLoadYearLevels(it.id) }
     }
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Pre-Registered Student") },
@@ -616,17 +1068,106 @@ fun AddStudentDialog(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // ID Format Warning Card
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF9800),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Student ID Format Requirements",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE65100)
+                                )
+                            }
+                            Text(
+                                text = "Format: YYYY-SEQUENCE",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF333333)
+                            )
+                            Column(
+                                modifier = Modifier.padding(start = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "• Year: Any 4-digit year (e.g., 1952, 2001, 2099)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                                Text(
+                                    text = "• Sequence: 1-99999 (1-2 digits auto-padded: 1→001, 23→023)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                                Text(
+                                    text = "• Examples: 2024-001, 2025-123, 2030-1000, 2030-15234",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                            }
+                        }
+                    }
+                }
+                
                 item {
                     OutlinedTextField(
                         value = studentId,
-                        onValueChange = { studentId = it },
+                        onValueChange = { newValue: String ->
+                            studentId = newValue
+                            // Validate format as user types
+                            if (newValue.isNotBlank()) {
+                                // Check if it's a valid format that can be formatted
+                                val formatted = com.smartacademictracker.util.IdValidator.formatStudentId(newValue)
+                                if (formatted != null) {
+                                    // Format the ID (this will zero-pad the sequence)
+                                    if (formatted != newValue) {
+                                        studentId = formatted
+                                    }
+                                    // Validate formatted ID
+                                    val validation = com.smartacademictracker.util.IdValidator.validateStudentId(formatted)
+                                    idError = if (!validation.isValid) validation.errorMessage else null
+                                } else {
+                                    // Check if it's a partial input (e.g., "2024-", "2024-1", or "2024-12345")
+                                    if (newValue.matches(Regex("^\\d{4}-\\d{0,5}$")) || newValue.matches(Regex("^\\d{0,4}$"))) {
+                                        idError = null // Still typing, no error yet
+                                    } else if (newValue.contains("-")) {
+                                        idError = "Invalid format. Expected: YYYY-SEQUENCE (e.g., 2024-001, 2025-123, 2030-1000). Maximum sequence: 99999"
+                                    } else {
+                                        idError = null
+                                    }
+                                }
+                            } else {
+                                idError = null
+                            }
+                        },
                         label = { Text("Student ID") },
-                        placeholder = { Text("e.g., 2024-1234") },
+                        placeholder = { Text("e.g., 2024-1, 2024-001, or 2030-1000") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        isError = idError != null,
+                        supportingText = idError?.let { errorMsg ->
+                            { Text(errorMsg) }
+                        }
                     )
                 }
-                
+
                 item {
                     OutlinedTextField(
                         value = firstName,
@@ -636,7 +1177,7 @@ fun AddStudentDialog(
                         singleLine = true
                     )
                 }
-                
+
                 item {
                     OutlinedTextField(
                         value = middleName,
@@ -646,7 +1187,7 @@ fun AddStudentDialog(
                         singleLine = true
                     )
                 }
-                
+
                 item {
                     OutlinedTextField(
                         value = lastName,
@@ -656,18 +1197,29 @@ fun AddStudentDialog(
                         singleLine = true
                     )
                 }
-                
+
                 item {
+                    var emailError by remember { mutableStateOf<String?>(null) }
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
-                        label = { Text("Email (Optional)") },
+                        onValueChange = { 
+                            email = it
+                            emailError = null
+                        },
+                        label = { Text("Email *") },
                         placeholder = { Text("e.g., student@university.edu") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        isError = emailError != null,
+                        supportingText = emailError?.let { errorMsg ->
+                            { Text(errorMsg) }
+                        },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Email
+                        )
                     )
                 }
-                
+
                 item {
                     var courseExpanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
@@ -701,7 +1253,7 @@ fun AddStudentDialog(
                         }
                     }
                 }
-                
+
                 item {
                     var yearLevelExpanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
@@ -735,7 +1287,7 @@ fun AddStudentDialog(
                         }
                     }
                 }
-                
+
                 item {
                     OutlinedTextField(
                         value = enrollmentYear,
@@ -751,12 +1303,38 @@ fun AddStudentDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    // Format and validate ID before submission
+                    val formattedId = com.smartacademictracker.util.IdValidator.formatStudentId(studentId)
+                    if (formattedId == null) {
+                        idError = "Invalid Student ID format. Expected: YYYY-SEQUENCE (e.g., 2024-001, 2025-123, 2030-1000). Maximum sequence: 99999"
+                        return@Button
+                    }
+                    
+                    val validation = com.smartacademictracker.util.IdValidator.validateStudentId(formattedId)
+                    val finalId = formattedId
+                    
+                    if (!validation.isValid) {
+                        idError = validation.errorMessage
+                        return@Button
+                    }
+                    
+                    // Validate email is required
+                    val trimmedEmail = email.trim()
+                    if (trimmedEmail.isBlank()) {
+                        return@Button // Email validation will be shown by the field
+                    }
+                    
+                    // Validate email format
+                    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                        return@Button // Email validation will be shown by the field
+                    }
+                    
                     val student = PreRegisteredStudent(
-                        studentId = studentId,
+                        studentId = finalId,
                         firstName = firstName,
                         lastName = lastName,
                         middleName = middleName.ifBlank { null },
-                        email = email.ifBlank { null },
+                        email = trimmedEmail,
                         courseId = selectedCourse?.id ?: "",
                         courseName = selectedCourse?.name ?: "",
                         courseCode = selectedCourse?.code ?: "",
@@ -773,8 +1351,11 @@ fun AddStudentDialog(
                 enabled = studentId.isNotBlank() &&
                         firstName.isNotBlank() &&
                         lastName.isNotBlank() &&
+                        email.trim().isNotBlank() &&
+                        android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() &&
                         selectedCourse != null &&
-                        selectedYearLevel != null
+                        selectedYearLevel != null &&
+                        idError == null
             ) {
                 Text("Add Student")
             }

@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -24,6 +25,33 @@ class StudentProfileViewModel @Inject constructor(
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
+    init {
+        setupRealtimeUserListener()
+        loadProfile()
+    }
+    
+    /**
+     * Set up real-time listener for current user changes
+     * This ensures profile screen updates automatically when user data changes (e.g., year level progression)
+     */
+    private fun setupRealtimeUserListener() {
+        viewModelScope.launch {
+            userRepository.getCurrentUserFlow()
+                .catch { exception ->
+                    android.util.Log.e("StudentProfileViewModel", "Error in current user flow: ${exception.message}", exception)
+                    // Fallback to one-time query on error
+                    loadProfile()
+                }
+                .collect { user ->
+                    _currentUser.value = user
+                    // Reload enrollments when user changes
+                    if (user != null) {
+                        loadEnrollmentsCount(user.id)
+                    }
+                }
+        }
+    }
+
     fun loadProfile() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -34,20 +62,7 @@ class StudentProfileViewModel @Inject constructor(
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
                         _currentUser.value = user
-                        
-                        // Load student's enrollments count
-                        val enrollmentsResult = enrollmentRepository.getEnrollmentsByStudent(user.id)
-                        enrollmentsResult.onSuccess { enrollments ->
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                enrolledSubjects = enrollments.size
-                            )
-                        }.onFailure { exception ->
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = exception.message ?: "Failed to load enrollments"
-                            )
-                        }
+                        loadEnrollmentsCount(user.id)
                     } else {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -64,6 +79,23 @@ class StudentProfileViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load profile"
+                )
+            }
+        }
+    }
+    
+    private fun loadEnrollmentsCount(userId: String) {
+        viewModelScope.launch {
+            val enrollmentsResult = enrollmentRepository.getEnrollmentsByStudent(userId)
+            enrollmentsResult.onSuccess { enrollments ->
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    enrolledSubjects = enrollments.size
+                )
+            }.onFailure { exception ->
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = exception.message ?: "Failed to load enrollments"
                 )
             }
         }

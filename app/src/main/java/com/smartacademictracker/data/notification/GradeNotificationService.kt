@@ -35,12 +35,18 @@ class GradeNotificationService @Inject constructor(
     
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val defaultSoundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = CHANNEL_DESCRIPTION
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500)
+                setSound(defaultSoundUri, null)
+                enableLights(true)
+                setShowBadge(true)
             }
             
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -64,15 +70,19 @@ class GradeNotificationService @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
+        val defaultSoundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Grade Update")
             .setContentText("New ${grade.gradePeriod.displayName} grade for ${grade.subjectName}: ${String.format("%.1f", grade.percentage)}%")
             .setStyle(NotificationCompat.BigTextStyle()
                 .bigText("You received a ${grade.gradePeriod.displayName} grade of ${grade.score}/${grade.maxScore} (${String.format("%.1f", grade.percentage)}%) in ${grade.subjectName}"))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setSound(defaultSoundUri)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
         
         val notificationId = NOTIFICATION_ID_BASE + grade.hashCode()

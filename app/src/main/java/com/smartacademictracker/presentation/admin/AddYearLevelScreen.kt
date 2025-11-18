@@ -25,12 +25,12 @@ fun AddYearLevelScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(courseId) {
-        println("DEBUG: AddYearLevelScreen - Received courseId: '$courseId'")
+        
         if (courseId.isNotEmpty()) {
             viewModel.setCourseId(courseId)
-            println("DEBUG: AddYearLevelScreen - Set courseId in ViewModel: '$courseId'")
+            
         } else {
-            println("DEBUG: AddYearLevelScreen - courseId is empty!")
+            
         }
     }
 

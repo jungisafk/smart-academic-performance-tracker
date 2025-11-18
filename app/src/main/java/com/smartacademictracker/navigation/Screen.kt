@@ -3,13 +3,20 @@ package com.smartacademictracker.navigation
 sealed class Screen(val route: String) {
     object SignIn : Screen("sign_in")
     object AccountActivation : Screen("account_activation")
+    object ForgotPassword : Screen("forgot_password/{userType}") {
+        fun createRoute(userType: com.smartacademictracker.data.model.UserRole) = "forgot_password/${userType.name}"
+    }
     
     // Student Screens
     object StudentDashboard : Screen("student_dashboard")
+    object StudentHome : Screen("student_home")
     object StudentGrades : Screen("student_grades")
+    object StudentGradesTab : Screen("student_grades_tab")
     object StudentSubjects : Screen("student_subjects")
+    object StudentSubjectsTab : Screen("student_subjects_tab")
     object StudentSubjectApplication : Screen("student_subject_application")
     object StudentProfile : Screen("student_profile")
+    object StudentProfileTab : Screen("student_profile_tab")
     object StudentAnalytics : Screen("student_analytics")
     object StudentSubjectDetail : Screen("student_subject_detail/{subjectId}") {
         fun createRoute(subjectId: String) = "student_subject_detail/$subjectId"
@@ -23,6 +30,10 @@ sealed class Screen(val route: String) {
     
     // Teacher Screens
     object TeacherDashboard : Screen("teacher_dashboard")
+    object TeacherHome : Screen("teacher_home")
+    object TeacherMySubjects : Screen("teacher_my_subjects")
+    object TeacherStudentManagementTab : Screen("teacher_student_management_tab")
+    object TeacherProfileTab : Screen("teacher_profile_tab")
     object TeacherSubjects : Screen("teacher_subjects")
     object TeacherGradeInput : Screen("teacher_grade_input/{subjectId}") {
         fun createRoute(subjectId: String) = "teacher_grade_input/$subjectId"
@@ -45,12 +56,16 @@ sealed class Screen(val route: String) {
     
     // Admin Screens
     object AdminDashboard : Screen("admin_dashboard")
+    object AdminHome : Screen("admin_home")
+    object AdminUserManagement : Screen("admin_user_management")
+    object AdminAcademicManagement : Screen("admin_academic_management")
+    object AdminProfileTab : Screen("admin_profile_tab")
     object AdminApplications : Screen("admin_applications")
     object AdminStudentApplications : Screen("admin_student_applications")
     object AdminCourseManagement : Screen("admin_course_management")
     object AdminYearLevelManagement : Screen("admin_year_level_management")
     object HierarchicalAcademicManagement : Screen("hierarchical_academic_management")
-    object AdminGradeMonitoring : Screen("admin_grade_monitoring")
+    object AdminGradeStatus : Screen("admin_grade_status")
     object AdminGradeEditRequests : Screen("admin_grade_edit_requests")
     object AdminAcademicPeriods : Screen("admin_academic_periods")
     object AddSubject : Screen("add_subject?courseId={courseId}&yearLevelId={yearLevelId}") {
@@ -75,6 +90,7 @@ sealed class Screen(val route: String) {
     
     // Common Screens
     object Profile : Screen("profile")
+    object ChangePassword : Screen("change_password")
     
     // Notification Screens
     object NotificationTest : Screen("notification_test")

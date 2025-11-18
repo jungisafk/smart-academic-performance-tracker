@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.admin
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.Course
@@ -40,7 +39,6 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
         viewModelScope.launch {
             courseRepository.getAllCourses().onSuccess { courses ->
                 _courses.value = courses
-                Log.d("BulkImportTeachersVM", "Loaded ${courses.size} courses")
             }
         }
     }
@@ -52,11 +50,9 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
             try {
                 val parseResult = when {
                     fileName.endsWith(".csv", ignoreCase = true) -> {
-                        Log.d("BulkImportTeachersVM", "Starting CSV file parsing...")
                         TeacherCsvParser.parseTeacherCsv(inputStream)
                     }
                     fileName.endsWith(".xlsx", ignoreCase = true) || fileName.endsWith(".xls", ignoreCase = true) -> {
-                        Log.d("BulkImportTeachersVM", "Starting Excel file parsing...")
                         ExcelParser.parseTeacherExcel(inputStream, fileName)
                     }
                     else -> {
@@ -65,10 +61,6 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
                 }
                 
                 parseResult.onSuccess { teacherRows ->
-                    Log.d("BulkImportTeachersVM", "File parsing successful: ${teacherRows.size} rows parsed")
-                    
-                    // Convert CSV rows to PreRegisteredTeacher objects
-                    // Note: convertCsvRowToTeacher is a suspend function, so we need to collect results in a loop
                     val teachers = mutableListOf<PreRegisteredTeacher>()
                     for (teacherRow in teacherRows) {
                         val teacher = convertCsvRowToTeacher(teacherRow)
@@ -77,22 +69,18 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
                         }
                     }
                     
-                    Log.d("BulkImportTeachersVM", "Converted ${teachers.size} teachers from ${teacherRows.size} rows")
-                    
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         parsedTeachers = teachers,
                         csvRows = teacherRows
                     )
                 }.onFailure { exception ->
-                    Log.e("BulkImportTeachersVM", "File parsing failed", exception)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to parse file. Please check the file format."
                     )
                 }
             } catch (e: Exception) {
-                Log.e("BulkImportTeachersVM", "Exception during file parsing", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Error reading file: ${e.message ?: "Unknown error"}"
@@ -101,7 +89,7 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
                 try {
                     inputStream.close()
                 } catch (e: Exception) {
-                    Log.w("BulkImportTeachersVM", "Error closing input stream", e)
+                    // Ignore close errors
                 }
             }
         }
@@ -143,12 +131,22 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
                 else -> EmploymentType.FULL_TIME // Default
             }
             
+            // Validate email is required
+            if (csvRow.email.isNullOrBlank()) {
+                throw Exception("Email is required for teacher ${csvRow.teacherId} (${csvRow.firstName} ${csvRow.lastName})")
+            }
+            
+            // Validate email format
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(csvRow.email.trim()).matches()) {
+                throw Exception("Invalid email format for teacher ${csvRow.teacherId}: ${csvRow.email}")
+            }
+            
             PreRegisteredTeacher(
                 teacherId = csvRow.teacherId,
                 firstName = csvRow.firstName,
                 lastName = csvRow.lastName,
                 middleName = csvRow.middleName,
-                email = csvRow.email,
+                email = csvRow.email.trim(),
                 departmentCourseId = departmentCourse?.id ?: "",
                 departmentCourseName = departmentCourse?.name ?: "",
                 departmentCourseCode = departmentCourse?.code ?: csvRow.departmentCode ?: "",
@@ -165,7 +163,7 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
                 isRegistered = false
             )
         } catch (e: Exception) {
-            Log.e("BulkImportTeachersVM", "Error converting CSV row to teacher: ${e.message}", e)
+            // Error converting row, skip it
             null
         }
     }
@@ -198,7 +196,6 @@ class AdminBulkImportTeachersViewModel @Inject constructor(
                         importResult = importResult,
                         successMessage = successMsg
                     )
-                    Log.d("BulkImportTeachersVM", "Import completed: ${importResult.successCount} success, ${importResult.failureCount} failures")
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isImporting = false,

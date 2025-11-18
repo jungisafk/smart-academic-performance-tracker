@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.teacher
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.StudentGradeAggregate
@@ -9,6 +8,7 @@ import com.smartacademictracker.data.model.Grade
 import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.SubjectRepository
+import com.smartacademictracker.data.manager.TeacherDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +20,8 @@ import javax.inject.Inject
 class TeacherAnalyticsViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val gradeRepository: GradeRepository,
-    private val subjectRepository: SubjectRepository
+    private val subjectRepository: SubjectRepository,
+    private val teacherDataCache: TeacherDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherAnalyticsUiState())
@@ -29,9 +30,27 @@ class TeacherAnalyticsViewModel @Inject constructor(
     private val _classPerformance = MutableStateFlow<List<SubjectPerformanceData>>(emptyList())
     val classPerformance: StateFlow<List<SubjectPerformanceData>> = _classPerformance.asStateFlow()
 
-    fun loadAnalyticsData() {
+    fun loadAnalyticsData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Prevent duplicate loading
+            if (_uiState.value.isLoading && !forceRefresh) return@launch
+            
+            // Check cache first
+            val cachedSubjects = teacherDataCache.cachedSubjects.value
+            if (!forceRefresh && cachedSubjects.isNotEmpty() && teacherDataCache.isCacheValid()) {
+                // Load filter options from cached subjects immediately
+                loadFilterOptions(cachedSubjects)
+                // Try to load performance data from cache if available
+                // Note: Analytics data is computed, so we still need to process it
+                // But we can show loading only if no cached data exists
+                if (_classPerformance.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            } else {
+                if (cachedSubjects.isEmpty() || !teacherDataCache.isCacheValid()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 // Get current user (teacher)
@@ -41,15 +60,23 @@ class TeacherAnalyticsViewModel @Inject constructor(
                         // Get subjects taught by this teacher
                         val subjectsResult = subjectRepository.getSubjectsByTeacher(user.id)
                         subjectsResult.onSuccess { subjects ->
+                            // Update cache
+                            teacherDataCache.updateSubjects(subjects)
                             // Load available filter options
                             loadFilterOptions(subjects)
                             // Load grade aggregates for all subjects
                             loadClassPerformanceData(subjects)
                         }.onFailure { exception ->
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = sanitizeFirebaseError(exception.message ?: "Failed to load subjects")
-                            )
+                            // If cache exists, use it; otherwise show error
+                            if (cachedSubjects.isNotEmpty() && teacherDataCache.isCacheValid()) {
+                                loadFilterOptions(cachedSubjects)
+                                loadClassPerformanceData(cachedSubjects)
+                            } else {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = sanitizeFirebaseError(exception.message ?: "Failed to load subjects")
+                                )
+                            }
                         }
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -58,10 +85,16 @@ class TeacherAnalyticsViewModel @Inject constructor(
                         )
                     }
                 }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = sanitizeFirebaseError(exception.message ?: "Failed to load user data")
-                    )
+                    // If cache exists, use it; otherwise show error
+                    if (cachedSubjects.isNotEmpty() && teacherDataCache.isCacheValid()) {
+                        loadFilterOptions(cachedSubjects)
+                        loadClassPerformanceData(cachedSubjects)
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = sanitizeFirebaseError(exception.message ?: "Failed to load user data")
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -130,7 +163,6 @@ class TeacherAnalyticsViewModel @Inject constructor(
                     }
                 }
             }.onFailure { exception ->
-                Log.d("TeacherAnalytics", "Failed to get aggregates for subject ${subject.name}: ${exception.message}")
                 val sanitizedError = sanitizeFirebaseError(exception.message)
                 if (!sanitizedError.contains("Unable to load") && !sanitizedError.contains("permission")) {
                     // Only set error if it's not a composite index or permission error (those are handled globally)
@@ -166,7 +198,6 @@ class TeacherAnalyticsViewModel @Inject constructor(
                     }
                 }.onFailure { fallbackException ->
                     // If fallback also fails, log but don't block the entire operation
-                    Log.d("TeacherAnalytics", "Failed to get grades for subject ${subject.name}: ${fallbackException.message}")
                     if (!hasError) {
                         hasError = true
                         errorMessage = sanitizeFirebaseError(fallbackException.message)
@@ -188,7 +219,6 @@ class TeacherAnalyticsViewModel @Inject constructor(
             error = if (hasError && subjectPerformanceList.isEmpty()) errorMessage else null
         )
         
-        Log.d("TeacherAnalytics", "Loaded performance data for ${subjects.size} subjects")
     }
 
 
@@ -222,10 +252,19 @@ class TeacherAnalyticsViewModel @Inject constructor(
     ): StudentGradeAggregate? {
         if (grades.isEmpty()) return null
         
-        val validGrades = grades.filter { it.score > 0 }
-        if (validGrades.isEmpty()) return null
+        // Get period grades
+        val prelimGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.PRELIM }
+        val midtermGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.MIDTERM }
+        val finalGrade = grades.find { it.gradePeriod == com.smartacademictracker.data.model.GradePeriod.FINAL }
         
-        val finalAverage = validGrades.map { it.percentage }.average()
+        // Calculate final average using weighted formula (30% prelim, 30% midterm, 40% final)
+        val finalAverage = com.smartacademictracker.data.utils.GradeCalculationEngine.calculateFinalAverage(
+            prelimGrade?.percentage,
+            midtermGrade?.percentage,
+            finalGrade?.percentage
+        )
+        
+        if (finalAverage == null) return null
         val status = when {
             finalAverage >= 90 -> GradeStatus.PASSING
             finalAverage >= 80 -> GradeStatus.PASSING
@@ -238,6 +277,9 @@ class TeacherAnalyticsViewModel @Inject constructor(
             id = "${studentId}_${subject.id}_${grades.first().semester}_${grades.first().academicYear}",
             studentId = studentId,
             studentName = grades.first().studentName,
+            prelimGrade = prelimGrade?.percentage,
+            midtermGrade = midtermGrade?.percentage,
+            finalGrade = finalGrade?.percentage,
             subjectId = subject.id,
             subjectName = subject.name,
             teacherId = subject.teacherId ?: "",
@@ -254,28 +296,18 @@ class TeacherAnalyticsViewModel @Inject constructor(
         
         aggregates.forEach { aggregate ->
             val grade = aggregate.finalAverage ?: return@forEach
-            val letterGrade = when {
-                grade >= 97 -> "A+"
-                grade >= 93 -> "A"
-                grade >= 90 -> "A-"
-                grade >= 87 -> "B+"
-                grade >= 83 -> "B"
-                grade >= 80 -> "B-"
-                grade >= 77 -> "C+"
-                grade >= 73 -> "C"
-                grade >= 70 -> "C-"
-                grade >= 67 -> "D+"
-                grade >= 65 -> "D"
-                else -> "F"
+            val gradeRange = when {
+                grade >= 75 -> "75+"
+                else -> "<75"
             }
-            distribution[letterGrade] = (distribution[letterGrade] ?: 0) + 1
+            distribution[gradeRange] = (distribution[gradeRange] ?: 0) + 1
         }
         
         return distribution
     }
 
     fun refreshData() {
-        loadAnalyticsData()
+        loadAnalyticsData(forceRefresh = true)
     }
 
     fun clearError() {

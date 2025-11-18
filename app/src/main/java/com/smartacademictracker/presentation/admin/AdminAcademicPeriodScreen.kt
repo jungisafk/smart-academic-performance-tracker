@@ -2,6 +2,7 @@ package com.smartacademictracker.presentation.admin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,6 +40,7 @@ import java.util.*
 fun AdminAcademicPeriodScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAddPeriod: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: AdminAcademicPeriodViewModel = hiltViewModel(),
     periodDataViewModel: AcademicPeriodDataViewModel = hiltViewModel()
 ) {
@@ -71,62 +73,13 @@ fun AdminAcademicPeriodScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color.White)
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Header Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                        ) {
-                            Icon(
-                                Icons.Default.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Academic Periods",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Manage periods and view data",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                    }
-                }
-            }
-            
             // Tab Row
             TabRow(
                 selectedTabIndex = selectedTab,
@@ -190,9 +143,11 @@ fun AdminAcademicPeriodScreen(
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(bottom = 80.dp) // Add padding for FAB
                                 .padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(
+                                bottom = 160.dp // Space for FAB (56dp height + 16dp bottom padding + 16dp spacing) + bottom nav (~80dp) + extra spacing
+                            )
                         ) {
                 // Current Academic Period Section
                 item {
@@ -279,12 +234,26 @@ fun AdminAcademicPeriodScreen(
                     items(academicPeriods) { period ->
                         // Only show as active if it matches the active period from repository
                         val isActive = activePeriod?.id == period.id
+                        var showEditDialog by remember { mutableStateOf(false) }
+                        
                         EnhancedAcademicPeriodCard(
                             period = period.copy(isActive = isActive),
-                            onEdit = { /* TODO: Implement edit functionality */ },
+                            onEdit = { showEditDialog = true },
                             onDelete = { viewModel.deleteAcademicPeriod(period.id) },
                             onSetActive = { viewModel.setActivePeriod(period.id) }
                         )
+                        
+                        // Edit Dialog
+                        if (showEditDialog) {
+                            EditAcademicPeriodDialog(
+                                period = period.copy(isActive = isActive),
+                                onDismiss = { showEditDialog = false },
+                                onSave = { name, description, isActive ->
+                                    viewModel.updateAcademicPeriod(period.id, name, description, isActive)
+                                    showEditDialog = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -329,6 +298,7 @@ fun AdminAcademicPeriodScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(20.dp)
+                            .padding(bottom = 80.dp) // Add bottom padding for bottom nav
                     ) {
                         if (periodDataUiState.isLoading) {
                             Box(
@@ -341,7 +311,8 @@ fun AdminAcademicPeriodScreen(
                             // Show detailed data for selected period
                             val data = selectedPeriodData!!
                             LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                contentPadding = PaddingValues(bottom = 24.dp) // Additional bottom padding
                             ) {
                                 // Period Info Card
                                 item {
@@ -788,6 +759,162 @@ fun AcademicPeriodCard(
 fun formatDate(timestamp: Long): String {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     return dateFormat.format(Date(timestamp))
+}
+
+@Composable
+fun EditAcademicPeriodDialog(
+    period: AcademicPeriod,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Boolean) -> Unit
+) {
+    var periodName by remember { mutableStateOf(period.name) }
+    var description by remember { mutableStateOf(period.description) }
+    var isActive by remember { mutableStateOf(period.isActive) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Edit Academic Period",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Period Name Field
+                OutlinedTextField(
+                    value = periodName,
+                    onValueChange = { periodName = it },
+                    label = { Text("Period Name *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF2196F3),
+                        unfocusedBorderColor = Color(0xFFE0E0E0)
+                    )
+                )
+                
+                // Description Field
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 5,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF2196F3),
+                        unfocusedBorderColor = Color(0xFFE0E0E0)
+                    )
+                )
+                
+                // Active Period Checkbox
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isActive,
+                            onCheckedChange = { isActive = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Color(0xFF2196F3),
+                                uncheckedColor = Color(0xFF666666)
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Set as active period",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF333333)
+                            )
+                            Text(
+                                text = "This will make this period the current active period",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666)
+                            )
+                        }
+                    }
+                }
+                
+                // Read-only fields (for information)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Read-only Information",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF666666)
+                        )
+                        Text(
+                            text = "Academic Year: ${period.academicYear}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666)
+                        )
+                        Text(
+                            text = "Semester: ${period.semester.displayName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666)
+                        )
+                        Text(
+                            text = "Date Range: ${formatDate(period.startDate)} - ${formatDate(period.endDate)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (periodName.isNotBlank()) {
+                        onSave(periodName, description, isActive)
+                    }
+                },
+                enabled = periodName.isNotBlank(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2196F3),
+                    disabledContainerColor = Color(0xFFE0E0E0)
+                )
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Cancel")
+            }
+        },
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 private fun formatDateRange(startDate: Long, endDate: Long): String {

@@ -7,11 +7,13 @@ package com.smartacademictracker.util
 object IdValidator {
     
     /**
-     * Student ID format: YYYY-N+ (e.g., "2024-1", "2024-001", "2024-1234")
-     * - YYYY: 4-digit year
-     * - N+: One or more digits (no fixed length limit)
+     * Student ID format: YYYY-SEQUENCE (e.g., "2024-001", "2025-123", "2030-1000", "2030-15234")
+     * - YYYY: 4-digit year (any 4-digit year, no range restriction)
+     * - SEQUENCE: 1-5 digit sequence number (1-99999)
+     *   - If 1-2 digits: zero-padded to 3 digits (1→001, 23→023, 7→007)
+     *   - If 3-5 digits: kept as-is (999→999, 1000→1000, 15234→15234)
      */
-    private val STUDENT_ID_PATTERN = Regex("^\\d{4}-\\d+$")
+    private val STUDENT_ID_PATTERN = Regex("^\\d{4}-\\d{1,5}$")
     
     /**
      * Teacher ID format: T-YYYY-N+ (e.g., "T-2024-1", "T-2024-001")
@@ -48,21 +50,33 @@ object IdValidator {
         
         val trimmed = studentId.trim()
         
+        // Check if it matches the pattern: YYYY-SEQUENCE (4-digit year, 1-5 digit sequence)
         if (!STUDENT_ID_PATTERN.matches(trimmed)) {
             return ValidationResult(
                 false,
-                "Invalid Student ID format. Expected format: YYYY-NNN (e.g., 2024-001, 2025-123)"
+                "Invalid Student ID format. Expected format: YYYY-SEQUENCE (e.g., 2024-001, 2025-123, 2030-1000)"
             )
         }
         
-        // Extract and validate year
+        // Validate year is exactly 4 digits (no range restriction)
         val year = extractYearFromStudentId(trimmed)
         if (year != null) {
-            val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-            if (year.toInt() < 2000 || year.toInt() > currentYear + 1) {
+            if (!year.matches(Regex("^\\d{4}$"))) {
                 return ValidationResult(
                     false,
-                    "Invalid year in Student ID. Year must be between 2000 and ${currentYear + 1}"
+                    "Invalid year in Student ID. Year must be exactly 4 digits (e.g., 1952, 2001, 2099)"
+                )
+            }
+        }
+        
+        // Validate sequence number is 1-99999
+        val parts = trimmed.split("-")
+        if (parts.size == 2) {
+            val sequenceNumber = parts[1].toIntOrNull()
+            if (sequenceNumber == null || sequenceNumber < 1 || sequenceNumber > 99999) {
+                return ValidationResult(
+                    false,
+                    "Invalid sequence number. Must be between 1 and 99999"
                 )
             }
         }
@@ -195,12 +209,46 @@ object IdValidator {
     }
     
     /**
-     * Format Student ID by ensuring proper format
-     * @param studentId Raw student ID input
-     * @return Formatted student ID
+     * Format Student ID by ensuring proper format YYYY-SEQUENCE
+     * Automatically zero-pads sequence number only if it has 1-2 digits (1-99 -> 001-099)
+     * If sequence is 3-5 digits, keeps it as-is (999, 1000, 15234)
+     * Maximum sequence is 99999 (5 digits)
+     * @param studentId Raw student ID input (e.g., "2024-1", "2024-45", "2024-300", "2030-1000", "2030-15234")
+     * @return Formatted student ID (e.g., "2024-001", "2024-045", "2024-300", "2030-1000", "2030-15234")
      */
-    fun formatStudentId(studentId: String): String {
-        return studentId.trim().uppercase()
+    fun formatStudentId(studentId: String): String? {
+        val trimmed = studentId.trim()
+        
+        // Try to parse the ID
+        val parts = trimmed.split("-")
+        if (parts.size != 2) {
+            return null // Invalid format
+        }
+        
+        val yearPart = parts[0].trim()
+        val sequencePart = parts[1].trim()
+        
+        // Validate year is exactly 4 digits
+        if (!yearPart.matches(Regex("^\\d{4}$"))) {
+            return null
+        }
+        
+        // Validate sequence is numeric and within range
+        val sequenceNumber = sequencePart.toIntOrNull()
+        if (sequenceNumber == null || sequenceNumber < 1 || sequenceNumber > 99999) {
+            return null
+        }
+        
+        // Format sequence: zero-pad only if 1-2 digits, otherwise keep as-is
+        val formattedSequence = if (sequenceNumber < 100) {
+            // 1-99: zero-pad to 3 digits (1→001, 23→023, 7→007)
+            sequenceNumber.toString().padStart(3, '0')
+        } else {
+            // 100-99999: keep as-is (999, 1000, 15234)
+            sequenceNumber.toString()
+        }
+        
+        return "$yearPart-$formattedSequence"
     }
     
     /**

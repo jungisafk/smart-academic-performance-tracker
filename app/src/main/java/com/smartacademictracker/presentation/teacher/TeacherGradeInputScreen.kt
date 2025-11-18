@@ -30,12 +30,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.util.Log
 import com.smartacademictracker.data.model.Enrollment
 import com.smartacademictracker.data.model.Grade
 import com.smartacademictracker.data.model.GradePeriod
 import com.smartacademictracker.data.model.StudentGradeAggregate
 import com.smartacademictracker.data.utils.GradeCalculationEngine
 import com.smartacademictracker.presentation.common.EmptyState
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +55,16 @@ fun TeacherGradeInputScreen(
     val grades by viewModel.grades.collectAsState()
     val gradeAggregates by viewModel.gradeAggregates.collectAsState()
     var selectedStudentIndex by remember { mutableStateOf<Int?>(null) }
+    var showCsvImportDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    // Sort enrollments alphabetically by last name (same as table display)
+    val sortedEnrollments = remember(enrollments) {
+        enrollments.sortedBy { enrollment ->
+            val nameParts = enrollment.studentName.trim().split("\\s+".toRegex())
+            nameParts.lastOrNull() ?: enrollment.studentName
+        }
+    }
 
     LaunchedEffect(subjectId) {
         viewModel.loadSubjectAndStudents(subjectId)
@@ -77,6 +92,17 @@ fun TeacherGradeInputScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { showCsvImportDialog = true }
+                    ) {
+                        Icon(
+                            Icons.Default.Upload,
+                            contentDescription = "Import CSV",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             )
@@ -247,14 +273,7 @@ fun TeacherGradeInputScreen(
                     }
                 }
 
-                // Students List - Sort by last name alphabetically
-                val sortedEnrollments = remember(enrollments) {
-                    enrollments.sortedBy { enrollment ->
-                        val nameParts = enrollment.studentName.trim().split("\\s+".toRegex())
-                        nameParts.lastOrNull() ?: enrollment.studentName
-                    }
-                }
-                
+                // Students List - Use sorted enrollments (already sorted above)
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -275,9 +294,6 @@ fun TeacherGradeInputScreen(
                         val firstName = nameParts.dropLast(1).joinToString(" ").ifEmpty { enrollment.studentName }
                         val lastName = nameParts.lastOrNull() ?: ""
                         
-                        // Find original index in unsorted list for dialog navigation
-                        val originalIndex = enrollments.indexOfFirst { it.id == enrollment.id }
-                        
                         StudentGradeRow(
                             studentNumber = index + 1,
                             firstName = firstName,
@@ -287,7 +303,8 @@ fun TeacherGradeInputScreen(
                             finalGrade = finalGrade?.letterGrade ?: "—",
                             finalAverageGrade = finalAverageGrade,
                             onClick = { 
-                                selectedStudentIndex = if (originalIndex >= 0) originalIndex else index
+                                // Use sorted index for dialog
+                                selectedStudentIndex = index
                             }
                         )
                     }
@@ -295,9 +312,38 @@ fun TeacherGradeInputScreen(
             }
         }
 
-        // Student Grade Input Dialog
+        // CSV Import Dialog
+        if (showCsvImportDialog) {
+            CsvImportDialog(
+                enrollments = sortedEnrollments,
+                parsedGradeRows = uiState.parsedGradeRows,
+                isLoading = uiState.isLoading,
+                error = uiState.error,
+                onDismiss = {
+                    showCsvImportDialog = false
+                    viewModel.clearError()
+                },
+                onFileSelected = { uri, fileName ->
+                    try {
+                        val inputStream = context.contentResolver.openInputStream(uri)
+                        if (inputStream != null) {
+                            viewModel.parseGradeCsv(inputStream, fileName)
+                        } else {
+                            viewModel.setError("Failed to open file. Please try selecting the file again.")
+                        }
+                    } catch (e: Exception) {
+                        viewModel.setError("Error reading file: ${e.message ?: "Unknown error"}")
+                    }
+                },
+                onImport = {
+                    viewModel.importGradesFromCsv()
+                }
+            )
+        }
+        
+        // Student Grade Input Dialog - Use sorted enrollments
         selectedStudentIndex?.let { index ->
-            val enrollment = enrollments.getOrNull(index)
+            val enrollment = sortedEnrollments.getOrNull(index)
             if (enrollment != null) {
                 val studentGrades = grades.filter { it.studentId == enrollment.studentId }
                 val aggregate = gradeAggregates.find { it.studentId == enrollment.studentId }
@@ -307,7 +353,7 @@ fun TeacherGradeInputScreen(
                     studentGrades = studentGrades,
                     aggregate = aggregate,
                     currentIndex = index,
-                    totalStudents = enrollments.size,
+                    totalStudents = sortedEnrollments.size,
                     uiState = uiState,
                     onDismiss = { selectedStudentIndex = null },
                     onNavigatePrevious = {
@@ -316,7 +362,7 @@ fun TeacherGradeInputScreen(
                         }
                     },
                     onNavigateNext = {
-                        if (index < enrollments.size - 1) {
+                        if (index < sortedEnrollments.size - 1) {
                             selectedStudentIndex = index + 1
                         }
                     },
@@ -331,6 +377,273 @@ fun TeacherGradeInputScreen(
                         viewModel.clearError()
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun CsvImportDialog(
+    enrollments: List<Enrollment>,
+    parsedGradeRows: List<com.smartacademictracker.data.utils.GradeRow>,
+    isLoading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onFileSelected: (Uri, String) -> Unit,
+    onImport: () -> Unit
+) {
+    val context = LocalContext.current
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var fileName by remember { mutableStateOf<String?>(null) }
+    
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        
+        try {
+            selectedFileUri = uri
+            fileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0 && cursor.moveToFirst()) {
+                    cursor.getString(nameIndex)
+                } else {
+                    null
+                }
+            } ?: uri.lastPathSegment ?: "Unknown file"
+            
+            onFileSelected(uri, fileName ?: "Unknown file")
+        } catch (e: Exception) {
+            // Error handled by onFileSelected
+        }
+    }
+    
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.9f),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Import Grades from CSV",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+                
+                // Instructions
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "File Format",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Supported format: CSV (.csv)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF4CAF50)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Your CSV file must have the following columns (case-insensitive):",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Column(
+                            modifier = Modifier.padding(start = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("• Student Name (Required)", style = MaterialTheme.typography.bodySmall)
+                            Text("• Prelim (Optional, 0-100)", style = MaterialTheme.typography.bodySmall)
+                            Text("• Midterm (Optional, 0-100)", style = MaterialTheme.typography.bodySmall)
+                            Text("• Final (Optional, 0-100)", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF9800),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Important",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF9800)
+                                    )
+                                }
+                                Text(
+                                    text = "The CSV file must contain exactly the same students as your enrolled student list. All student names must match exactly.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF333333)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Student List Preview
+                Card {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Enrolled Students (${enrollments.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Your CSV must include all these students:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            enrollments.forEachIndexed { index, enrollment ->
+                                Text(
+                                    text = "${index + 1}. ${enrollment.studentName}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // File Selection
+                OutlinedButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.Upload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (fileName != null) "Selected: $fileName" else "Select CSV File")
+                }
+                
+                // Parsed Grades Preview
+                if (parsedGradeRows.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Parsed Grades (${parsedGradeRows.size} students)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                parsedGradeRows.take(10).forEach { row ->
+                                    Text(
+                                        text = "${row.studentName}: Prelim=${row.prelim ?: "—"}, Midterm=${row.midterm ?: "—"}, Final=${row.final ?: "—"}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (parsedGradeRows.size > 10) {
+                                    Text(
+                                        text = "... and ${parsedGradeRows.size - 10} more",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Error Message
+                if (error != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                    ) {
+                        Text(
+                            text = error,
+                            color = Color(0xFFD32F2F),
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+                
+                // Import Button
+                if (parsedGradeRows.isNotEmpty()) {
+                    Button(
+                        onClick = onImport,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Importing...")
+                        } else {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Import Grades")
+                        }
+                    }
+                }
             }
         }
     }

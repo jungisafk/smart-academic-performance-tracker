@@ -15,7 +15,8 @@ import javax.inject.Singleton
 class NotificationSenderService @Inject constructor(
     private val notificationRepository: NotificationRepository,
     private val localNotificationService: LocalNotificationService,
-    private val templateService: NotificationTemplateService
+    private val templateService: NotificationTemplateService,
+    private val userRepository: com.smartacademictracker.data.repository.UserRepository
 ) {
 
     fun sendGradeUpdateNotification(
@@ -26,12 +27,57 @@ class NotificationSenderService @Inject constructor(
         score: Double,
         maxScore: Double
     ) {
+        val percentage = String.format("%.1f", (score / maxScore) * 100)
+        val message = "Your $period grade for $subjectName: $score/$maxScore ($percentage%)"
+        
         val variables = mapOf(
             "subjectName" to subjectName,
             "gradePeriod" to period,
             "score" to score.toString(),
             "maxScore" to maxScore.toString(),
-            "percentage" to String.format("%.1f", (score / maxScore) * 100)
+            "percentage" to percentage,
+            "message" to message
+        )
+
+        sendNotification(
+            userId = userId,
+            type = NotificationType.GRADE_UPDATE,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    /**
+     * Send notification for multiple grade periods submitted at once
+     * @param userId Student ID to notify
+     * @param subjectName Subject name
+     * @param submittedPeriods List of grade periods that were submitted (e.g., [PRELIM, MIDTERM])
+     */
+    fun sendMultipleGradeUpdateNotification(
+        userId: String,
+        subjectName: String,
+        submittedPeriods: List<com.smartacademictracker.data.model.GradePeriod>
+    ) {
+        val periodNames = submittedPeriods.map { it.displayName.lowercase() }
+        val message = when {
+            submittedPeriods.size == 1 -> {
+                "Your ${periodNames[0]} grade is available for viewing"
+            }
+            submittedPeriods.size == 2 -> {
+                "Your ${periodNames[0]} and ${periodNames[1]} grades are available for viewing"
+            }
+            submittedPeriods.contains(com.smartacademictracker.data.model.GradePeriod.FINAL) -> {
+                "Your final grade is available for viewing"
+            }
+            else -> {
+                "Your ${periodNames.joinToString(" and ")} grades are available for viewing"
+            }
+        }
+        
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "gradePeriods" to submittedPeriods.joinToString(", ") { it.displayName },
+            "message" to message
         )
 
         sendNotification(
@@ -179,33 +225,64 @@ class NotificationSenderService @Inject constructor(
                 )
 
                 // Save to database
+                android.util.Log.d("NotificationSenderService", "Saving notification to database - Type: $type, UserId: $userId")
                 val result = notificationRepository.createNotification(notification)
                 result.fold(
                     onSuccess = { savedNotification ->
+                        android.util.Log.d("NotificationSenderService", "Notification saved successfully, showing local notification")
                         // Show local notification
                         showLocalNotification(savedNotification)
                     },
                     onFailure = { error ->
                         // Handle error silently or log it
-                        println("Failed to save notification: ${error.message}")
+                        android.util.Log.e("NotificationSenderService", "Failed to save notification: ${error.message}", error)
+                        // Still try to show notification even if save fails
+                        android.util.Log.d("NotificationSenderService", "Attempting to show notification despite save failure")
+                        showLocalNotification(notification)
                     }
                 )
             } catch (e: Exception) {
                 // Handle error silently or log it
-                println("Failed to send notification: ${e.message}")
+                android.util.Log.e("NotificationSenderService", "Exception in sendNotification: ${e.message}", e)
+                e.printStackTrace()
             }
         }
     }
 
     private fun showLocalNotification(notification: Notification) {
-        localNotificationService.showNotification(
-            title = notification.title,
-            message = notification.message,
-            type = notification.type,
-            priority = notification.priority,
-            actionUrl = notification.actionUrl,
-            data = notification.data
-        )
+        android.util.Log.d("NotificationSenderService", "showLocalNotification called - Title: ${notification.title}, Type: ${notification.type}, UserId: ${notification.userId}")
+        
+        // Only show notification locally if it's for the current logged-in user
+        // Otherwise, the notification will be picked up by the intended user's device via real-time listeners
+        CoroutineScope(Dispatchers.IO).launch {
+            val currentUserResult = userRepository.getCurrentUser()
+            currentUserResult.onSuccess { currentUser ->
+                if (currentUser != null && currentUser.id == notification.userId) {
+                    android.util.Log.d("NotificationSenderService", "Notification is for current user, showing locally")
+                    localNotificationService.showNotification(
+                        title = notification.title,
+                        message = notification.message,
+                        type = notification.type,
+                        priority = notification.priority,
+                        actionUrl = notification.actionUrl,
+                        data = notification.data
+                    )
+                } else {
+                    android.util.Log.d("NotificationSenderService", "Notification is for user ${notification.userId}, current user is ${currentUser?.id}. Not showing locally - will be picked up by intended user's device.")
+                }
+            }.onFailure { error ->
+                android.util.Log.w("NotificationSenderService", "Failed to get current user, showing notification anyway: ${error.message}")
+                // If we can't get current user, show notification anyway (fallback)
+                localNotificationService.showNotification(
+                    title = notification.title,
+                    message = notification.message,
+                    type = notification.type,
+                    priority = notification.priority,
+                    actionUrl = notification.actionUrl,
+                    data = notification.data
+                )
+            }
+        }
     }
 
     fun sendBulkNotification(
@@ -240,5 +317,308 @@ class NotificationSenderService @Inject constructor(
                 println("Failed to send bulk notification: ${e.message}")
             }
         }
+    }
+    
+    // ========== NEW NOTIFICATION METHODS ==========
+    
+    fun sendTeacherAssignedToSectionNotification(
+        teacherId: String,
+        subjectName: String,
+        sectionName: String,
+        assignedBy: String
+    ) {
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "sectionName" to sectionName,
+            "assignedBy" to assignedBy
+        )
+        sendNotification(
+            userId = teacherId,
+            type = NotificationType.TEACHER_ASSIGNED_TO_SECTION,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendTeacherRemovedFromSectionNotification(
+        teacherId: String,
+        subjectName: String,
+        sectionName: String,
+        removedBy: String
+    ) {
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "sectionName" to sectionName,
+            "removedBy" to removedBy
+        )
+        sendNotification(
+            userId = teacherId,
+            type = NotificationType.TEACHER_REMOVED_FROM_SECTION,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendStudentEnrolledNotification(
+        studentId: String,
+        subjectName: String,
+        sectionName: String,
+        teacherName: String
+    ) {
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "sectionName" to sectionName,
+            "teacherName" to teacherName
+        )
+        sendNotification(
+            userId = studentId,
+            type = NotificationType.STUDENT_ENROLLED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendStudentDroppedNotification(
+        studentId: String,
+        subjectName: String,
+        sectionName: String,
+        droppedBy: String,
+        reason: String? = null
+    ) {
+        val reasonText = if (reason.isNullOrBlank()) "" else " Reason: $reason"
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "sectionName" to sectionName,
+            "droppedBy" to droppedBy,
+            "reason" to reasonText
+        )
+        sendNotification(
+            userId = studentId,
+            type = NotificationType.STUDENT_DROPPED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendGradeEditRequestApprovedNotification(
+        teacherId: String,
+        studentName: String,
+        subjectName: String,
+        gradePeriod: String
+    ) {
+        val variables = mapOf(
+            "studentName" to studentName,
+            "subjectName" to subjectName,
+            "gradePeriod" to gradePeriod
+        )
+        sendNotification(
+            userId = teacherId,
+            type = NotificationType.GRADE_EDIT_REQUEST_APPROVED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendGradeEditRequestRejectedNotification(
+        teacherId: String,
+        studentName: String,
+        subjectName: String,
+        gradePeriod: String,
+        reason: String? = null
+    ) {
+        val reasonText = if (reason.isNullOrBlank()) "" else " Reason: $reason"
+        val variables = mapOf(
+            "studentName" to studentName,
+            "subjectName" to subjectName,
+            "gradePeriod" to gradePeriod,
+            "reason" to reasonText
+        )
+        sendNotification(
+            userId = teacherId,
+            type = NotificationType.GRADE_EDIT_REQUEST_REJECTED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendUserStatusChangedNotification(
+        userId: String,
+        status: String,
+        changedBy: String
+    ) {
+        val variables = mapOf(
+            "status" to status,
+            "changedBy" to changedBy
+        )
+        sendNotification(
+            userId = userId,
+            type = NotificationType.USER_STATUS_CHANGED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendUserRoleChangedNotification(
+        userId: String,
+        newRole: String,
+        changedBy: String
+    ) {
+        val variables = mapOf(
+            "newRole" to newRole,
+            "changedBy" to changedBy
+        )
+        sendNotification(
+            userId = userId,
+            type = NotificationType.USER_ROLE_CHANGED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendSubjectCreatedNotification(
+        userIds: List<String>,
+        subjectName: String,
+        subjectCode: String
+    ) {
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "subjectCode" to subjectCode
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.SUBJECT_CREATED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendSubjectUpdatedNotification(
+        userIds: List<String>,
+        subjectName: String,
+        subjectCode: String
+    ) {
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "subjectCode" to subjectCode
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.SUBJECT_UPDATED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendSubjectDeletedNotification(
+        userIds: List<String>,
+        subjectName: String,
+        subjectCode: String
+    ) {
+        val variables = mapOf(
+            "subjectName" to subjectName,
+            "subjectCode" to subjectCode
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.SUBJECT_DELETED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendCourseCreatedNotification(
+        userIds: List<String>,
+        courseName: String,
+        courseCode: String
+    ) {
+        val variables = mapOf(
+            "courseName" to courseName,
+            "courseCode" to courseCode
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.COURSE_CREATED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendCourseUpdatedNotification(
+        userIds: List<String>,
+        courseName: String,
+        courseCode: String
+    ) {
+        val variables = mapOf(
+            "courseName" to courseName,
+            "courseCode" to courseCode
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.COURSE_UPDATED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendCourseDeletedNotification(
+        userIds: List<String>,
+        courseName: String,
+        courseCode: String
+    ) {
+        val variables = mapOf(
+            "courseName" to courseName,
+            "courseCode" to courseCode
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.COURSE_DELETED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
+    }
+    
+    fun sendYearLevelCreatedNotification(
+        userIds: List<String>,
+        yearLevelName: String
+    ) {
+        val variables = mapOf(
+            "yearLevelName" to yearLevelName
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.YEAR_LEVEL_CREATED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendYearLevelUpdatedNotification(
+        userIds: List<String>,
+        yearLevelName: String
+    ) {
+        val variables = mapOf(
+            "yearLevelName" to yearLevelName
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.YEAR_LEVEL_UPDATED,
+            variables = variables,
+            priority = NotificationPriority.NORMAL
+        )
+    }
+    
+    fun sendYearLevelDeletedNotification(
+        userIds: List<String>,
+        yearLevelName: String
+    ) {
+        val variables = mapOf(
+            "yearLevelName" to yearLevelName
+        )
+        sendBulkNotification(
+            userIds = userIds,
+            type = NotificationType.YEAR_LEVEL_DELETED,
+            variables = variables,
+            priority = NotificationPriority.HIGH
+        )
     }
 }

@@ -6,10 +6,11 @@ import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.EnrollmentRepository
 import com.smartacademictracker.data.repository.StudentEnrollmentRepository
-import com.smartacademictracker.data.repository.StudentApplicationRepository
+import com.smartacademictracker.data.repository.SubjectApplicationRepository
 import com.smartacademictracker.data.repository.TeacherApplicationRepository
 import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.service.AcademicPeriodFilterService
+import com.smartacademictracker.data.manager.AdminDataCache
 import com.smartacademictracker.data.model.EnrollmentStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -29,10 +32,11 @@ class AdminDashboardViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val enrollmentRepository: EnrollmentRepository,
     private val studentEnrollmentRepository: StudentEnrollmentRepository,
-    private val studentApplicationRepository: StudentApplicationRepository,
+    private val subjectApplicationRepository: SubjectApplicationRepository,
     private val teacherApplicationRepository: TeacherApplicationRepository,
     private val gradeRepository: GradeRepository,
-    private val academicPeriodFilterService: AcademicPeriodFilterService
+    private val academicPeriodFilterService: AcademicPeriodFilterService,
+    private val adminDataCache: AdminDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AdminDashboardUiState())
@@ -40,14 +44,23 @@ class AdminDashboardViewModel @Inject constructor(
 
     private val _subjects = MutableStateFlow<List<com.smartacademictracker.data.model.Subject>>(emptyList())
     private val _enrollments = MutableStateFlow<List<com.smartacademictracker.data.model.StudentEnrollment>>(emptyList())
-    private val _studentApplications = MutableStateFlow<List<com.smartacademictracker.data.model.StudentApplication>>(emptyList())
+    private val _studentApplications = MutableStateFlow<List<com.smartacademictracker.data.model.SubjectApplication>>(emptyList())
     private val _teacherApplications = MutableStateFlow<List<com.smartacademictracker.data.model.TeacherApplication>>(emptyList())
     private val _users = MutableStateFlow<List<com.smartacademictracker.data.model.User>>(emptyList())
     private val _gradeEditRequests = MutableStateFlow<List<com.smartacademictracker.data.model.Grade>>(emptyList())
+    
+    private var subjectsFlowJob: Job? = null
+    private var usersFlowJob: Job? = null
+    private var teacherApplicationsFlowJob: Job? = null
 
     init {
+        // Load cached data immediately if available
+        loadCachedData()
+        
+        // Set up real-time listeners
+        setupRealtimeListeners()
+        
         // Set up real-time data flow for admin dashboard
-        // Use nested combine since combine only supports up to 5 flows
         viewModelScope.launch {
             combine(
                 _subjects,
@@ -56,7 +69,6 @@ class AdminDashboardViewModel @Inject constructor(
                 _teacherApplications,
                 _users
             ) { subjects, enrollments, studentApplications, teacherApplications, users ->
-                // Return data to combine with the 6th flow
                 DataTuple(subjects, enrollments, studentApplications, teacherApplications, users)
             }.flatMapLatest { dataTuple ->
                 combine(_gradeEditRequests) { gradeEditRequestsArray ->
@@ -67,7 +79,7 @@ class AdminDashboardViewModel @Inject constructor(
                     val totalStudents = dataTuple.users.count { it.role == "STUDENT" }
                     val totalTeachers = dataTuple.users.count { it.role == "TEACHER" }
                     val totalEnrollments = dataTuple.enrollments.count { it.status == EnrollmentStatus.ACTIVE }
-                    val pendingStudentApplications = dataTuple.studentApplications.count { it.status == com.smartacademictracker.data.model.StudentApplicationStatus.PENDING }
+                    val pendingStudentApplications = dataTuple.studentApplications.count { it.status == com.smartacademictracker.data.model.ApplicationStatus.PENDING }
                     val pendingTeacherApplications = dataTuple.teacherApplications.count { it.status == com.smartacademictracker.data.model.ApplicationStatus.PENDING }
                     val pendingApplications = pendingStudentApplications + pendingTeacherApplications
                     val pendingGradeEditRequests = gradeEditRequests.size
@@ -81,48 +93,112 @@ class AdminDashboardViewModel @Inject constructor(
                         pendingApplications = pendingApplications,
                         pendingTeacherApplications = pendingTeacherApplications,
                         pendingGradeEditRequests = pendingGradeEditRequests
-                        // Don't override isLoading here - let loadDashboardData() handle it
                     )
-                    
-                    println("DEBUG: AdminDashboardViewModel - Real-time update: $totalSubjects subjects, $totalStudents students, $pendingApplications pending applications")
                 }
             }.collect { }
         }
+    }
+    
+    private fun setupRealtimeListeners() {
+        // Set up real-time listener for subjects
+        subjectsFlowJob = viewModelScope.launch {
+            subjectRepository.getAllSubjectsFlow()
+                .catch { exception ->
+                    // Fallback to one-time query on error
+                    val result = subjectRepository.getAllSubjects()
+                    result.onSuccess { subjects ->
+                        _subjects.value = subjects
+                        adminDataCache.updateSubjects(subjects)
+                    }
+                }
+                .collect { subjects ->
+                    _subjects.value = subjects
+                    adminDataCache.updateSubjects(subjects)
+                }
+        }
         
-        // Backup timeout to ensure loading state is always resolved
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(15000) // 15 second backup timeout
-            if (_uiState.value.isLoading) {
-                println("DEBUG: AdminDashboardViewModel - Backup timeout triggered, setting loading to false")
-                _uiState.value = _uiState.value.copy(isLoading = false)
-            }
+        // Set up real-time listener for users
+        usersFlowJob = viewModelScope.launch {
+            userRepository.getAllUsersFlow()
+                .catch { exception ->
+                    // Fallback to one-time query on error
+                    val result = userRepository.getAllUsers()
+                    result.onSuccess { users ->
+                        _users.value = users
+                        adminDataCache.updateUsers(users)
+                    }
+                }
+                .collect { users ->
+                    _users.value = users
+                    adminDataCache.updateUsers(users)
+                }
+        }
+        
+        // Set up real-time listener for teacher applications
+        teacherApplicationsFlowJob = viewModelScope.launch {
+            teacherApplicationRepository.getAllApplicationsFlow()
+                .catch { exception ->
+                    // Fallback to one-time query on error
+                    val result = teacherApplicationRepository.getAllApplications()
+                    result.onSuccess { applications ->
+                        _teacherApplications.value = applications
+                        adminDataCache.updateTeacherApplications(applications)
+                    }
+                }
+                .collect { applications ->
+                    _teacherApplications.value = applications
+                    adminDataCache.updateTeacherApplications(applications)
+                }
+        }
+    }
+    
+    private fun loadCachedData() {
+        // Load cached data immediately if available
+        val cachedSubjects = adminDataCache.cachedSubjects.value
+        val cachedEnrollments = adminDataCache.cachedEnrollments.value
+        val cachedStudentApplications = adminDataCache.cachedStudentApplications.value
+        val cachedTeacherApplications = adminDataCache.cachedTeacherApplications.value
+        val cachedUsers = adminDataCache.cachedUsers.value
+        val cachedGradeEditRequests = adminDataCache.cachedGradeEditRequests.value
+        
+        if (adminDataCache.hasCachedData() && adminDataCache.isCacheValid()) {
+            _subjects.value = cachedSubjects
+            _enrollments.value = cachedEnrollments
+            _studentApplications.value = cachedStudentApplications
+            _teacherApplications.value = cachedTeacherApplications
+            _users.value = cachedUsers
+            _gradeEditRequests.value = cachedGradeEditRequests
+            _uiState.value = _uiState.value.copy(isLoading = false)
         }
     }
 
-    fun loadDashboardData() {
+    fun loadDashboardData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            println("DEBUG: AdminDashboardViewModel - Starting loadDashboardData()")
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.hasCachedData() && adminDataCache.isCacheValid()) {
+                loadCachedData()
+            } else {
+                // Only show loading if we don't have cached data
+                if (!adminDataCache.hasCachedData()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
+            
+            // Always refresh data in background, but don't block UI if cache exists
             
             try {
-                // Load academic period information first
-                println("DEBUG: AdminDashboardViewModel - Loading academic period...")
                 val academicContext = academicPeriodFilterService.getAcademicPeriodContext()
                 
                 // Load all data in parallel with individual timeouts
-                // Each operation has its own timeout so one failure doesn't block others
                 coroutineScope {
                     val subjectsDeferred = async<Result<List<com.smartacademictracker.data.model.Subject>>> {
                         try {
-                            withTimeout(15000) { // 15 second timeout per operation
-                                println("DEBUG: AdminDashboardViewModel - Loading subjects...")
+                            withTimeout(15000) {
                                 subjectRepository.getAllSubjects()
                             }
                         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                            println("DEBUG: AdminDashboardViewModel - Timeout loading subjects")
                             Result.failure(Exception("Timed out loading subjects"))
                         } catch (e: Exception) {
-                            println("DEBUG: AdminDashboardViewModel - Error loading subjects: ${e.message}")
                             Result.failure(e)
                         }
                     }
@@ -130,29 +206,23 @@ class AdminDashboardViewModel @Inject constructor(
                     val enrollmentsDeferred = async<Result<List<com.smartacademictracker.data.model.StudentEnrollment>>> {
                         try {
                             withTimeout(15000) {
-                                println("DEBUG: AdminDashboardViewModel - Loading student enrollments...")
                                 studentEnrollmentRepository.getAllActiveEnrollments()
                             }
                         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                            println("DEBUG: AdminDashboardViewModel - Timeout loading enrollments")
                             Result.failure(Exception("Timed out loading enrollments"))
                         } catch (e: Exception) {
-                            println("DEBUG: AdminDashboardViewModel - Error loading enrollments: ${e.message}")
                             Result.failure(e)
                         }
                     }
                     
-                    val studentApplicationsDeferred = async<Result<List<com.smartacademictracker.data.model.StudentApplication>>> {
+                    val studentApplicationsDeferred = async<Result<List<com.smartacademictracker.data.model.SubjectApplication>>> {
                         try {
                             withTimeout(15000) {
-                                println("DEBUG: AdminDashboardViewModel - Loading student applications...")
-                                studentApplicationRepository.getAllApplications()
+                                subjectApplicationRepository.getAllApplications()
                             }
                         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                            println("DEBUG: AdminDashboardViewModel - Timeout loading student applications")
                             Result.failure(Exception("Timed out loading student applications"))
                         } catch (e: Exception) {
-                            println("DEBUG: AdminDashboardViewModel - Error loading student applications: ${e.message}")
                             Result.failure(e)
                         }
                     }
@@ -160,14 +230,11 @@ class AdminDashboardViewModel @Inject constructor(
                     val teacherApplicationsDeferred = async<Result<List<com.smartacademictracker.data.model.TeacherApplication>>> {
                         try {
                             withTimeout(15000) {
-                                println("DEBUG: AdminDashboardViewModel - Loading teacher applications...")
                                 teacherApplicationRepository.getAllApplications()
                             }
                         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                            println("DEBUG: AdminDashboardViewModel - Timeout loading teacher applications")
                             Result.failure(Exception("Timed out loading teacher applications"))
                         } catch (e: Exception) {
-                            println("DEBUG: AdminDashboardViewModel - Error loading teacher applications: ${e.message}")
                             Result.failure(e)
                         }
                     }
@@ -175,14 +242,11 @@ class AdminDashboardViewModel @Inject constructor(
                     val usersDeferred = async<Result<List<com.smartacademictracker.data.model.User>>> {
                         try {
                             withTimeout(15000) {
-                                println("DEBUG: AdminDashboardViewModel - Loading users...")
                                 userRepository.getAllUsers()
                             }
                         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                            println("DEBUG: AdminDashboardViewModel - Timeout loading users")
                             Result.failure(Exception("Timed out loading users"))
                         } catch (e: Exception) {
-                            println("DEBUG: AdminDashboardViewModel - Error loading users: ${e.message}")
                             Result.failure(e)
                         }
                     }
@@ -190,19 +254,16 @@ class AdminDashboardViewModel @Inject constructor(
                     val gradeEditRequestsDeferred = async<Result<List<com.smartacademictracker.data.model.Grade>>> {
                         try {
                             withTimeout(15000) {
-                                println("DEBUG: AdminDashboardViewModel - Loading grade edit requests...")
                                 gradeRepository.getGradesWithEditRequests()
                             }
                         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                            println("DEBUG: AdminDashboardViewModel - Timeout loading grade edit requests")
                             Result.failure(Exception("Timed out loading grade edit requests"))
                         } catch (e: Exception) {
-                            println("DEBUG: AdminDashboardViewModel - Error loading grade edit requests: ${e.message}")
                             Result.failure(e)
                         }
                     }
                     
-                    // Wait for all operations to complete (or timeout)
+                    // Wait for all operations to complete
                     val subjectsResult = subjectsDeferred.await()
                     val enrollmentsResult = enrollmentsDeferred.await()
                     val studentApplicationsResult = studentApplicationsDeferred.await()
@@ -210,61 +271,66 @@ class AdminDashboardViewModel @Inject constructor(
                     val usersResult = usersDeferred.await()
                     val gradeEditRequestsResult = gradeEditRequestsDeferred.await()
                     
-                    // Process results and update state (continue even if some fail)
+                    // Process results and update state and cache
+                    var hasData = false
+                    
                     subjectsResult.onSuccess { subjectsList ->
                         _subjects.value = subjectsList
-                        println("DEBUG: AdminDashboardViewModel - Loaded ${subjectsList.size} subjects")
-                    }.onFailure { exception ->
-                        println("DEBUG: AdminDashboardViewModel - Error loading subjects: ${exception.message}")
+                        adminDataCache.updateSubjects(subjectsList)
+                        hasData = true
                     }
                     
                     enrollmentsResult.onSuccess { enrollmentsList ->
                         _enrollments.value = enrollmentsList
-                        println("DEBUG: AdminDashboardViewModel - Loaded ${enrollmentsList.size} enrollments")
-                    }.onFailure { exception ->
-                        println("DEBUG: AdminDashboardViewModel - Error loading enrollments: ${exception.message}")
+                        adminDataCache.updateEnrollments(enrollmentsList)
+                        hasData = true
                     }
                     
                     studentApplicationsResult.onSuccess { applicationsList ->
                         _studentApplications.value = applicationsList
-                        println("DEBUG: AdminDashboardViewModel - Loaded ${applicationsList.size} student applications")
-                    }.onFailure { exception ->
-                        println("DEBUG: AdminDashboardViewModel - Error loading student applications: ${exception.message}")
+                        adminDataCache.updateStudentApplications(applicationsList)
+                        hasData = true
                     }
                     
                     teacherApplicationsResult.onSuccess { applicationsList ->
                         _teacherApplications.value = applicationsList
-                        println("DEBUG: AdminDashboardViewModel - Loaded ${applicationsList.size} teacher applications")
-                    }.onFailure { exception ->
-                        println("DEBUG: AdminDashboardViewModel - Error loading teacher applications: ${exception.message}")
+                        adminDataCache.updateTeacherApplications(applicationsList)
+                        hasData = true
                     }
                     
                     usersResult.onSuccess { usersList ->
                         _users.value = usersList
-                        println("DEBUG: AdminDashboardViewModel - Loaded ${usersList.size} users")
-                    }.onFailure { exception ->
-                        println("DEBUG: AdminDashboardViewModel - Error loading users: ${exception.message}")
+                        adminDataCache.updateUsers(usersList)
+                        hasData = true
                     }
                     
                     gradeEditRequestsResult.onSuccess { requestsList ->
                         _gradeEditRequests.value = requestsList
-                        println("DEBUG: AdminDashboardViewModel - Loaded ${requestsList.size} grade edit requests")
-                    }.onFailure { exception ->
-                        println("DEBUG: AdminDashboardViewModel - Error loading grade edit requests: ${exception.message}")
+                        adminDataCache.updateGradeEditRequests(requestsList)
+                        hasData = true
+                    }
+                    
+                    // Update cache timestamp
+                    if (hasData) {
+                        adminDataCache.updateAll(
+                            _subjects.value,
+                            _enrollments.value,
+                            _studentApplications.value,
+                            _teacherApplications.value,
+                            _users.value,
+                            _gradeEditRequests.value
+                        )
                     }
                 }
                 
-                // Set loading to false after all data loading attempts complete
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     activeAcademicPeriod = academicContext.periodId,
                     currentSemester = academicContext.semester,
                     currentAcademicYear = academicContext.academicYear
                 )
-                println("DEBUG: AdminDashboardViewModel - All data loading completed, loading set to false")
                 
             } catch (e: Exception) {
-                println("DEBUG: AdminDashboardViewModel - Error loading dashboard data: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load dashboard data"
@@ -274,39 +340,39 @@ class AdminDashboardViewModel @Inject constructor(
     }
 
     fun refreshData() {
-        loadDashboardData()
+        loadDashboardData(forceRefresh = true)
     }
     
     fun updateSubjects(subjects: List<com.smartacademictracker.data.model.Subject>) {
         _subjects.value = subjects
-        println("DEBUG: AdminDashboardViewModel - Updated subjects: ${subjects.size} total")
+        adminDataCache.updateSubjects(subjects)
     }
     
     fun updateEnrollments(enrollments: List<com.smartacademictracker.data.model.StudentEnrollment>) {
         _enrollments.value = enrollments
-        println("DEBUG: AdminDashboardViewModel - Updated enrollments: ${enrollments.size} total")
+        adminDataCache.updateEnrollments(enrollments)
     }
     
-    fun updateStudentApplications(applications: List<com.smartacademictracker.data.model.StudentApplication>) {
+    fun updateStudentApplications(applications: List<com.smartacademictracker.data.model.SubjectApplication>) {
         _studentApplications.value = applications
-        println("DEBUG: AdminDashboardViewModel - Updated student applications: ${applications.size} total")
+        adminDataCache.updateStudentApplications(applications)
     }
     
     fun updateTeacherApplications(applications: List<com.smartacademictracker.data.model.TeacherApplication>) {
         _teacherApplications.value = applications
-        println("DEBUG: AdminDashboardViewModel - Updated teacher applications: ${applications.size} total")
+        adminDataCache.updateTeacherApplications(applications)
     }
     
     fun updateUsers(users: List<com.smartacademictracker.data.model.User>) {
         _users.value = users
-        println("DEBUG: AdminDashboardViewModel - Updated users: ${users.size} total")
+        adminDataCache.updateUsers(users)
     }
 
     // Helper data class for combining flows
     private data class DataTuple(
         val subjects: List<com.smartacademictracker.data.model.Subject>,
         val enrollments: List<com.smartacademictracker.data.model.StudentEnrollment>,
-        val studentApplications: List<com.smartacademictracker.data.model.StudentApplication>,
+        val studentApplications: List<com.smartacademictracker.data.model.SubjectApplication>,
         val teacherApplications: List<com.smartacademictracker.data.model.TeacherApplication>,
         val users: List<com.smartacademictracker.data.model.User>
     )
@@ -315,22 +381,20 @@ class AdminDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val result = teacherApplicationRepository.removeDuplicateApplications()
-                result.onSuccess { deletedCount ->
-                    println("DEBUG: AdminDashboardViewModel - Cleaned up $deletedCount duplicate applications")
-                    // Reload data to reflect changes
-                    loadDashboardData()
-                }.onFailure { exception ->
-                    println("DEBUG: AdminDashboardViewModel - Error cleaning up duplicates: ${exception.message}")
+                result.onSuccess {
+                    loadDashboardData(forceRefresh = true)
                 }
             } catch (e: Exception) {
-                println("DEBUG: AdminDashboardViewModel - Exception during cleanup: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    error = "Error cleaning up duplicates: ${e.message}"
+                )
             }
         }
     }
 }
 
 data class AdminDashboardUiState(
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
     val error: String? = null,
     val totalSubjects: Int = 0,
     val activeSubjects: Int = 0,

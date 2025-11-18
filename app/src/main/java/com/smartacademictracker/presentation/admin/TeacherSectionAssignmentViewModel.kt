@@ -12,6 +12,8 @@ import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.repository.TeacherApplicationRepository
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.YearLevelRepository
+import com.smartacademictracker.data.manager.AdminDataCache
+import com.smartacademictracker.data.notification.NotificationSenderService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,7 +29,9 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
     private val sectionAssignmentRepository: SectionAssignmentRepository,
     private val teacherApplicationRepository: TeacherApplicationRepository,
     private val userRepository: UserRepository,
-    private val yearLevelRepository: YearLevelRepository
+    private val yearLevelRepository: YearLevelRepository,
+    private val adminDataCache: AdminDataCache,
+    private val notificationSenderService: NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherSectionAssignmentUiState())
@@ -45,9 +49,40 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
     private val _yearLevels = MutableStateFlow<List<YearLevel>>(emptyList())
     val yearLevels: StateFlow<List<YearLevel>> = _yearLevels.asStateFlow()
 
-    fun loadData() {
+    init {
+        // Load cached data immediately if available
+        val cachedSubjects = adminDataCache.cachedSubjects.value
+        val cachedYearLevels = adminDataCache.cachedYearLevels.value
+        val cachedTeacherApplications = adminDataCache.cachedTeacherApplications.value
+        
+        if (cachedSubjects.isNotEmpty() && cachedYearLevels.isNotEmpty() && 
+            cachedTeacherApplications.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _subjects.value = cachedSubjects
+            _yearLevels.value = cachedYearLevels
+            _teacherApplications.value = cachedTeacherApplications
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun loadData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedSubjects.value.isNotEmpty() && 
+                adminDataCache.cachedYearLevels.value.isNotEmpty() &&
+                adminDataCache.cachedTeacherApplications.value.isNotEmpty() &&
+                adminDataCache.isCacheValid()) {
+                _subjects.value = adminDataCache.cachedSubjects.value
+                _yearLevels.value = adminDataCache.cachedYearLevels.value
+                _teacherApplications.value = adminDataCache.cachedTeacherApplications.value
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedSubjects.value.isEmpty() || 
+                    adminDataCache.cachedYearLevels.value.isEmpty() ||
+                    adminDataCache.cachedTeacherApplications.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 // Load all data in parallel for faster loading
@@ -66,54 +101,35 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                     // Process results
                     subjectsResult.onSuccess { subjectsList ->
                         _subjects.value = subjectsList
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${subjectsList.size} subjects")
+                        adminDataCache.updateSubjects(subjectsList)
                     }.onFailure { exception ->
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Error loading subjects: ${exception.message}")
+                        // Error handling
                     }
 
                     assignmentsResult.onSuccess { assignmentsList ->
                         _sectionAssignments.value = assignmentsList
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${assignmentsList.size} section assignments")
                     }.onFailure { exception ->
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Error loading section assignments: ${exception.message}")
+                        // Error handling
                     }
 
                     applicationsResult.onSuccess { applicationsList ->
-                        android.util.Log.d("TeacherSectionAssignmentVM", "=== Teacher Applications Loaded ===")
-                        android.util.Log.d("TeacherSectionAssignmentVM", "Total applications: ${applicationsList.size}")
-                        
-                        // Log each application
-                        applicationsList.forEachIndexed { index, app ->
-                            android.util.Log.d("TeacherSectionAssignmentVM", "App[$index]: id=${app.id}, teacher=${app.teacherName} (${app.teacherId}), subject=${app.subjectName} (${app.subjectId}), status=${app.status}")
-                        }
-                        
-                        // Group by status for summary
-                        val byStatus = applicationsList.groupBy { it.status }
-                        byStatus.forEach { (status, apps) ->
-                            android.util.Log.d("TeacherSectionAssignmentVM", "Status ${status}: ${apps.size} applications")
-                        }
-                        
                         _teacherApplications.value = applicationsList
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${applicationsList.size} teacher applications")
+                        adminDataCache.updateTeacherApplications(applicationsList)
                     }.onFailure { exception ->
-                        android.util.Log.e("TeacherSectionAssignmentVM", "=== Teacher Applications Load Error ===")
-                        android.util.Log.e("TeacherSectionAssignmentVM", "Error type: ${exception.javaClass.simpleName}")
-                        android.util.Log.e("TeacherSectionAssignmentVM", "Error message: ${exception.message}")
-                        android.util.Log.e("TeacherSectionAssignmentVM", "Error cause: ${exception.cause?.message}")
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Error loading teacher applications: ${exception.message}")
+                        // Error handling
                     }
 
                     yearLevelsResult.onSuccess { yearLevelsList ->
                         _yearLevels.value = yearLevelsList
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Loaded ${yearLevelsList.size} year levels")
+                        adminDataCache.updateYearLevels(yearLevelsList)
                     }.onFailure { exception ->
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Error loading year levels: ${exception.message}")
+                        // Error handling
                     }
 
                     _uiState.value = _uiState.value.copy(isLoading = false)
                 }
             } catch (e: Exception) {
-                println("DEBUG: TeacherSectionAssignmentViewModel - Error loading data: ${e.message}")
+                
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to load data"
@@ -170,25 +186,36 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                     )
 
                     sectionAssignmentRepository.createSectionAssignment(assignment).onSuccess {
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Successfully assigned teacher to section")
+                        // Get current admin user for notification
+                        val currentAdmin = userRepository.getCurrentUser().getOrNull()
+                        val adminName = currentAdmin?.let { "${it.firstName} ${it.lastName}" } ?: "Admin"
+                        
+                        // Notify teacher about assignment
+                        notificationSenderService.sendTeacherAssignedToSectionNotification(
+                            teacherId = teacherId,
+                            subjectName = subject?.name ?: "Unknown Subject",
+                            sectionName = sectionName,
+                            assignedBy = adminName
+                        )
+                        
                         // Update the teacher application status to approved
                         updateTeacherApplicationStatus(teacherId, subjectId, sectionName)
                         // Refresh data
-                        loadData()
+                        loadData(forceRefresh = true)
                     }.onFailure { exception ->
-                        println("DEBUG: TeacherSectionAssignmentViewModel - Error assigning teacher: ${exception.message}")
+                        
                         _uiState.value = _uiState.value.copy(
                             error = "Failed to assign teacher: ${exception.message}"
                         )
                     }
                 }.onFailure { exception ->
-                    println("DEBUG: TeacherSectionAssignmentViewModel - Error getting teacher info: ${exception.message}")
+                    
                     _uiState.value = _uiState.value.copy(
                         error = "Failed to get teacher information: ${exception.message}"
                     )
                 }
             } catch (e: Exception) {
-                println("DEBUG: TeacherSectionAssignmentViewModel - Error in assignTeacherToSection: ${e.message}")
+                
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to assign teacher: ${e.message}"
                 )
@@ -199,18 +226,35 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
     fun removeSectionAssignment(assignmentId: String) {
         viewModelScope.launch {
             try {
+                // Get assignment details before deletion for notification
+                val assignment = _sectionAssignments.value.find { it.id == assignmentId }
+                
                 sectionAssignmentRepository.deleteSectionAssignment(assignmentId).onSuccess {
-                    println("DEBUG: TeacherSectionAssignmentViewModel - Successfully removed section assignment")
+                    // Get current admin user for notification
+                    val currentAdmin = userRepository.getCurrentUser().getOrNull()
+                    val adminName = currentAdmin?.let { "${it.firstName} ${it.lastName}" } ?: "Admin"
+                    
+                    // Notify teacher about removal
+                    if (assignment != null) {
+                        val subject = _subjects.value.find { it.id == assignment.subjectId }
+                        notificationSenderService.sendTeacherRemovedFromSectionNotification(
+                            teacherId = assignment.teacherId,
+                            subjectName = subject?.name ?: assignment.subjectId,
+                            sectionName = assignment.sectionName,
+                            removedBy = adminName
+                        )
+                    }
+                    
                     // Refresh data
                     loadData()
                 }.onFailure { exception ->
-                    println("DEBUG: TeacherSectionAssignmentViewModel - Error removing assignment: ${exception.message}")
+                    
                     _uiState.value = _uiState.value.copy(
                         error = "Failed to remove assignment: ${exception.message}"
                     )
                 }
             } catch (e: Exception) {
-                println("DEBUG: TeacherSectionAssignmentViewModel - Error in removeSectionAssignment: ${e.message}")
+                
                 _uiState.value = _uiState.value.copy(
                     error = "Failed to remove assignment: ${e.message}"
                 )
@@ -244,13 +288,13 @@ class TeacherSectionAssignmentViewModel @Inject constructor(
                 )
                 
                 teacherApplicationRepository.updateApplication(updatedApplication).onSuccess {
-                    println("DEBUG: TeacherSectionAssignmentViewModel - Updated teacher application status to approved")
+                    
                 }.onFailure { exception ->
-                    println("DEBUG: TeacherSectionAssignmentViewModel - Error updating application status: ${exception.message}")
+                    
                 }
             }
         } catch (e: Exception) {
-            println("DEBUG: TeacherSectionAssignmentViewModel - Error updating application status: ${e.message}")
+            
         }
     }
 

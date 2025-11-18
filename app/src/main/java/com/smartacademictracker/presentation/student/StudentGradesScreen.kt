@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.CheckCircle
@@ -38,20 +37,21 @@ import com.smartacademictracker.data.utils.GradeCalculationEngine
 @Composable
 fun StudentGradesScreen(
     onNavigateBack: () -> Unit,
-    viewModel: StudentGradesViewModel = hiltViewModel()
+    viewModel: StudentGradesViewModel = hiltViewModel(),
+    isEmbedded: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val grades by viewModel.grades.collectAsState()
     val gradeAggregates by viewModel.gradeAggregates.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadGrades()
-    }
-
-    // Refresh grades when screen is composed
-    DisposableEffect(Unit) {
-        viewModel.refreshGrades()
-        onDispose { }
+    // Note: Data loading is handled by StudentGradesTabScreen when embedded
+    // Only load if this screen is used standalone (not embedded in tab screen)
+    if (!isEmbedded) {
+        LaunchedEffect(viewModel) {
+            if (grades.isEmpty() && !uiState.isLoading) {
+                viewModel.loadGrades()
+            }
+        }
     }
 
     Box(
@@ -62,57 +62,18 @@ fun StudentGradesScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp)
         ) {
-            // Header Section
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.Default.ArrowBack, 
-                                contentDescription = "Back",
-                                tint = Color(0xFF666666)
-                            )
-                        }
-                        Text(
-                            text = "My Grades",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = { viewModel.refreshGrades() },
-                        enabled = !uiState.isLoading
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh, 
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                }
-            }
-            
-            // Summary Card
+            // Summary Card - Matching Admin UI Style
             if (!uiState.isLoading && (gradeAggregates.isNotEmpty() || grades.isNotEmpty())) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
                     ) {
                         Row(
                             modifier = Modifier
@@ -120,13 +81,29 @@ fun StudentGradesScreen(
                                 .padding(20.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2196F3)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Grade,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
                                     text = "Academic Performance",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.9f)
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2196F3)
                                 )
                                 Text(
                                     text = if (gradeAggregates.isNotEmpty()) {
@@ -134,31 +111,9 @@ fun StudentGradesScreen(
                                     } else {
                                         "${grades.size} Grade${if (grades.size != 1) "s" else ""}"
                                     },
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "Track your academic progress",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.9f),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Color(0xFF666666),
                                     modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                            
-                            // Grade Icon
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFFC107)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Grade,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
                                 )
                             }
                         }
@@ -857,7 +812,9 @@ fun EnhancedExpandableSubjectGradeCard(
                         text = gradeAggregate.subjectName,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF333333)
+                        color = Color(0xFF333333),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Academic Year: ${gradeAggregate.academicYear}",
@@ -947,19 +904,19 @@ fun EnhancedExpandableSubjectSummaryCard(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     
-    // Calculate average grade
-    val averageGrade = if (grades.isNotEmpty()) {
-        grades.map { it.percentage }.average()
-    } else 0.0
+    // Calculate final average using weighted formula (30% prelim + 30% midterm + 40% final)
+    val prelimGrade = grades.find { it.gradePeriod == GradePeriod.PRELIM }?.percentage
+    val midtermGrade = grades.find { it.gradePeriod == GradePeriod.MIDTERM }?.percentage
+    val finalGrade = grades.find { it.gradePeriod == GradePeriod.FINAL }?.percentage
     
-    // Determine status based on average
-    val status = when {
-        averageGrade >= 90 -> GradeStatus.PASSING
-        averageGrade >= 80 -> GradeStatus.PASSING
-        averageGrade >= 70 -> GradeStatus.AT_RISK
-        averageGrade > 0 -> GradeStatus.FAILING
-        else -> GradeStatus.INCOMPLETE
-    }
+    val finalAverage = GradeCalculationEngine.calculateFinalAverage(
+        prelimGrade,
+        midtermGrade,
+        finalGrade
+    )
+    
+    // Determine status based on final average
+    val status = GradeCalculationEngine.determineGradeStatus(finalAverage)
     
     Card(
         modifier = Modifier
@@ -987,7 +944,9 @@ fun EnhancedExpandableSubjectSummaryCard(
                         text = subjectName,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF333333)
+                        color = Color(0xFF333333),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Text(
                         text = "${grades.size} grade${if (grades.size != 1) "s" else ""} recorded",
@@ -1013,7 +972,7 @@ fun EnhancedExpandableSubjectSummaryCard(
                         )
                     ) {
                         Text(
-                            text = GradeCalculationEngine.calculateLetterGrade(averageGrade),
+                            text = GradeCalculationEngine.calculateLetterGrade(finalAverage),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = when (status) {

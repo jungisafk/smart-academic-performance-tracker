@@ -22,6 +22,7 @@ import com.smartacademictracker.data.model.ApplicationStatus
 @Composable
 fun AdminStudentApplicationsScreen(
     onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: AdminStudentApplicationsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -32,28 +33,10 @@ fun AdminStudentApplicationsScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                text = "Student Applications",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         // Loading state
         if (uiState.isLoading) {
             Box(

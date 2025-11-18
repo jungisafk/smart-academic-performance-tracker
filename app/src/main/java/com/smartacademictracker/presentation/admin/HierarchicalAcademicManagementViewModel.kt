@@ -8,8 +8,11 @@ import com.smartacademictracker.data.model.Subject
 import com.smartacademictracker.data.repository.CourseRepository
 import com.smartacademictracker.data.repository.YearLevelRepository
 import com.smartacademictracker.data.repository.SubjectRepository
+import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.migration.DatabaseMigrationService
 import com.smartacademictracker.data.service.AcademicPeriodFilterService
+import com.smartacademictracker.data.manager.AdminDataCache
+import com.smartacademictracker.data.notification.NotificationSenderService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +26,10 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
     private val yearLevelRepository: YearLevelRepository,
     private val subjectRepository: SubjectRepository,
     private val migrationService: DatabaseMigrationService,
-    private val academicPeriodFilterService: AcademicPeriodFilterService
+    private val academicPeriodFilterService: AcademicPeriodFilterService,
+    private val adminDataCache: AdminDataCache,
+    private val userRepository: UserRepository,
+    private val notificationSenderService: NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HierarchicalAcademicManagementUiState())
@@ -38,9 +44,40 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
     private val _subjects = MutableStateFlow<List<Subject>>(emptyList())
     val subjects: StateFlow<List<Subject>> = _subjects.asStateFlow()
 
-    fun loadAllData() {
+    init {
+        // Load cached data immediately if available
+        val cachedCourses = adminDataCache.cachedCourses.value
+        val cachedYearLevels = adminDataCache.cachedYearLevels.value
+        val cachedSubjects = adminDataCache.cachedSubjects.value
+        
+        if (cachedCourses.isNotEmpty() && cachedYearLevels.isNotEmpty() && 
+            cachedSubjects.isNotEmpty() && adminDataCache.isCacheValid()) {
+            _courses.value = cachedCourses
+            _yearLevels.value = cachedYearLevels
+            _subjects.value = cachedSubjects
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun loadAllData(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Load cached data first if available and not forcing refresh
+            if (!forceRefresh && adminDataCache.cachedCourses.value.isNotEmpty() && 
+                adminDataCache.cachedYearLevels.value.isNotEmpty() &&
+                adminDataCache.cachedSubjects.value.isNotEmpty() &&
+                adminDataCache.isCacheValid()) {
+                _courses.value = adminDataCache.cachedCourses.value
+                _yearLevels.value = adminDataCache.cachedYearLevels.value
+                _subjects.value = adminDataCache.cachedSubjects.value
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } else {
+                // Only show loading if we don't have cached data
+                if (adminDataCache.cachedCourses.value.isEmpty() || 
+                    adminDataCache.cachedYearLevels.value.isEmpty() ||
+                    adminDataCache.cachedSubjects.value.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
+            }
             
             try {
                 // Check if there's an active academic period
@@ -53,16 +90,17 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
                     return@launch
                 }
                 // First, clean up corrupted subjects
-                println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaning up corrupted subjects...")
+                
                 subjectRepository.cleanupCorruptedSubjects().onSuccess { corruptedCount ->
                     if (corruptedCount > 0) {
-                        println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaned up $corruptedCount corrupted subjects")
+                        
                     }
                 }
                 
                 // Load courses
                 courseRepository.getAllCourses().onSuccess { coursesList ->
                     _courses.value = coursesList
+                    adminDataCache.updateCourses(coursesList)
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         error = "Failed to load courses: ${exception.message}"
@@ -72,6 +110,7 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
                 // Load year levels
                 yearLevelRepository.getAllYearLevels().onSuccess { yearLevelsList ->
                     _yearLevels.value = yearLevelsList
+                    adminDataCache.updateYearLevels(yearLevelsList)
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         error = "Failed to load year levels: ${exception.message}"
@@ -81,6 +120,7 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
                 // Load subjects
                 subjectRepository.getAllSubjects().onSuccess { subjectsList ->
                     _subjects.value = subjectsList
+                    adminDataCache.updateSubjects(subjectsList)
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         error = "Failed to load subjects: ${exception.message}"
@@ -98,36 +138,35 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
     }
 
     fun refreshAllData() {
-        loadAllData()
+        loadAllData(forceRefresh = true)
     }
     
     fun refreshData() {
         viewModelScope.launch {
             // First, clean up corrupted subjects
-            println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaning up corrupted subjects in refresh...")
+            
             subjectRepository.cleanupCorruptedSubjects().onSuccess { corruptedCount ->
                 if (corruptedCount > 0) {
-                    println("DEBUG: HierarchicalAcademicManagementViewModel - Cleaned up $corruptedCount corrupted subjects")
+                    
                 }
             }
             
             // Load courses
             courseRepository.getAllCourses().onSuccess { coursesList ->
                 _courses.value = coursesList
+                adminDataCache.updateCourses(coursesList)
             }
             
             // Load year levels
             yearLevelRepository.getAllYearLevels().onSuccess { yearLevelsList ->
                 _yearLevels.value = yearLevelsList
-                println("DEBUG: HierarchicalAcademicManagementViewModel - Loaded ${yearLevelsList.size} year levels")
-                yearLevelsList.forEach { yearLevel ->
-                    println("DEBUG: Year Level - ID: ${yearLevel.id}, CourseId: ${yearLevel.courseId}, Name: ${yearLevel.name}")
-                }
+                adminDataCache.updateYearLevels(yearLevelsList)
             }
             
             // Load subjects
             subjectRepository.getAllSubjects().onSuccess { subjectsList ->
                 _subjects.value = subjectsList
+                adminDataCache.updateSubjects(subjectsList)
             }
         }
     }
@@ -139,26 +178,42 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
                 val orphanedYearLevels = _yearLevels.value.filter { it.courseId.isEmpty() }
                 
                 if (orphanedYearLevels.isNotEmpty()) {
-                    println("DEBUG: HierarchicalAcademicManagementViewModel - Found ${orphanedYearLevels.size} orphaned year levels, cleaning up...")
+                    
                     
                     // Delete orphaned year levels
                     for (yearLevel in orphanedYearLevels) {
                         yearLevelRepository.deleteYearLevel(yearLevel.id)
-                        println("DEBUG: HierarchicalAcademicManagementViewModel - Deleted orphaned year level: ${yearLevel.name}")
+                        
                     }
                     
                     // Refresh data after cleanup
                     refreshData()
                 }
             } catch (e: Exception) {
-                println("DEBUG: HierarchicalAcademicManagementViewModel - Error cleaning up orphaned year levels: ${e.message}")
+                
             }
         }
     }
 
     fun deleteCourse(courseId: String) {
         viewModelScope.launch {
+            // Get course details before deletion for notification
+            val course = _courses.value.find { it.id == courseId }
+            
             courseRepository.deleteCourse(courseId).onSuccess {
+                // Get all users to notify them
+                val allUsersResult = userRepository.getAllUsers()
+                allUsersResult.onSuccess { users ->
+                    val userIds = users.map { it.id }
+                    if (course != null) {
+                        notificationSenderService.sendCourseDeletedNotification(
+                            userIds = userIds,
+                            courseName = course.name,
+                            courseCode = course.code
+                        )
+                    }
+                }
+                
                 // Remove from local list
                 _courses.value = _courses.value.filter { it.id != courseId }
                 // Also remove associated year levels and subjects
@@ -176,7 +231,22 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
 
     fun deleteYearLevel(yearLevelId: String) {
         viewModelScope.launch {
+            // Get year level details before deletion for notification
+            val yearLevel = _yearLevels.value.find { it.id == yearLevelId }
+            
             yearLevelRepository.deleteYearLevel(yearLevelId).onSuccess {
+                // Get all users to notify them
+                val allUsersResult = userRepository.getAllUsers()
+                allUsersResult.onSuccess { users ->
+                    val userIds = users.map { it.id }
+                    if (yearLevel != null) {
+                        notificationSenderService.sendYearLevelDeletedNotification(
+                            userIds = userIds,
+                            yearLevelName = yearLevel.name
+                        )
+                    }
+                }
+                
                 // Remove from local list
                 _yearLevels.value = _yearLevels.value.filter { it.id != yearLevelId }
                 // Also remove associated subjects
@@ -191,7 +261,23 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
 
     fun deleteSubject(subjectId: String) {
         viewModelScope.launch {
+            // Get subject details before deletion for notification
+            val subject = _subjects.value.find { it.id == subjectId }
+            
             subjectRepository.deleteSubject(subjectId).onSuccess {
+                // Get all users to notify them
+                val allUsersResult = userRepository.getAllUsers()
+                allUsersResult.onSuccess { users ->
+                    val userIds = users.map { it.id }
+                    if (subject != null) {
+                        notificationSenderService.sendSubjectDeletedNotification(
+                            userIds = userIds,
+                            subjectName = subject.name,
+                            subjectCode = subject.code
+                        )
+                    }
+                }
+                
                 // Remove from local list
                 _subjects.value = _subjects.value.filter { it.id != subjectId }
             }.onFailure { exception ->
@@ -214,7 +300,6 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
                 // First try redistribution to fix the current issue
                 val redistributeResult = migrationService.redistributeYearLevels()
                 if (redistributeResult.isSuccess) {
-                    println("DEBUG: Redistribution successful: ${redistributeResult.getOrNull()}")
                     // Refresh data after redistribution
                     refreshData()
                     _uiState.value = _uiState.value.copy(isLoading = false)
@@ -222,7 +307,6 @@ class HierarchicalAcademicManagementViewModel @Inject constructor(
                     // If redistribution fails, try full migration
                     val result = migrationService.runFullMigration()
                     if (result.isSuccess) {
-                        println("DEBUG: Migration successful: ${result.getOrNull()}")
                         refreshData()
                         _uiState.value = _uiState.value.copy(isLoading = false)
                     } else {

@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 
 @HiltViewModel
@@ -136,36 +138,9 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         // Get student's year level number
                         val studentYearLevelNumber = currentUser.yearLevelId?.let { yearLevelIdToLevelMap[it] }
                         
-                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Student YearLevelId: ${currentUser.yearLevelId}, YearLevelNumber: $studentYearLevelNumber")
-                        
-                        // Load subjects filtered by student's course and year level
-                        val subjectsResult = subjectRepository.getAllSubjects()
-                        subjectsResult.onSuccess { subjectsList ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loaded ${subjectsList.size} total subjects")
-                            
-                            // Debug: Log ALL subjects before filtering
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - === ALL SUBJECTS BEFORE FILTERING ===")
-                            subjectsList.forEachIndexed { index, subject ->
-                                val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Subject[$index]: ${subject.name} (${subject.code}) - Type: ${subject.subjectType}, YearLevelId: ${subject.yearLevelId} (Level: $subjectLevel, ${subject.yearLevelName}), CourseId: ${subject.courseId}, Active: ${subject.active}")
-                            }
-                            
-                            // Debug: Log student's year level and course
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Student YearLevelId: ${currentUser.yearLevelId}, YearLevelName: ${currentUser.yearLevelName}, YearLevelNumber: $studentYearLevelNumber")
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Student CourseId: ${currentUser.courseId}, CourseCode: ${currentUser.courseCode}")
-                            
-                            // Debug: Count minor subjects in all subjects
-                            val allMinorSubjects = subjectsList.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Total minor subjects in database: ${allMinorSubjects.size}")
-                            allMinorSubjects.forEachIndexed { index, subject ->
-                                val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - All Minor[$index]: ${subject.name} (${subject.code}) - YearLevelId: ${subject.yearLevelId} (Level: $subjectLevel, ${subject.yearLevelName}), CourseId: ${subject.courseId}, Active: ${subject.active}")
-                            }
-                            
-                            // Filter subjects by student's course and year level
-                            // - Major subjects: must match both year level ID AND course
-                            // - Minor subjects: must match year level NUMBER (not ID) to allow cross-course matching
-                            val filteredSubjects = subjectsList.filter { subject ->
+                        // Helper function to filter subjects
+                        fun filterSubjectsList(subjects: List<Subject>): List<Subject> {
+                            return subjects.filter { subject ->
                                 val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
                                 val matchesYearLevelById = subject.yearLevelId == currentUser.yearLevelId
                                 val matchesYearLevelByNumber = studentYearLevelNumber != null && subjectLevel == studentYearLevelNumber
@@ -174,53 +149,66 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                                 
                                 // For major subjects: match by year level ID and course
                                 // For minor subjects: match by year level NUMBER (allows cross-course matching)
-                                val passesFilter = if (isMinor) {
+                                if (isMinor) {
                                     matchesYearLevelByNumber
                                 } else {
                                     matchesYearLevelById && matchesCourse
                                 }
-                                
-                                // Debug each subject's filter evaluation
-                                if (subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR) {
-                                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Minor Subject Filter Check: ${subject.name} (${subject.code})")
-                                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel -   - Subject Level: $subjectLevel, Student Level: $studentYearLevelNumber")
-                                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel -   - Matches YearLevel by Number: $matchesYearLevelByNumber")
-                                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel -   - Is Minor: $isMinor")
-                                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel -   - Passes Filter: $passesFilter")
+                            }
+                        }
+                        
+                        // Load subjects filtered by student's course and year level
+                        val subjectsResult = subjectRepository.getAllSubjects()
+                        subjectsResult.onSuccess { subjectsList ->
+                            // Filter subjects before displaying
+                            val filteredSubjects = filterSubjectsList(subjectsList)
+                            
+                            // Load section assignments to filter out subjects without teachers
+                            val studentCourseId = currentUser.courseId
+                            val allAssignments = mutableListOf<com.smartacademictracker.data.model.SectionAssignment>()
+                            
+                            // Load assignments for each filtered subject in parallel
+                            coroutineScope {
+                                val assignmentDeferreds = filteredSubjects.map { subject ->
+                                    async {
+                                        val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                                        val result = if (isMinor) {
+                                            sectionAssignmentRepository.getSectionAssignmentsBySubject(subject.id)
+                                        } else {
+                                            if (studentCourseId != null) {
+                                                sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subject.id, studentCourseId)
+                                            } else {
+                                                return@async emptyList()
+                                            }
+                                        }
+                                        result.getOrNull() ?: emptyList()
+                                    }
                                 }
                                 
-                                passesFilter
-                            }
-                        
-                            val majorCount = filteredSubjects.count { it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR }
-                            val minorCount = filteredSubjects.count { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Filtered to ${filteredSubjects.size} subjects for course: ${currentUser.courseId}, year level: ${currentUser.yearLevelId} (${majorCount} major, ${minorCount} minor)")
-                            
-                            // Debug: Log details of minor subjects
-                            val minorSubjects = filteredSubjects.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Minor subjects found: ${minorSubjects.size}")
-                            minorSubjects.forEachIndexed { index, subject ->
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Minor[$index]: ${subject.name} (${subject.code}) - YearLevel: ${subject.yearLevelId} (${subject.yearLevelName}), CourseId: ${subject.courseId}")
+                                // Wait for all assignments to load
+                                val assignmentResults = assignmentDeferreds.map { it.await() }
+                                allAssignments.addAll(assignmentResults.flatten())
                             }
                             
-                            // Debug: Log details of major subjects
-                            val majorSubjects = filteredSubjects.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR }
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Major subjects found: ${majorSubjects.size}")
-                            majorSubjects.forEachIndexed { index, subject ->
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Major[$index]: ${subject.name} (${subject.code}) - YearLevel: ${subject.yearLevelId} (${subject.yearLevelName}), CourseId: ${subject.courseId}")
+                            // Filter subjects to only include those with at least one active teacher assignment
+                            val subjectsWithTeachers = filteredSubjects.filter { subject ->
+                                allAssignments.any { assignment ->
+                                    assignment.subjectId == subject.id &&
+                                    assignment.teacherId.isNotEmpty() &&
+                                    assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                                }
                             }
-                            _subjects.value = filteredSubjects
                             
-                            // Load section assignments AFTER subjects are loaded
-                            // This ensures we can load assignments for each subject individually
-                            loadSectionAssignments()
+                            _subjects.value = subjectsWithTeachers
+                            
+                            // Store all assignments for later use
+                            _sectionAssignments.value = allAssignments
                             
                             // Update UI state with filtering info
                             _uiState.value = _uiState.value.copy(
-                                successMessage = "Showing subjects for your course and year level (${filteredSubjects.size} subjects available)"
+                                successMessage = "Showing subjects for your course and year level (${subjectsWithTeachers.size} subjects available)"
                             )
                         }.onFailure { exception ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load subjects: ${exception.message}")
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 error = "Failed to load subjects: ${exception.message}"
@@ -228,7 +216,6 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                             return@onSuccess
                         }
                     }.onFailure { exception ->
-                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load year levels: ${exception.message}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = "Failed to load year levels: ${exception.message}"
@@ -303,15 +290,12 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                     if (sectionName.isNotEmpty()) {
                         val sectionAssignmentsResult = if (isMinor) {
                             // For minor subjects: query by subjectId only
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Checking teacher assignment for minor subject ${subject.id} (${subject.name}), section: $sectionName")
                             sectionAssignmentRepository.getSectionAssignmentsBySubject(subjectId)
                         } else {
                             // For major subjects: query by both subjectId and courseId
                             if (studentCourseId != null) {
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Checking teacher assignment for major subject ${subject.id} (${subject.name}), section: $sectionName, courseId: $studentCourseId")
                                 sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subjectId, studentCourseId)
                             } else {
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - No courseId for student, cannot check major subject assignment")
                                 _uiState.value = _uiState.value.copy(
                                     applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                     error = "Student course information is missing"
@@ -322,19 +306,12 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         
                         var hasAssignedTeacher = false
                         sectionAssignmentsResult.onSuccess { assignments ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Found ${assignments.size} assignments for subject ${subject.id}, section: $sectionName")
-                            assignments.forEach { assignment ->
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel -   Assignment: Section=${assignment.sectionName}, Teacher=${assignment.teacherName} (${assignment.teacherId}), Status=${assignment.status}, CourseId=${assignment.courseId}")
-                            }
                             hasAssignedTeacher = assignments.any { assignment ->
                                 assignment.subjectId == subjectId &&
                                 assignment.sectionName == sectionName &&
                                 assignment.teacherId.isNotEmpty() &&
                                 assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
                             }
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Has assigned teacher for section $sectionName: $hasAssignedTeacher")
-                        }.onFailure { exception ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to check section assignments: ${exception.message}")
                         }
                         
                         // Only allow application if the specific section has an assigned teacher
@@ -350,15 +327,12 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         // A subject is considered to have a teacher if at least one section has an assigned teacher
                         val sectionAssignmentsResult = if (isMinor) {
                             // For minor subjects: query by subjectId only
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Checking if minor subject ${subject.id} (${subject.name}) has any assigned teachers")
                             sectionAssignmentRepository.getSectionAssignmentsBySubject(subjectId)
                         } else {
                             // For major subjects: query by both subjectId and courseId
                             if (studentCourseId != null) {
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Checking if major subject ${subject.id} (${subject.name}) has any assigned teachers, courseId: $studentCourseId")
                                 sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subjectId, studentCourseId)
                             } else {
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - No courseId for student, cannot check major subject assignment")
                                 _uiState.value = _uiState.value.copy(
                                     applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                     error = "Student course information is missing"
@@ -369,15 +343,11 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         
                         var hasAnyAssignedTeacher = false
                         sectionAssignmentsResult.onSuccess { assignments ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Found ${assignments.size} assignments for subject ${subject.id}")
                             hasAnyAssignedTeacher = assignments.any { assignment ->
                                 assignment.subjectId == subjectId &&
                                 assignment.teacherId.isNotEmpty() &&
                                 assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
                             }
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Subject has any assigned teacher: $hasAnyAssignedTeacher")
-                        }.onFailure { exception ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to check section assignments: ${exception.message}")
                         }
                         
                         if (!hasAnyAssignedTeacher) {
@@ -455,8 +425,8 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         return@onSuccess
                     }
                     
-                    // Check for APPROVED application - only block if student is enrolled
-                    // (We already checked enrollment above, so this is just for consistency)
+                    // Check for APPROVED application - only block if student is actively enrolled
+                    // If student was KICKED or DROPPED, allow reapplication even if there's an APPROVED application
                     val approvedApplication = if (sectionName.isNotEmpty()) {
                         _myApplications.value.find { 
                             it.subjectId == subjectId && 
@@ -470,7 +440,8 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         }
                     }
                     if (approvedApplication != null) {
-                        // Double-check enrollment (in case enrollment was created after application was approved)
+                        // Check if student has an ACTIVE enrollment
+                        // If not ACTIVE (e.g., KICKED, DROPPED), allow reapplication
                         val hasActiveEnrollment = if (sectionName.isNotEmpty()) {
                             val isEnrolledResult = studentEnrollmentRepository.isStudentEnrolled(
                                 currentUser.id,
@@ -479,10 +450,11 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                             )
                             isEnrolledResult.getOrNull() ?: false
                         } else {
-                            val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
-                            if (studentEnrollmentsResult.isSuccess) {
-                                val list = studentEnrollmentsResult.getOrNull().orEmpty()
-                                list.any { it.studentId == currentUser.id && it.status == EnrollmentStatus.ACTIVE }
+                            // Use getStudentEnrollmentsBySubject to check ALL enrollments (including KICKED/DROPPED)
+                            val enrollmentsResult = studentEnrollmentRepository.getStudentEnrollmentsBySubject(currentUser.id, subjectId)
+                            if (enrollmentsResult.isSuccess) {
+                                val enrollments = enrollmentsResult.getOrNull().orEmpty()
+                                enrollments.any { it.status == EnrollmentStatus.ACTIVE }
                             } else {
                                 false
                             }
@@ -498,7 +470,8 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                             )
                             return@onSuccess
                         }
-                        // else, let them apply again (approved but not enrolled)
+                        // If there's an APPROVED application but no ACTIVE enrollment,
+                        // the student was likely KICKED or DROPPED - allow reapplication
                     }
                     
                     // Allow reapplication if previous application was WITHDRAWN or REJECTED
@@ -556,18 +529,14 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
     fun loadMyApplications() {
         viewModelScope.launch {
             try {
-                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loading my applications...")
                 // Get current user to load their applications
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { currentUser ->
                     if (currentUser != null) {
-                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Current user: ${currentUser.id}")
                         val result = subjectApplicationRepository.getApplicationsByStudentId(currentUser.id)
                         result.onSuccess { applications ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loaded ${applications.size} applications")
                             _myApplications.value = applications
                         }.onFailure { exception ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load applications: ${exception.message}")
                             _uiState.value = _uiState.value.copy(
                                 error = "Failed to load applications: ${exception.message}"
                             )
@@ -594,12 +563,40 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
         loadData()
     }
 
+    fun cancelApplication(applicationId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                val result = subjectApplicationRepository.withdrawApplication(applicationId)
+                result.onSuccess {
+                    // Reload applications to update UI
+                    loadMyApplications()
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        successMessage = "Application cancelled successfully"
+                    )
+                }.onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = exception.message ?: "Failed to cancel application"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to cancel application"
+                )
+            }
+        }
+    }
+
     fun clearApplicationSuccess() {
         _uiState.value = _uiState.value.copy(isApplicationSuccess = false)
     }
 
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.value = _uiState.value.copy(error = null, successMessage = null)
     }
 
     private fun loadSectionAssignments() {
@@ -609,7 +606,6 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { currentUser ->
                     if (currentUser == null) {
-                        println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - No current user, skipping section assignments")
                         return@onSuccess
                     }
                     
@@ -626,39 +622,25 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
                         val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
                         val result = if (isMinor) {
                             // For minor subjects: query by subjectId only (they don't have courseId)
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loading assignments for minor subject ${subject.id} (${subject.name}) by subjectId only")
                             sectionAssignmentRepository.getSectionAssignmentsBySubject(subject.id)
                         } else {
                             // For major subjects: query by both subjectId and courseId
                             if (studentCourseId != null) {
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loading assignments for major subject ${subject.id} (${subject.name}) by subjectId and courseId: $studentCourseId")
                                 sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subject.id, studentCourseId)
                             } else {
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - No courseId for student, skipping major subject ${subject.id}")
                                 return@forEach
                             }
                         }
                         
                         result.onSuccess { assignments ->
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Found ${assignments.size} assignments for subject ${subject.id} (${subject.name})")
-                            assignments.forEach { assignment ->
-                                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel -   Assignment: Section ${assignment.sectionName}, Teacher: ${assignment.teacherName} (${assignment.teacherId}), Status: ${assignment.status}")
-                            }
                             allAssignments.addAll(assignments)
                             // Update the list after each successful load
                             _sectionAssignments.value = allAssignments.toList()
-                        }.onFailure { exception ->
-                            // Log but don't fail completely - some subjects might not have assignments
-                            println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to load section assignments for subject ${subject.id}: ${exception.message}")
                         }
                     }
-                    
-                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Loaded ${allAssignments.size} total section assignments for ${subjects.size} subjects")
-                }.onFailure { exception ->
-                    println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Failed to get current user: ${exception.message}")
                 }
             } catch (e: Exception) {
-                println("DEBUG: HierarchicalStudentSubjectApplicationViewModel - Error loading section assignments: ${e.message}")
+                // Silent failure
             }
         }
     }
@@ -672,22 +654,59 @@ class HierarchicalStudentSubjectApplicationViewModel @Inject constructor(
      */
     private suspend fun notifyTeacherOfStudentApplication(application: SubjectApplication) {
         try {
-            // Get subject to find the teacher
+            // Get subject to check if it's minor or major
             val subjectResult = subjectRepository.getSubjectById(application.subjectId)
             subjectResult.onSuccess { subject ->
-                val teacherId = subject.teacherId
-                if (teacherId != null && teacherId.isNotEmpty()) {
-                    notificationSenderService.sendNotification(
-                        userId = teacherId,
-                        type = com.smartacademictracker.data.model.NotificationType.STUDENT_APPLICATION_SUBMITTED,
-                        variables = mapOf(
-                            "studentName" to application.studentName,
-                            "subjectName" to application.subjectName,
-                            "sectionName" to application.sectionName,
-                            "applicationId" to application.id
-                        ),
-                        priority = com.smartacademictracker.data.model.NotificationPriority.NORMAL
-                    )
+                if (subject == null) {
+                    return@onSuccess
+                }
+                
+                // Get teacher ID from section assignments (not from subject.teacherId)
+                val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                val sectionAssignmentsResult = if (isMinor) {
+                    sectionAssignmentRepository.getSectionAssignmentsBySubject(application.subjectId)
+                } else {
+                    if (application.courseId.isNotEmpty()) {
+                        sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(application.subjectId, application.courseId)
+                    } else {
+                        return@onSuccess
+                    }
+                }
+                
+                sectionAssignmentsResult.onSuccess { assignments ->
+                    // Find the teacher assigned to the section the student applied for
+                    val matchingAssignment = if (application.sectionName.isNotEmpty()) {
+                        assignments.find { assignment ->
+                            assignment.subjectId == application.subjectId &&
+                            (assignment.sectionName == application.sectionName ||
+                             assignment.sectionName.endsWith(application.sectionName) ||
+                             application.sectionName.endsWith(assignment.sectionName.takeLast(1))) &&
+                            assignment.teacherId.isNotEmpty() &&
+                            assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                        }
+                    } else {
+                        // If no section specified, get the first active assignment with a teacher
+                        assignments.firstOrNull { assignment ->
+                            assignment.subjectId == application.subjectId &&
+                            assignment.teacherId.isNotEmpty() &&
+                            assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                        }
+                    }
+                    
+                    val teacherId = matchingAssignment?.teacherId
+                    if (teacherId != null && teacherId.isNotEmpty()) {
+                        notificationSenderService.sendNotification(
+                            userId = teacherId,
+                            type = com.smartacademictracker.data.model.NotificationType.STUDENT_APPLICATION_SUBMITTED,
+                            variables = mapOf(
+                                "studentName" to application.studentName,
+                                "subjectName" to application.subjectName,
+                                "sectionName" to application.sectionName,
+                                "applicationId" to application.id
+                            ),
+                            priority = com.smartacademictracker.data.model.NotificationPriority.NORMAL
+                        )
+                    }
                 }
             }
         } catch (e: Exception) {

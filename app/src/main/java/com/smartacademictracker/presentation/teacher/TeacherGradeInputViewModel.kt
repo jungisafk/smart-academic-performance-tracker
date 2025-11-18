@@ -14,6 +14,8 @@ import com.smartacademictracker.data.repository.GradeRepository
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.utils.GradeCalculationEngine
+import com.smartacademictracker.data.utils.GradeCsvParser
+import com.smartacademictracker.data.utils.GradeRow
 import com.smartacademictracker.data.notification.GradeCompletionNotificationService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import java.io.InputStream
 import javax.inject.Inject
 
 @HiltViewModel
@@ -33,7 +36,8 @@ class TeacherGradeInputViewModel @Inject constructor(
     private val gradeRepository: GradeRepository,
     private val userRepository: UserRepository,
     private val sectionAssignmentRepository: SectionAssignmentRepository,
-    private val gradeCompletionNotificationService: GradeCompletionNotificationService
+    private val gradeCompletionNotificationService: GradeCompletionNotificationService,
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherGradeInputUiState())
@@ -71,52 +75,92 @@ class TeacherGradeInputViewModel @Inject constructor(
                 // Load enrollments for this subject (new section-based enrollments)
                 val currentUser = userRepository.getCurrentUser().getOrNull()
                 val teacherId = currentUser?.id ?: ""
-                println("DEBUG: TeacherGradeInputViewModel - Loading students for subject: $subjectId, teacher: $teacherId")
                 
                 val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
                 studentEnrollmentsResult.onSuccess { seList ->
-                    println("DEBUG: TeacherGradeInputViewModel - Found ${seList.size} student enrollments for subject $subjectId")
-                    // Determine teacher's section for this subject
-                    var teacherSection: String? = null
+                    // Get ALL sections the teacher is assigned to for this subject
                     if (teacherId.isNotEmpty()) {
                         sectionAssignmentRepository.getSectionAssignmentsByTeacher(teacherId).onSuccess { assignments ->
-                            teacherSection = assignments.firstOrNull { it.subjectId == subjectId }?.sectionName
+                            // Get all section names for this subject
+                            val teacherAssignedSections = assignments
+                                .filter { it.subjectId == subjectId && it.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE }
+                                .map { it.sectionName }
+                                .toSet()
+                            
+                            // Filter students: show those in teacher's assigned sections OR those with matching teacherId
+                            // This ensures students enrolled without teacherId still show up if they're in the teacher's section
+                            val filtered = when {
+                                teacherAssignedSections.isNotEmpty() -> {
+                                    // Show students in any of the teacher's assigned sections, regardless of teacherId
+                                    seList.filter { 
+                                        it.sectionName in teacherAssignedSections || 
+                                        (teacherId.isNotEmpty() && it.teacherId == teacherId)
+                                    }
+                                }
+                                teacherId.isNotEmpty() -> seList.filter { it.teacherId == teacherId }
+                                else -> seList
+                            }
+                            
+                            val mapped = filtered.map { se ->
+                                Enrollment(
+                                    id = se.id,
+                                    studentId = se.studentId,
+                                    studentName = se.studentName,
+                                    subjectId = se.subjectId,
+                                    subjectName = se.subjectName,
+                                    subjectCode = se.subjectCode,
+                                    enrolledAt = se.enrollmentDate,
+                                    semester = se.semester.name,
+                                    academicYear = se.academicYear,
+                                    active = se.status.name == "ACTIVE"
+                                )
+                            }
+                            _enrollments.value = mapped
+                        }.onFailure {
+                            // If we can't get section assignments, fall back to filtering by teacherId
+                            val filtered = if (teacherId.isNotEmpty()) {
+                                seList.filter { it.teacherId == teacherId }
+                            } else {
+                                seList
+                            }
+                            val mapped = filtered.map { se ->
+                                Enrollment(
+                                    id = se.id,
+                                    studentId = se.studentId,
+                                    studentName = se.studentName,
+                                    subjectId = se.subjectId,
+                                    subjectName = se.subjectName,
+                                    subjectCode = se.subjectCode,
+                                    enrolledAt = se.enrollmentDate,
+                                    semester = se.semester.name,
+                                    academicYear = se.academicYear,
+                                    active = se.status.name == "ACTIVE"
+                                )
+                            }
+                            _enrollments.value = mapped
                         }
+                    } else {
+                        // No teacher ID, show all students
+                        val mapped = seList.map { se ->
+                            Enrollment(
+                                id = se.id,
+                                studentId = se.studentId,
+                                studentName = se.studentName,
+                                subjectId = se.subjectId,
+                                subjectName = se.subjectName,
+                                subjectCode = se.subjectCode,
+                                enrolledAt = se.enrollmentDate,
+                                semester = se.semester.name,
+                                academicYear = se.academicYear,
+                                active = se.status.name == "ACTIVE"
+                            )
+                        }
+                        _enrollments.value = mapped
                     }
-                    seList.forEach { se ->
-                        println("DEBUG: StudentEnrollment - Student: ${se.studentName}, TeacherId: ${se.teacherId}, Section: ${se.sectionName}, Status: ${se.status}")
-                    }
-                    
-                    // Filter by teacher's section if available; otherwise by teacherId; else use all
-                    val filtered = when {
-                        teacherSection != null -> seList.filter { it.sectionName == teacherSection }
-                        teacherId.isNotEmpty() -> seList.filter { it.teacherId == teacherId }
-                        else -> seList
-                    }
-                    println("DEBUG: TeacherGradeInputViewModel - After filtering (section=$teacherSection teacher=$teacherId): ${filtered.size} students")
-                    
-                    val mapped = filtered.map { se ->
-                        Enrollment(
-                            id = se.id,
-                            studentId = se.studentId,
-                            studentName = se.studentName,
-                            subjectId = se.subjectId,
-                            subjectName = se.subjectName,
-                            subjectCode = se.subjectCode,
-                            enrolledAt = se.enrollmentDate,
-                            semester = se.semester.name,
-                            academicYear = se.academicYear,
-                            active = se.status.name == "ACTIVE"
-                        )
-                    }
-                    println("DEBUG: TeacherGradeInputViewModel - Final mapped enrollments: ${mapped.size}")
-                    _enrollments.value = mapped
                 }.onFailure { error ->
-                    println("DEBUG: TeacherGradeInputViewModel - Error loading student enrollments: ${error.message}")
                     // Fallback to legacy enrollments if needed
                     val enrollmentsResult = enrollmentRepository.getEnrollmentsBySubject(subjectId)
                     enrollmentsResult.onSuccess { enrollmentsList ->
-                        println("DEBUG: TeacherGradeInputViewModel - Fallback to legacy enrollments: ${enrollmentsList.size}")
                         _enrollments.value = enrollmentsList
                     }
                 }
@@ -134,11 +178,8 @@ class TeacherGradeInputViewModel @Inject constructor(
                 currentSubjectId = subjectId
                 gradeListenerJob = viewModelScope.launch {
                     gradeRepository.getGradesBySubjectFlow(subjectId)
-                        .catch { exception ->
-                            println("DEBUG: TeacherGradeInputViewModel - Error in real-time grade listener: ${exception.message}")
-                        }
+                        .catch { }
                         .collect { grades ->
-                            println("DEBUG: TeacherGradeInputViewModel - Real-time grade update: ${grades.size} grades for subject $subjectId")
                             // Only update if this is still the current subject
                             if (currentSubjectId == subjectId) {
                                 _grades.value = grades
@@ -223,12 +264,14 @@ class TeacherGradeInputViewModel @Inject constructor(
                         )
                     } else {
                         // Create new grade
+                        // Set teacherId to current user's ID (teacher creating the grade)
+                        // This ensures the grade is associated with the correct teacher
                         Grade(
                             studentId = studentId,
                             studentName = studentName,
                             subjectId = subject.id,
                             subjectName = subject.name,
-                            teacherId = subject.teacherId ?: "",
+                            teacherId = userId, // Use current teacher's ID, not subject.teacherId
                             gradePeriod = gradePeriod,
                             score = value,
                             maxScore = 100.0,
@@ -252,7 +295,6 @@ class TeacherGradeInputViewModel @Inject constructor(
                         val refreshedGradesResult = gradeRepository.getGradesBySubject(subject.id)
                         refreshedGradesResult.onSuccess { refreshedGrades ->
                             _grades.value = refreshedGrades
-                            println("DEBUG: TeacherGradeInputViewModel - Reloaded ${refreshedGrades.size} grades after save")
                         }.onFailure {
                             // Fallback: manually update the grade in the list
                             if (existingGrade != null) {
@@ -285,11 +327,15 @@ class TeacherGradeInputViewModel @Inject constructor(
                         updateStudentGradeAggregate(studentId, studentName, subject)
 
                         // Check if all grades are completed for this subject and period
+                        // Get teacher name for notification
+                        val currentUser = userRepository.getCurrentUser().getOrNull()
+                        val teacherName = currentUser?.let { "${it.firstName} ${it.lastName}" } ?: ""
+                        
                         gradeCompletionNotificationService.checkAndNotifyGradeCompletion(
                             subjectId = subject.id,
                             subjectName = subject.name,
-                            teacherId = subject.teacherId ?: "",
-                            teacherName = "", // Should get from user repository
+                            teacherId = userId, // Use current teacher's ID
+                            teacherName = teacherName,
                             gradePeriod = gradePeriod
                         )
 
@@ -320,12 +366,16 @@ class TeacherGradeInputViewModel @Inject constructor(
     
     private suspend fun updateStudentGradeAggregate(studentId: String, studentName: String, subject: Subject) {
         try {
+            // Get current user ID for aggregate
+            val currentUser = userRepository.getCurrentUser().getOrNull()
+            val currentUserId = currentUser?.id ?: ""
+            
             val aggregateResult = gradeRepository.createOrUpdateStudentGradeAggregate(
                 studentId = studentId,
                 subjectId = subject.id,
                 studentName = studentName,
                 subjectName = subject.name,
-                teacherId = subject.teacherId ?: "",
+                teacherId = currentUserId, // Use current teacher's ID
                 semester = "Fall 2025", // TODO: Get from current academic period
                 academicYear = "2025-2026" // TODO: Get from current academic period
             )
@@ -345,7 +395,6 @@ class TeacherGradeInputViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             // Log error but don't fail the main operation
-            println("Failed to update grade aggregate: ${e.message}")
         }
     }
     
@@ -368,9 +417,355 @@ class TeacherGradeInputViewModel @Inject constructor(
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
+    
+    fun setError(error: String?) {
+        _uiState.value = _uiState.value.copy(error = error)
+    }
 
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+    
+    /**
+     * Parse CSV file for grade import
+     */
+    fun parseGradeCsv(inputStream: InputStream, fileName: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                val parseResult = if (fileName.endsWith(".csv", ignoreCase = true)) {
+                    GradeCsvParser.parseGradeCsv(inputStream)
+                } else {
+                    Result.failure(Exception("Unsupported file format. Please use CSV (.csv) files."))
+                }
+                
+                parseResult.onSuccess { gradeRows ->
+                    // Validate that all students in CSV match exactly with teacher's student list
+                    val csvStudentNames = gradeRows.map { it.studentName.trim().lowercase() }.toSet()
+                    val enrolledStudentNames = _enrollments.value.map { 
+                        it.studentName.trim().lowercase() 
+                    }.toSet()
+                    
+                    // Check if CSV has all enrolled students
+                    val missingInCsv = enrolledStudentNames.filter { it !in csvStudentNames }
+                    val extraInCsv = csvStudentNames.filter { it !in enrolledStudentNames }
+                    
+                    val validationErrors = mutableListOf<String>()
+                    if (missingInCsv.isNotEmpty()) {
+                        validationErrors.add("Missing students in CSV: ${missingInCsv.joinToString(", ")}")
+                    }
+                    if (extraInCsv.isNotEmpty()) {
+                        validationErrors.add("Extra students in CSV (not enrolled): ${extraInCsv.joinToString(", ")}")
+                    }
+                    
+                    if (validationErrors.isNotEmpty()) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "CSV validation failed:\n${validationErrors.joinToString("\n")}\n\n" +
+                                    "The CSV file must contain exactly the same students as your enrolled student list."
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            parsedGradeRows = gradeRows
+                        )
+                    }
+                }.onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = exception.message ?: "Failed to parse CSV file. Please check the file format."
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Error reading file: ${e.message ?: "Unknown error"}"
+                )
+            } finally {
+                try {
+                    inputStream.close()
+                } catch (e: Exception) {
+                    // Ignore close errors
+                }
+            }
+        }
+    }
+    
+    /**
+     * Import grades from parsed CSV data
+     */
+    fun importGradesFromCsv() {
+        viewModelScope.launch {
+            val parsedRows = _uiState.value.parsedGradeRows
+            if (parsedRows.isEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    error = "No grades to import. Please parse a CSV file first."
+                )
+                return@launch
+            }
+            
+            val subject = _subject.value
+            if (subject == null) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Subject not loaded. Please try again."
+                )
+                return@launch
+            }
+            
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                val currentUser = userRepository.getCurrentUser().getOrNull()
+                val userId = currentUser?.id ?: ""
+                val userRole = currentUser?.role ?: "TEACHER"
+                
+                var successCount = 0
+                var failureCount = 0
+                val errors = mutableListOf<String>()
+                
+                // Track submitted periods per student for notification purposes
+                val studentSubmittedPeriods = mutableMapOf<String, MutableSet<GradePeriod>>()
+                
+                // Create a map of student names to enrollments (case-insensitive)
+                val enrollmentMap = _enrollments.value.associateBy { 
+                    it.studentName.trim().lowercase() 
+                }
+                
+                for (gradeRow in parsedRows) {
+                    try {
+                        val enrollment = enrollmentMap[gradeRow.studentName.trim().lowercase()]
+                        if (enrollment == null) {
+                            failureCount++
+                            errors.add("Student not found: ${gradeRow.studentName}")
+                            continue
+                        }
+                        
+                        val studentId = enrollment.studentId
+                        val studentName = enrollment.studentName
+                        
+                        // Import Prelim grade
+                        gradeRow.prelim?.let { prelim ->
+                            if (GradeCalculationEngine.isValidGrade(prelim)) {
+                                val existingGradeResult = gradeRepository.getGradesByStudentSubjectAndPeriod(
+                                    studentId, subject.id, GradePeriod.PRELIM
+                                )
+                                val existingGrade = existingGradeResult.getOrNull()
+                                
+                                // Check if grade is locked
+                                if (existingGrade != null && existingGrade.id.isNotEmpty() && 
+                                    userRole != "ADMIN" && existingGrade.unlockedBy == null) {
+                                    errors.add("$studentName - Prelim grade is locked")
+                                    failureCount++
+                                } else {
+                                    val grade = existingGrade?.copy(
+                                        score = prelim,
+                                        percentage = prelim,
+                                        letterGrade = GradeCalculationEngine.calculateLetterGrade(prelim),
+                                        dateRecorded = System.currentTimeMillis()
+                                    ) ?: Grade(
+                                        studentId = studentId,
+                                        studentName = studentName,
+                                        subjectId = subject.id,
+                                        subjectName = subject.name,
+                                        teacherId = userId, // Use current teacher's ID
+                                        gradePeriod = GradePeriod.PRELIM,
+                                        score = prelim,
+                                        maxScore = 100.0,
+                                        percentage = prelim,
+                                        letterGrade = GradeCalculationEngine.calculateLetterGrade(prelim),
+                                        semester = "Fall 2025",
+                                        academicYear = "2025-2026"
+                                    )
+                                    
+                                    val result = if (existingGrade != null) {
+                                        gradeRepository.updateGrade(grade, userId, userRole, skipNotification = true)
+                                    } else {
+                                        gradeRepository.createGrade(grade, userId, userRole, skipNotification = true)
+                                    }
+                                    
+                                    result.onSuccess { 
+                                        successCount++
+                                        // Track that Prelim was submitted for this student
+                                        studentSubmittedPeriods.getOrPut(studentId) { mutableSetOf() }.add(GradePeriod.PRELIM)
+                                    }
+                                        .onFailure { 
+                                            failureCount++
+                                            errors.add("$studentName - Prelim: ${it.message}")
+                                        }
+                                }
+                            } else {
+                                errors.add("$studentName - Invalid Prelim grade: $prelim")
+                                failureCount++
+                            }
+                        }
+                        
+                        // Import Midterm grade
+                        gradeRow.midterm?.let { midterm ->
+                            if (GradeCalculationEngine.isValidGrade(midterm)) {
+                                val existingGradeResult = gradeRepository.getGradesByStudentSubjectAndPeriod(
+                                    studentId, subject.id, GradePeriod.MIDTERM
+                                )
+                                val existingGrade = existingGradeResult.getOrNull()
+                                
+                                if (existingGrade != null && existingGrade.id.isNotEmpty() && 
+                                    userRole != "ADMIN" && existingGrade.unlockedBy == null) {
+                                    errors.add("$studentName - Midterm grade is locked")
+                                    failureCount++
+                                } else {
+                                    val grade = existingGrade?.copy(
+                                        score = midterm,
+                                        percentage = midterm,
+                                        letterGrade = GradeCalculationEngine.calculateLetterGrade(midterm),
+                                        dateRecorded = System.currentTimeMillis()
+                                    ) ?: Grade(
+                                        studentId = studentId,
+                                        studentName = studentName,
+                                        subjectId = subject.id,
+                                        subjectName = subject.name,
+                                        teacherId = userId, // Use current teacher's ID
+                                        gradePeriod = GradePeriod.MIDTERM,
+                                        score = midterm,
+                                        maxScore = 100.0,
+                                        percentage = midterm,
+                                        letterGrade = GradeCalculationEngine.calculateLetterGrade(midterm),
+                                        semester = "Fall 2025",
+                                        academicYear = "2025-2026"
+                                    )
+                                    
+                                    val result = if (existingGrade != null) {
+                                        gradeRepository.updateGrade(grade, userId, userRole, skipNotification = true)
+                                    } else {
+                                        gradeRepository.createGrade(grade, userId, userRole, skipNotification = true)
+                                    }
+                                    
+                                    result.onSuccess { 
+                                        successCount++
+                                        // Track that Midterm was submitted for this student
+                                        studentSubmittedPeriods.getOrPut(studentId) { mutableSetOf() }.add(GradePeriod.MIDTERM)
+                                    }
+                                        .onFailure { 
+                                            failureCount++
+                                            errors.add("$studentName - Midterm: ${it.message}")
+                                        }
+                                }
+                            } else {
+                                errors.add("$studentName - Invalid Midterm grade: $midterm")
+                                failureCount++
+                            }
+                        }
+                        
+                        // Import Final grade
+                        gradeRow.final?.let { final ->
+                            if (GradeCalculationEngine.isValidGrade(final)) {
+                                val existingGradeResult = gradeRepository.getGradesByStudentSubjectAndPeriod(
+                                    studentId, subject.id, GradePeriod.FINAL
+                                )
+                                val existingGrade = existingGradeResult.getOrNull()
+                                
+                                if (existingGrade != null && existingGrade.id.isNotEmpty() && 
+                                    userRole != "ADMIN" && existingGrade.unlockedBy == null) {
+                                    errors.add("$studentName - Final grade is locked")
+                                    failureCount++
+                                } else {
+                                    val grade = existingGrade?.copy(
+                                        score = final,
+                                        percentage = final,
+                                        letterGrade = GradeCalculationEngine.calculateLetterGrade(final),
+                                        dateRecorded = System.currentTimeMillis()
+                                    ) ?: Grade(
+                                        studentId = studentId,
+                                        studentName = studentName,
+                                        subjectId = subject.id,
+                                        subjectName = subject.name,
+                                        teacherId = userId, // Use current teacher's ID
+                                        gradePeriod = GradePeriod.FINAL,
+                                        score = final,
+                                        maxScore = 100.0,
+                                        percentage = final,
+                                        letterGrade = GradeCalculationEngine.calculateLetterGrade(final),
+                                        semester = "Fall 2025",
+                                        academicYear = "2025-2026"
+                                    )
+                                    
+                                    val result = if (existingGrade != null) {
+                                        gradeRepository.updateGrade(grade, userId, userRole, skipNotification = true)
+                                    } else {
+                                        gradeRepository.createGrade(grade, userId, userRole, skipNotification = true)
+                                    }
+                                    
+                                    result.onSuccess { 
+                                        successCount++
+                                        // Track that Final was submitted for this student
+                                        studentSubmittedPeriods.getOrPut(studentId) { mutableSetOf() }.add(GradePeriod.FINAL)
+                                    }
+                                        .onFailure { 
+                                            failureCount++
+                                            errors.add("$studentName - Final: ${it.message}")
+                                        }
+                                }
+                            } else {
+                                errors.add("$studentName - Invalid Final grade: $final")
+                                failureCount++
+                            }
+                        }
+                    } catch (e: Exception) {
+                        failureCount++
+                        errors.add("${gradeRow.studentName}: ${e.message}")
+                    }
+                }
+                
+                // Send notifications for each student based on submitted periods
+                // Note: Individual grade notifications are disabled in GradeRepository for CSV imports
+                // We send a single consolidated notification per student here
+                studentSubmittedPeriods.forEach { (studentId, periods) ->
+                    if (periods.isNotEmpty()) {
+                        notificationSenderService.sendMultipleGradeUpdateNotification(
+                            userId = studentId,
+                            subjectName = subject.name,
+                            submittedPeriods = periods.toList()
+                        )
+                    }
+                }
+                
+                // Reload grades after import
+                val refreshedGradesResult = gradeRepository.getGradesBySubject(subject.id)
+                refreshedGradesResult.onSuccess { refreshedGrades ->
+                    _grades.value = refreshedGrades
+                    
+                    // Update grade aggregates for all students who had grades imported
+                    // This recalculates the final average based on prelim, midterm, and final grades
+                    studentSubmittedPeriods.keys.forEach { studentId ->
+                        val enrollment = enrollmentMap.values.find { it.studentId == studentId }
+                        if (enrollment != null) {
+                            updateStudentGradeAggregate(
+                                studentId = studentId,
+                                studentName = enrollment.studentName,
+                                subject = subject
+                            )
+                        }
+                    }
+                }
+                
+                val message = if (failureCount == 0) {
+                    "Successfully imported grades for ${successCount} student(s)!"
+                } else {
+                    "Imported ${successCount} grade(s). ${failureCount} failed.\n" +
+                    if (errors.size <= 5) errors.joinToString("\n") else errors.take(5).joinToString("\n") + "\n... and ${errors.size - 5} more"
+                }
+                
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    successMessage = message,
+                    parsedGradeRows = emptyList() // Clear parsed rows after import
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Error during import: ${e.message}"
+                )
+            }
+        }
     }
     
     /**
@@ -396,7 +791,6 @@ class TeacherGradeInputViewModel @Inject constructor(
                             if (it.id == updatedGrade.id) updatedGrade else it 
                         }
                         _grades.value = updatedGrades
-                        println("DEBUG: TeacherGradeInputViewModel - Updated grade ${updatedGrade.id} with editRequested=${updatedGrade.editRequested}")
                     }
                     // Also reload all data to ensure consistency
                     loadSubjectAndStudents(it) 
@@ -415,5 +809,6 @@ data class TeacherGradeInputUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
-    val savingGrades: Set<String> = emptySet() // Track which student grades are being saved
+    val savingGrades: Set<String> = emptySet(), // Track which student grades are being saved
+    val parsedGradeRows: List<GradeRow> = emptyList() // Parsed CSV grade rows
 )

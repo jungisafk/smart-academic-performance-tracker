@@ -62,20 +62,14 @@ fun StudentDashboardScreen(
     val unreadCount by notificationViewModel.unreadCount.collectAsState()
 
     // Load dashboard data when screen is composed
-    LaunchedEffect(Unit) {
+    LaunchedEffect(dashboardViewModel) {
         dashboardViewModel.loadDashboardData()
+    }
+    
+    LaunchedEffect(notificationViewModel) {
         notificationViewModel.loadNotifications()
     }
     
-    // Debug: Log overview data changes
-    LaunchedEffect(dashboardState.enrolledSubjects, dashboardState.averageGrade) {
-        android.util.Log.d("StudentDashboard", "=== Overview Data Changed ===")
-        android.util.Log.d("StudentDashboard", "Enrolled Subjects: ${dashboardState.enrolledSubjects}")
-        android.util.Log.d("StudentDashboard", "Average Grade: ${dashboardState.averageGrade}")
-        android.util.Log.d("StudentDashboard", "Recent Grades Count: ${dashboardState.recentGrades.size}")
-        android.util.Log.d("StudentDashboard", "Is Loading: ${dashboardState.isLoading}")
-        android.util.Log.d("StudentDashboard", "Error: ${dashboardState.error}")
-    }
     
     Column(
         modifier = Modifier
@@ -217,12 +211,16 @@ fun StudentDashboardScreen(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Text(
                                 text = "Enrolled Subjects",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF666666)
+                                color = Color(0xFF666666),
+                                maxLines = 2
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = if (dashboardState.isLoading) "Loading..." else dashboardState.enrolledSubjects.toString(),
                                 style = MaterialTheme.typography.headlineSmall,
@@ -233,7 +231,7 @@ fun StudentDashboardScreen(
                     }
                 }
                 
-                // Average Grade Card
+                // Total Subject Passed Card
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
@@ -246,24 +244,26 @@ fun StudentDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Star,
+                            imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
                             tint = Color(0xFFFFC107),
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Text(
-                                text = "Average Grade",
+                                text = "Total Subject Passed",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF666666)
+                                color = Color(0xFF666666),
+                                maxLines = 2
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = when {
                                     dashboardState.isLoading -> "Loading..."
-                                    dashboardState.recentGrades.isEmpty() -> "N/A"
-                                    dashboardState.averageGrade == 0.0 -> "N/A"
-                                    else -> GradeCalculationEngine.calculateLetterGrade(dashboardState.averageGrade)
+                                    else -> dashboardState.totalSubjectsPassed.toString()
                                 },
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,

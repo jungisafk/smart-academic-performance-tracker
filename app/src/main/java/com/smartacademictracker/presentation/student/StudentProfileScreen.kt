@@ -1,6 +1,7 @@
 package com.smartacademictracker.presentation.student
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +16,9 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +35,8 @@ import com.smartacademictracker.data.model.User
 fun StudentProfileScreen(
     onNavigateBack: () -> Unit,
     onSignOut: () -> Unit,
+    onNavigateToChangePassword: () -> Unit = {},
+    showBackButton: Boolean = true,
     viewModel: StudentProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -57,12 +63,15 @@ fun StudentProfileScreen(
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        Icons.Default.ArrowBack, 
-                        contentDescription = "Back",
-                        tint = Color(0xFF666666)
-                    )
+                // Only show back button if showBackButton is true
+                if (showBackButton) {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.Default.ArrowBack, 
+                            contentDescription = "Back",
+                            tint = Color(0xFF666666)
+                        )
+                    }
                 }
                 Text(
                     text = "Profile",
@@ -97,7 +106,8 @@ fun StudentProfileScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 80.dp), // Add bottom padding for bottom nav
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     // Profile Header Card
@@ -228,6 +238,24 @@ fun StudentProfileScreen(
                                 )
                             }
                             
+                            // Course Information
+                            val user = currentUser
+                            val courseCode = user?.courseCode
+                            val courseInfo = courseCode ?: "Not available"
+                            EnhancedProfileInfoRow(
+                                icon = Icons.Default.School,
+                                label = "Course",
+                                value = courseInfo
+                            )
+                            
+                            // Year Level Information
+                            val yearLevelInfo = user?.yearLevelName ?: "Not available"
+                            EnhancedProfileInfoRow(
+                                icon = Icons.Default.Badge,
+                                label = "Year Level",
+                                value = yearLevelInfo
+                            )
+                            
                             EnhancedProfileInfoRow(
                                 icon = Icons.Default.School,
                                 label = "Enrolled Subjects",
@@ -244,6 +272,66 @@ fun StudentProfileScreen(
                             )
                         }
                     }
+
+                    // Actions Section
+                    Text(
+                        text = "Actions",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+
+                    // Change Password Action Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToChangePassword() },
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = Color(0xFF2196F3)
+                            )
+                            
+                            Spacer(modifier = Modifier.width(16.dp))
+                            
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "Change Password",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF333333)
+                                )
+                                Text(
+                                    text = "Update your account password",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF666666)
+                                )
+                            }
+                            
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = Color(0xFF999999)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Sign Out Button
                     Card(

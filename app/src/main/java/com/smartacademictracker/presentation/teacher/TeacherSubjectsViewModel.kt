@@ -1,6 +1,5 @@
 package com.smartacademictracker.presentation.teacher
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.Subject
@@ -12,10 +11,13 @@ import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.EnrollmentRepository
 import com.smartacademictracker.data.repository.SectionAssignmentRepository
 import com.smartacademictracker.data.repository.StudentEnrollmentRepository
+import com.smartacademictracker.data.manager.TeacherDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -27,7 +29,8 @@ class TeacherSubjectsViewModel @Inject constructor(
     private val enrollmentRepository: EnrollmentRepository,
     private val sectionAssignmentRepository: SectionAssignmentRepository,
     private val studentEnrollmentRepository: StudentEnrollmentRepository,
-    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService,
+    private val teacherDataCache: TeacherDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherSubjectsUiState())
@@ -47,43 +50,131 @@ class TeacherSubjectsViewModel @Inject constructor(
 
     private val _approvedApplications = MutableStateFlow<List<TeacherApplication>>(emptyList())
     val approvedApplications: StateFlow<List<TeacherApplication>> = _approvedApplications.asStateFlow()
+    
+    private var subjectsFlowJob: Job? = null
+    private var currentTeacherId: String? = null
 
-    fun loadSubjects() {
+    init {
+        // Preload data immediately when ViewModel is created
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            val cachedSubjects = teacherDataCache.cachedSubjects.value
+            if (cachedSubjects.isNotEmpty() && teacherDataCache.isCacheValid()) {
+                val currentUserResult = userRepository.getCurrentUser()
+                currentUserResult.onSuccess { user ->
+                    if (user != null) {
+                        // Process cached data through filtering functions
+                        filterAvailableSubjects(user.id, user.departmentCourseId, cachedSubjects)
+                        loadMySubjects(user.id, cachedSubjects)
+                        loadAppliedSubjects(user.id)
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    }
+                }
+            } else {
+                // If no cache, start loading immediately
+                loadSubjects(forceRefresh = false)
+            }
+        }
+    }
+
+    fun loadSubjects(forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            val cachedSubjects = teacherDataCache.cachedSubjects.value
+            val hasValidCache = !forceRefresh && cachedSubjects.isNotEmpty() && teacherDataCache.isCacheValid()
+            
+            // Show loading only if we don't have cached data
+            if (!hasValidCache) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             
             try {
                 // Get current user
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        Log.d("TeacherSubjects", "Loading subjects for teacher: ${user.id}")
+                        // If we have cached subjects, process them immediately while loading fresh data
+                        if (hasValidCache) {
+                            // Process cached data through filtering functions immediately
+                            filterAvailableSubjects(user.id, user.departmentCourseId, cachedSubjects)
+                            loadMySubjects(user.id, cachedSubjects)
+                            loadAppliedSubjects(user.id)
+                            _uiState.value = _uiState.value.copy(isLoading = false)
+                        }
                         
-                        // Load ALL subjects first (like admin side does)
+                        // Cancel any existing flow job
+                        if (currentTeacherId != user.id) {
+                            subjectsFlowJob?.cancel()
+                            currentTeacherId = user.id
+                        }
+                        
+                        // Set up real-time listener for teacher's subjects
+                        if (subjectsFlowJob == null || !subjectsFlowJob!!.isActive) {
+                            android.util.Log.d("TeacherSubjectsViewModel", "Setting up real-time listener for teacher subjects - teacherId: ${user.id}")
+                            subjectsFlowJob = viewModelScope.launch {
+                                subjectRepository.getSubjectsByTeacherFlow(user.id)
+                                    .catch { exception ->
+                                        android.util.Log.e("TeacherSubjectsViewModel", "Flow error in getSubjectsByTeacherFlow: ${exception.message}", exception)
+                                        // Fallback to one-time query on error
+                                        val allSubjectsResult = subjectRepository.getAllSubjects()
+                                        allSubjectsResult.onSuccess { allSubjects ->
+                                            android.util.Log.d("TeacherSubjectsViewModel", "Fallback: Loaded ${allSubjects.size} subjects")
+                                            teacherDataCache.updateSubjects(allSubjects)
+                                            filterAvailableSubjects(user.id, user.departmentCourseId, allSubjects)
+                                            loadMySubjects(user.id, allSubjects)
+                                            loadAppliedSubjects(user.id)
+                                            _uiState.value = _uiState.value.copy(isLoading = false)
+                                        }
+                                    }
+                                    .collect { subjectsFromFlow ->
+                                        android.util.Log.d("TeacherSubjectsViewModel", "Flow collected ${subjectsFromFlow.size} subjects for teacher ${user.id}")
+                                        subjectsFromFlow.forEach { subject ->
+                                            android.util.Log.d("TeacherSubjectsViewModel", "Subject from Flow - id: ${subject.id}, name: ${subject.name}, teacherId: ${subject.teacherId}")
+                                        }
+                                        
+                                        // IMPORTANT: getSubjectsByTeacherFlow only returns subjects where teacherId field is set on Subject document
+                                        // But teachers are assigned via section_assignments, so we need to load ALL subjects
+                                        // and then filter by section_assignments in loadMySubjects
+                                        android.util.Log.d("TeacherSubjectsViewModel", "Loading ALL subjects to properly filter by section_assignments")
+                                        val allSubjectsResult = subjectRepository.getAllSubjects()
+                                        allSubjectsResult.onSuccess { allSubjects ->
+                                            android.util.Log.d("TeacherSubjectsViewModel", "Loaded ${allSubjects.size} total subjects")
+                                            teacherDataCache.updateSubjects(allSubjects)
+                                            
+                                            // Process fresh data through filtering functions
+                                            android.util.Log.d("TeacherSubjectsViewModel", "Processing subjects through filtering functions")
+                                            filterAvailableSubjects(user.id, user.departmentCourseId, allSubjects)
+                                            loadMySubjects(user.id, allSubjects)
+                                            loadAppliedSubjects(user.id)
+                                            
+                                            _uiState.value = _uiState.value.copy(isLoading = false)
+                                        }.onFailure { exception ->
+                                            android.util.Log.e("TeacherSubjectsViewModel", "Failed to load all subjects: ${exception.message}", exception)
+                                            // Fallback to using subjects from Flow
+                                            teacherDataCache.updateSubjects(subjectsFromFlow)
+                                            filterAvailableSubjects(user.id, user.departmentCourseId, subjectsFromFlow)
+                                            loadMySubjects(user.id, subjectsFromFlow)
+                                            loadAppliedSubjects(user.id)
+                                            _uiState.value = _uiState.value.copy(isLoading = false)
+                                        }
+                                    }
+                            }
+                        } else {
+                            android.util.Log.d("TeacherSubjectsViewModel", "Flow job already active, skipping setup")
+                        }
+                        
+                        // Also load all subjects for available subjects filtering
                         val allSubjectsResult = subjectRepository.getAllSubjects()
                         allSubjectsResult.onSuccess { allSubjects ->
-                            Log.d("TeacherSubjects", "Loaded ${allSubjects.size} total subjects")
-                            allSubjects.forEach { subject ->
-                                Log.d("TeacherSubjects", "Subject - ID: ${subject.id}, Name: ${subject.name}, Code: ${subject.code}, TeacherId: ${subject.teacherId}")
-                                Log.d("TeacherSubjects", "Subject ${subject.name} - Sections: ${subject.sections}")
-                            }
-                            
-                            // Filter available subjects (subjects with available sections)
+                            teacherDataCache.updateSubjects(allSubjects)
                             filterAvailableSubjects(user.id, user.departmentCourseId, allSubjects)
-
-                            // Load teacher's assigned subjects (from section assignments)
-                            loadMySubjects(user.id, allSubjects)
-
-                            // Load teacher's applied subjects
-                            loadAppliedSubjects(user.id)
-
                             _uiState.value = _uiState.value.copy(isLoading = false)
                         }.onFailure { exception ->
-                            Log.d("TeacherSubjects", "Failed to load all subjects: ${exception.message}")
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = exception.message ?: "Failed to load subjects"
-                            )
+                            // Only show error if we don't have cached data or forcing refresh
+                            if (!hasValidCache || forceRefresh) {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = exception.message ?: "Failed to load subjects"
+                                )
+                            }
                         }
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -92,23 +183,28 @@ class TeacherSubjectsViewModel @Inject constructor(
                         )
                     }
                 }.onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = exception.message ?: "Failed to load user data"
-                    )
+                    // Only show error if we don't have cached data or forcing refresh
+                    if (!hasValidCache || forceRefresh) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = exception.message ?: "Failed to load user data"
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = e.message ?: "Failed to load subjects"
-                )
+                // Only show error if we don't have cached data or forcing refresh
+                if (!hasValidCache || forceRefresh) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to load subjects"
+                    )
+                }
             }
         }
     }
 
     fun applyForSubject(subjectId: String) {
         viewModelScope.launch {
-            Log.d("TeacherSubjects", "Applying for subject: $subjectId")
             _uiState.value = _uiState.value.copy(
                 applyingSubjects = _uiState.value.applyingSubjects + subjectId,
                 error = null
@@ -119,14 +215,11 @@ class TeacherSubjectsViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        Log.d("TeacherSubjects", "User found: ${user.email}")
-                        
                         // Check if teacher has an active application (PENDING or APPROVED) for this subject
                         // Allow reapplication if previous application was REJECTED
                         val hasActiveResult = teacherApplicationRepository.hasTeacherActiveApplication(user.id, subjectId)
                         hasActiveResult.onSuccess { hasActive ->
                             if (hasActive) {
-                                Log.d("TeacherSubjects", "Teacher has an active application for this subject")
                                 _uiState.value = _uiState.value.copy(
                                     applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                     error = "You have already applied for this subject. Please check your applications."
@@ -137,8 +230,6 @@ class TeacherSubjectsViewModel @Inject constructor(
                             // Get subject details
                             val subjectResult = subjectRepository.getSubjectById(subjectId)
                             subjectResult.onSuccess { subject ->
-                                Log.d("TeacherSubjects", "Subject found: ${subject.name}, Type: ${subject.subjectType}, CourseId: ${subject.courseId}")
-                                
                                 // Validate that teacher can apply for this subject based on department and type
                                 val canApply = when (subject.subjectType) {
                                     com.smartacademictracker.data.model.SubjectType.MAJOR -> {
@@ -154,7 +245,6 @@ class TeacherSubjectsViewModel @Inject constructor(
                                 }
                                 
                                 if (!canApply) {
-                                    Log.d("TeacherSubjects", "Teacher cannot apply for this subject - department mismatch")
                                     _uiState.value = _uiState.value.copy(
                                         applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                         error = "You don't have permission to apply for this subject. MAJOR subjects are only available to teachers in the same department."
@@ -174,12 +264,9 @@ class TeacherSubjectsViewModel @Inject constructor(
                                     status = ApplicationStatus.PENDING
                                 )
 
-                                Log.d("TeacherSubjects", "Creating application for: ${application.subjectName}")
                                 // Submit application
                                 val applicationResult = teacherApplicationRepository.createApplication(application)
                                 applicationResult.onSuccess {
-                                    Log.d("TeacherSubjects", "Application created successfully!")
-                                    
                                     // Notify all admins about the new teacher application
                                     notifyAdminsOfTeacherApplication(application)
                                     
@@ -198,21 +285,18 @@ class TeacherSubjectsViewModel @Inject constructor(
                                         _availableSubjects.value = currentAvailable
                                     }
                                 }.onFailure { exception ->
-                                    Log.d("TeacherSubjects", "Application creation failed: ${exception.message}")
                                     _uiState.value = _uiState.value.copy(
                                         applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                         error = exception.message ?: "Failed to submit application"
                                     )
                                 }
                             }.onFailure { exception ->
-                                Log.d("TeacherSubjects", "Subject not found: ${exception.message}")
                                 _uiState.value = _uiState.value.copy(
                                     applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                     error = exception.message ?: "Subject not found"
                                 )
                             }
                         }.onFailure { exception ->
-                            Log.d("TeacherSubjects", "Failed to check application status: ${exception.message}")
                             _uiState.value = _uiState.value.copy(
                                 applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                 error = exception.message ?: "Failed to check application status"
@@ -253,23 +337,19 @@ class TeacherSubjectsViewModel @Inject constructor(
 
     fun cancelApplication(applicationId: String) {
         viewModelScope.launch {
-            Log.d("TeacherSubjects", "Cancelling application: $applicationId")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
                 teacherApplicationRepository.cancelApplication(applicationId).onSuccess {
-                    Log.d("TeacherSubjects", "Application cancelled successfully")
                     // Reload all data to reflect the change
                     loadSubjects()
                 }.onFailure { exception ->
-                    Log.d("TeacherSubjects", "Failed to cancel application: ${exception.message}")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = exception.message ?: "Failed to cancel application"
                     )
                 }
             } catch (e: Exception) {
-                Log.d("TeacherSubjects", "Exception cancelling application: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Failed to cancel application"
@@ -294,71 +374,53 @@ class TeacherSubjectsViewModel @Inject constructor(
                             val studentEnrollmentsResult = studentEnrollmentRepository.getStudentsBySubject(subjectId)
                             studentEnrollmentsResult.onSuccess { enrollments ->
                                 // Filter by teacher's assigned sections
+                                // Note: getStudentsBySubject already filters by ACTIVE status, but we double-check
                                 val filteredEnrollments = enrollments.filter { 
-                                    it.sectionName in sectionNames && it.status.name == "ACTIVE"
+                                    it.sectionName in sectionNames && it.status == com.smartacademictracker.data.model.EnrollmentStatus.ACTIVE
                                 }
-                                Log.d("TeacherSubjects", "Found ${filteredEnrollments.size} students in sections $sectionNames for subject $subjectId")
                                 return filteredEnrollments.size
                             }.onFailure { exception ->
-                                Log.d("TeacherSubjects", "Error getting student enrollments: ${exception.message}")
                                 return 0
                             }
                         } else {
-                            Log.d("TeacherSubjects", "No section assignments found for teacher ${user.id} in subject $subjectId")
                             return 0
                         }
                     }.onFailure { exception ->
-                        Log.d("TeacherSubjects", "Error getting section assignments: ${exception.message}")
                         return 0
                     }
                 }
             }.onFailure { exception ->
-                Log.d("TeacherSubjects", "Error getting current user: ${exception.message}")
                 return 0
             }
             0
         } catch (e: Exception) {
-            Log.d("TeacherSubjects", "Error getting student count for subject $subjectId: ${e.message}")
             0
         }
     }
 
     suspend fun getSectionAvailability(subjectId: String): Map<String, Boolean> {
         return try {
-            Log.d("TeacherSubjects", "Getting section availability for subject $subjectId")
             val assignmentsResult = sectionAssignmentRepository.getSectionAssignmentsBySubject(subjectId)
             assignmentsResult.onSuccess { assignments ->
-                Log.d("TeacherSubjects", "Found ${assignments.size} assignments for subject $subjectId")
-                assignments.forEach { assignment ->
-                    Log.d("TeacherSubjects", "Assignment - Section: ${assignment.sectionName}, Teacher: ${assignment.teacherId}")
-                }
-                
                 // Get the subject to know all its sections
                 val subjectResult = subjectRepository.getSubjectById(subjectId)
                 subjectResult.onSuccess { subject ->
                     val assignedSections = assignments.map { it.sectionName }.toSet()
                     val allSections = subject.sections.toSet()
                     
-                    Log.d("TeacherSubjects", "Subject $subjectId - All sections: $allSections")
-                    Log.d("TeacherSubjects", "Subject $subjectId - Assigned sections: $assignedSections")
-                    
                     // Return map of section name to availability (true = available, false = assigned)
                     val availability = allSections.associateWith { sectionName ->
                         !assignedSections.contains(sectionName)
                     }
-                    Log.d("TeacherSubjects", "Subject $subjectId - Section availability: $availability")
                     return availability
                 }.onFailure { exception ->
-                    Log.d("TeacherSubjects", "Failed to get subject $subjectId: ${exception.message}")
                     return emptyMap()
                 }
             }.onFailure { exception ->
-                Log.d("TeacherSubjects", "Failed to get assignments for subject $subjectId: ${exception.message}")
                 return emptyMap()
             }
             emptyMap()
         } catch (e: Exception) {
-            Log.d("TeacherSubjects", "Error getting section availability for subject $subjectId: ${e.message}")
             emptyMap()
         }
     }
@@ -382,61 +444,60 @@ class TeacherSubjectsViewModel @Inject constructor(
             }
             emptyList()
         } catch (e: Exception) {
-            Log.d("TeacherSubjects", "Error getting assigned sections for subject $subjectId: ${e.message}")
             emptyList()
         }
     }
 
     private suspend fun loadMySubjects(teacherId: String, allSubjects: List<Subject>) {
         try {
+            android.util.Log.d("TeacherSubjectsViewModel", "loadMySubjects called - teacherId: $teacherId, allSubjects count: ${allSubjects.size}")
+            android.util.Log.d("TeacherSubjectsViewModel", "allSubjects IDs: ${allSubjects.map { it.id }}")
+            
             // Get section assignments for this teacher
             val assignmentsResult = sectionAssignmentRepository.getSectionAssignmentsByTeacher(teacherId)
             assignmentsResult.onSuccess { assignments ->
-                Log.d("TeacherSubjects", "Found ${assignments.size} section assignments for teacher")
+                android.util.Log.d("TeacherSubjectsViewModel", "getSectionAssignmentsByTeacher returned ${assignments.size} assignments")
+                assignments.forEach { assignment ->
+                    android.util.Log.d("TeacherSubjectsViewModel", "Assignment - subjectId: ${assignment.subjectId}, sectionName: ${assignment.sectionName}, status: ${assignment.status}, teacherId: ${assignment.teacherId}")
+                }
+                
+                // Filter only ACTIVE assignments
+                val activeAssignments = assignments.filter { it.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE }
+                android.util.Log.d("TeacherSubjectsViewModel", "Active assignments count: ${activeAssignments.size}")
                 
                 // Get unique subject IDs from assignments
-                val assignedSubjectIds = assignments.map { it.subjectId }.toSet()
-                Log.d("TeacherSubjects", "Assigned subject IDs: $assignedSubjectIds")
+                val assignedSubjectIds = activeAssignments.map { it.subjectId }.toSet()
+                android.util.Log.d("TeacherSubjectsViewModel", "Assigned subject IDs: $assignedSubjectIds")
                 
                 // Filter subjects that teacher is assigned to
                 val mySubjects = allSubjects.filter { it.id in assignedSubjectIds }
-                _mySubjects.value = mySubjects
-                Log.d("TeacherSubjects", "Found ${mySubjects.size} subjects assigned to teacher")
-                
+                android.util.Log.d("TeacherSubjectsViewModel", "Filtered mySubjects count: ${mySubjects.size}")
                 mySubjects.forEach { subject ->
-                    Log.d("TeacherSubjects", "My Subject - ID: ${subject.id}, Name: ${subject.name}, Code: ${subject.code}")
+                    android.util.Log.d("TeacherSubjectsViewModel", "My Subject - id: ${subject.id}, name: ${subject.name}")
                 }
+                _mySubjects.value = mySubjects
             }.onFailure { exception ->
-                Log.d("TeacherSubjects", "Failed to load section assignments: ${exception.message}")
+                android.util.Log.e("TeacherSubjectsViewModel", "Failed to get section assignments: ${exception.message}", exception)
                 _mySubjects.value = emptyList()
             }
         } catch (e: Exception) {
-            Log.d("TeacherSubjects", "Error loading my subjects: ${e.message}")
+            android.util.Log.e("TeacherSubjectsViewModel", "Exception in loadMySubjects: ${e.message}", e)
             _mySubjects.value = emptyList()
         }
     }
 
     private suspend fun filterAvailableSubjects(teacherId: String, teacherDepartmentCourseId: String?, subjects: List<Subject>) {
         try {
-            Log.d("TeacherSubjects", "Filtering ${subjects.size} subjects for teacher $teacherId (Department: $teacherDepartmentCourseId)")
+            // Load all section assignments once (more efficient than querying per subject)
+            val allAssignmentsResult = sectionAssignmentRepository.getAllSectionAssignments()
+            val allAssignments = allAssignmentsResult.getOrNull().orEmpty()
             
-            // Warn if teacher doesn't have a department set
-            if (teacherDepartmentCourseId == null || teacherDepartmentCourseId.isBlank()) {
-                Log.w("TeacherSubjects", "WARNING: Teacher $teacherId does not have departmentCourseId set! They will only see MINOR subjects.")
-            }
-            
-            subjects.forEach { subject ->
-                Log.d("TeacherSubjects", "Available Subject - ID: ${subject.id}, Name: ${subject.name}, Code: ${subject.code}, CourseId: ${subject.courseId}, Type: ${subject.subjectType}, TeacherId: ${subject.teacherId}")
-            }
+            // Group assignments by subject ID for quick lookup
+            val assignmentsBySubject = allAssignments.groupBy { it.subjectId }
             
             // Get teacher's applications
             val applicationsResult = teacherApplicationRepository.getApplicationsByTeacher(teacherId)
             applicationsResult.onSuccess { applications ->
-                Log.d("TeacherSubjects", "Found ${applications.size} applications for teacher")
-                applications.forEach { app ->
-                    Log.d("TeacherSubjects", "Application - SubjectId: ${app.subjectId}, Status: ${app.status}")
-                }
-                
                 // Get subject IDs that teacher has active applications for (PENDING or APPROVED)
                 // Exclude REJECTED applications to allow reapplication
                 val appliedSubjectIds = applications
@@ -444,26 +505,19 @@ class TeacherSubjectsViewModel @Inject constructor(
                     .map { it.subjectId }
                     .toSet()
                 
-                Log.d("TeacherSubjects", "Applied subject IDs: $appliedSubjectIds")
-                
                 // Filter subjects based on department and subject type rules
                 val availableSubjects = mutableListOf<Subject>()
                 for (subject in subjects) {
                     val notApplied = subject.id !in appliedSubjectIds
-                    Log.d("TeacherSubjects", "Checking subject ${subject.name} (${subject.id}) - Not Applied: $notApplied")
                     
                     if (notApplied) {
                         // Check department and subject type visibility rules
                         val isVisible = when (subject.subjectType) {
                             com.smartacademictracker.data.model.SubjectType.MAJOR -> {
                                 // MAJOR subjects: only visible to teachers of the same course/department
-                                val canSee = teacherDepartmentCourseId != null && 
-                                           teacherDepartmentCourseId.isNotBlank() && 
-                                           subject.courseId == teacherDepartmentCourseId
-                                if (!canSee && teacherDepartmentCourseId != null && teacherDepartmentCourseId.isNotBlank()) {
-                                    Log.d("TeacherSubjects", "Subject ${subject.name} - MAJOR subject from different department (Teacher: $teacherDepartmentCourseId, Subject: ${subject.courseId})")
-                                }
-                                canSee
+                                teacherDepartmentCourseId != null && 
+                                teacherDepartmentCourseId.isNotBlank() && 
+                                subject.courseId == teacherDepartmentCourseId
                             }
                             com.smartacademictracker.data.model.SubjectType.MINOR -> {
                                 // MINOR subjects: visible to all teachers (cross-departmental)
@@ -471,37 +525,21 @@ class TeacherSubjectsViewModel @Inject constructor(
                             }
                         }
                         
-                        Log.d("TeacherSubjects", "Subject ${subject.name} - Type: ${subject.subjectType}, CourseId: ${subject.courseId}, TeacherDept: $teacherDepartmentCourseId, IsVisible: $isVisible")
-                        
                         if (isVisible) {
-                            // Check if this subject has any available sections
-                            val sectionAvailability = getSectionAvailability(subject.id)
-                            val hasAvailableSections = sectionAvailability.values.any { it }
-                            
-                            Log.d("TeacherSubjects", "Subject ${subject.name} - Section Availability: $sectionAvailability")
-                            Log.d("TeacherSubjects", "Subject ${subject.name} - Has Available Sections: $hasAvailableSections")
+                            // Check if this subject has any available sections using pre-loaded assignments
+                            val subjectAssignments = assignmentsBySubject[subject.id].orEmpty()
+                            val assignedSections = subjectAssignments.map { it.sectionName }.toSet()
+                            val allSections = subject.sections.toSet()
+                            val hasAvailableSections = allSections.any { it !in assignedSections }
                             
                             if (hasAvailableSections) {
                                 availableSubjects.add(subject)
-                                Log.d("TeacherSubjects", "Added ${subject.name} to available subjects")
-                            } else {
-                                Log.d("TeacherSubjects", "${subject.name} has no available sections, skipping")
                             }
-                        } else {
-                            Log.d("TeacherSubjects", "${subject.name} is not visible to this teacher (MAJOR subject from different department), skipping")
                         }
-                    } else {
-                        Log.d("TeacherSubjects", "${subject.name} already applied, skipping")
                     }
                 }
                 _availableSubjects.value = availableSubjects
-                
-                Log.d("TeacherSubjects", "Final available subjects: ${availableSubjects.size}")
-                availableSubjects.forEach { subject ->
-                    Log.d("TeacherSubjects", "Final Available - ID: ${subject.id}, Name: ${subject.name}, Code: ${subject.code}, Type: ${subject.subjectType}")
-                }
             }.onFailure { exception ->
-                Log.d("TeacherSubjects", "Failed to load applications: ${exception.message}")
                 // If we can't load applications, filter by department/type rules only
                 val availableSubjects = subjects.filter { subject ->
                     val isVisible = when (subject.subjectType) {
@@ -515,13 +553,19 @@ class TeacherSubjectsViewModel @Inject constructor(
                             true
                         }
                     }
-                    isVisible && subject.teacherId == null
+                    if (isVisible) {
+                        // Check section availability using pre-loaded assignments
+                        val subjectAssignments = assignmentsBySubject[subject.id].orEmpty()
+                        val assignedSections = subjectAssignments.map { it.sectionName }.toSet()
+                        val allSections = subject.sections.toSet()
+                        allSections.any { it !in assignedSections }
+                    } else {
+                        false
+                    }
                 }
                 _availableSubjects.value = availableSubjects
-                Log.d("TeacherSubjects", "Fallback: showing ${availableSubjects.size} unassigned subjects")
             }
         } catch (e: Exception) {
-            Log.d("TeacherSubjects", "Exception filtering subjects: ${e.message}")
             // If there's an exception, filter by department/type rules only
             val availableSubjects = subjects.filter { subject ->
                 val isVisible = when (subject.subjectType) {
@@ -540,7 +584,6 @@ class TeacherSubjectsViewModel @Inject constructor(
                 isVisible && subject.teacherId == null
             }
             _availableSubjects.value = availableSubjects
-            Log.d("TeacherSubjects", "Exception fallback: showing ${availableSubjects.size} unassigned subjects")
         }
     }
 
@@ -549,15 +592,12 @@ class TeacherSubjectsViewModel @Inject constructor(
             // Get teacher's applications
             val applicationsResult = teacherApplicationRepository.getApplicationsByTeacher(teacherId)
             applicationsResult.onSuccess { applications ->
-                Log.d("TeacherSubjects", "Found ${applications.size} applications for teacher")
-                
                 // Store all applications
                 _applications.value = applications
                 
                 // Store approved applications separately
                 val approvedApps = applications.filter { it.status == ApplicationStatus.APPROVED }
                 _approvedApplications.value = approvedApps
-                Log.d("TeacherSubjects", "Found ${approvedApps.size} approved applications")
                 
                 // Get subject IDs that teacher has applied for
                 val appliedSubjectIds = applications
@@ -574,14 +614,10 @@ class TeacherSubjectsViewModel @Inject constructor(
                     }
                 }
                 _appliedSubjects.value = appliedSubjectsList
-                
-                Log.d("TeacherSubjects", "Applied subjects loaded: ${appliedSubjectsList.size}")
             }.onFailure { exception ->
-                Log.d("TeacherSubjects", "Failed to load applied subjects: ${exception.message}")
                 _appliedSubjects.value = emptyList()
             }
         } catch (e: Exception) {
-            Log.d("TeacherSubjects", "Exception loading applied subjects: ${e.message}")
             _appliedSubjects.value = emptyList()
         }
     }
@@ -608,7 +644,7 @@ class TeacherSubjectsViewModel @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.e("TeacherSubjects", "Failed to notify admins of teacher application: ${e.message}")
+            // Silent failure
         }
     }
 }

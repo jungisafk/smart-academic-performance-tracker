@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.MenuBook
@@ -25,7 +24,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.smartacademictracker.data.model.StudentEnrollment
-import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,20 +35,8 @@ fun StudentSubjectsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val enrollments by viewModel.enrollments.collectAsState()
 
-    // Debug logging
-    LaunchedEffect(uiState, enrollments) {
-        Log.d("StudentSubjectsScreen", "=== UI STATE CHANGED ===")
-        Log.d("StudentSubjectsScreen", "isLoading: ${uiState.isLoading}")
-        Log.d("StudentSubjectsScreen", "error: ${uiState.error}")
-        Log.d("StudentSubjectsScreen", "enrollments.size: ${enrollments.size}")
-        enrollments.forEachIndexed { index, enrollment ->
-            Log.d("StudentSubjectsScreen", "  Display[$index]: ${enrollment.subjectName} (${enrollment.subjectCode}) - Section: ${enrollment.sectionName}")
-        }
-    }
-
-    // Load enrollments when screen is composed
-    LaunchedEffect(Unit) {
-        Log.d("StudentSubjectsScreen", "Screen composed - Loading enrollments...")
+    // Load enrollments when screen is composed, using ViewModel as key to prevent unnecessary reloads
+    LaunchedEffect(viewModel) {
         viewModel.loadEnrollments()
     }
 
@@ -65,46 +51,6 @@ fun StudentSubjectsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header Section
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.Default.ArrowBack, 
-                                contentDescription = "Back",
-                                tint = Color(0xFF666666)
-                            )
-                        }
-                        Text(
-                            text = "My Subjects",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF333333)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = { viewModel.refreshEnrollments() },
-                        enabled = !uiState.isLoading
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh, 
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                }
-            }
-            
             // Summary Card
             if (!uiState.isLoading && enrollments.isNotEmpty()) {
                 item {

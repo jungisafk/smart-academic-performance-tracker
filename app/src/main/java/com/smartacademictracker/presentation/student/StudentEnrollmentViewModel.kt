@@ -33,14 +33,12 @@ class StudentEnrollmentViewModel @Inject constructor(
 
     fun loadEnrollments() {
         viewModelScope.launch {
-            Log.d("StudentEnrollment", "Loading student enrollments...")
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
             try {
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { currentUser ->
                     if (currentUser == null) {
-                        Log.e("StudentEnrollment", "Current user is null")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = "User not found"
@@ -48,13 +46,8 @@ class StudentEnrollmentViewModel @Inject constructor(
                         return@onSuccess
                     }
                     
-                    Log.d("StudentEnrollment", "Loading enrollments for student: ${currentUser.id} (${currentUser.firstName} ${currentUser.lastName})")
                     val result = enrollmentRepository.getEnrollmentsByStudent(currentUser.id)
                     result.onSuccess { enrollmentList ->
-                        Log.d("StudentEnrollment", "Found ${enrollmentList.size} enrollments for student")
-                        enrollmentList.forEach { enrollment ->
-                            Log.d("StudentEnrollment", "Enrollment: ${enrollment.subjectName} - ${enrollment.sectionName} (Status: ${enrollment.status})")
-                        }
                         _enrollments.value = enrollmentList
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,

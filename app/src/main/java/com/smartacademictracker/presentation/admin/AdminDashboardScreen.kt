@@ -255,7 +255,7 @@ fun AdminDashboardScreen(
                                 QuickActionData("Teacher Management", onNavigateToApplications, Icons.Default.PersonAdd, true),
                                 QuickActionData("Academic Structure", onNavigateToHierarchicalAcademicManagement, Icons.Default.MenuBook, false),
                                 QuickActionData("Manage Users", onNavigateToUsers, Icons.Default.Person, false),
-                                QuickActionData("Grade Monitoring", onNavigateToGradeMonitoring, Icons.Default.BarChart, false),
+                                QuickActionData("Grade Status", onNavigateToGradeMonitoring, Icons.Default.Assignment, false),
                                 QuickActionData("Grade Edit Requests", onNavigateToGradeEditRequests, Icons.Default.Edit, false),
                                 QuickActionData("Academic Periods", onNavigateToAcademicPeriods, Icons.Default.CalendarToday, false),
                                 QuickActionData("Pre-Register", onNavigateToPreRegistered, Icons.Default.School, false),
@@ -317,16 +317,15 @@ fun SystemOverviewCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(100.dp),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Icon
@@ -357,14 +356,19 @@ fun SystemOverviewCard(
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF666666)
+                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 16.sp),
+                    color = Color(0xFF666666),
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = value,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2196F3)
+                    color = Color(0xFF2196F3),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
         }
@@ -570,7 +574,7 @@ fun QuickActionButton(
         onClick = onClick,
         modifier = modifier
             .then(if (modifier == Modifier) Modifier.fillMaxWidth() else Modifier)
-            .aspectRatio(1.5f), // More compact aspect ratio
+            .heightIn(min = 80.dp, max = 120.dp), // Fixed height range instead of aspectRatio
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isYellow) Color(0xFFFFC107) else Color(0xFF2196F3)

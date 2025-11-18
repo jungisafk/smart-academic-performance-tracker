@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +28,7 @@ import java.io.InputStream
 fun AdminBulkImportStudentsScreen(
     onNavigateBack: () -> Unit,
     onImportSuccess: () -> Unit = onNavigateBack,
+    modifier: Modifier = Modifier,
     viewModel: AdminBulkImportStudentsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -38,11 +40,11 @@ fun AdminBulkImportStudentsScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri == null) {
-            android.util.Log.d("BulkImport", "File picker cancelled or returned null")
+            
             return@rememberLauncherForActivityResult
         }
         
-        android.util.Log.d("BulkImport", "File selected: $uri")
+        
         
         try {
             selectedFileUri = uri
@@ -55,53 +57,35 @@ fun AdminBulkImportStudentsScreen(
                 }
             } ?: uri.lastPathSegment ?: "Unknown file"
             
-            android.util.Log.d("BulkImport", "File name: $fileName")
+            
             
             // Parse the file
             val fileFileName = fileName ?: "Unknown file" // Store in local variable and handle null
             try {
                 val inputStream = context.contentResolver.openInputStream(uri)
                 if (inputStream != null) {
-                    android.util.Log.d("BulkImport", "InputStream opened successfully, starting parse...")
+                    
                     viewModel.parseFile(inputStream, fileFileName)
                 } else {
-                    android.util.Log.e("BulkImport", "Failed to open InputStream for URI: $uri")
+                    
                     viewModel.setError("Failed to open file. Please try selecting the file again.")
                 }
             } catch (e: Exception) {
-                android.util.Log.e("BulkImport", "Error reading file", e)
+                
                 viewModel.setError("Error reading file: ${e.message ?: "Unknown error"}")
             }
         } catch (e: Exception) {
-            android.util.Log.e("BulkImport", "Error processing file URI", e)
+            
             viewModel.setError("Error processing file: ${e.message ?: "Unknown error"}")
         }
     }
     
     val snackbarHostState = remember { SnackbarHostState() }
     
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Bulk Import Students") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF2196F3),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                )
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { paddingValues ->
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -121,16 +105,10 @@ fun AdminBulkImportStudentsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Supported formats: CSV (.csv) or Excel (.xlsx)",
+                            text = "Supported format: CSV (.csv)",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF4CAF50)
-                        )
-                        Text(
-                            text = "Note: Only .xlsx files are supported. For .xls (older Excel format), please save as .xlsx or convert to CSV.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -141,14 +119,89 @@ fun AdminBulkImportStudentsScreen(
                         modifier = Modifier.padding(start = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text("• Student ID (Required)", style = MaterialTheme.typography.bodySmall)
+                        Text("• Student ID (Required)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                         Text("• First Name (Required)", style = MaterialTheme.typography.bodySmall)
                         Text("• Last Name (Required)", style = MaterialTheme.typography.bodySmall)
                         Text("• Middle Name (Optional)", style = MaterialTheme.typography.bodySmall)
+                        Text("• Course Code (Required)", style = MaterialTheme.typography.bodySmall)
+                        Text("• Year Level (Required: 1, 2, 3, 4 or '1st Year', '2nd Year', etc.)", style = MaterialTheme.typography.bodySmall)
                         Text("• Email (Optional)", style = MaterialTheme.typography.bodySmall)
-                        Text("• Course Code (Optional)", style = MaterialTheme.typography.bodySmall)
-                        Text("• Year Level (Optional: 1, 2, 3, 4 or '1st Year', '2nd Year', etc.)", style = MaterialTheme.typography.bodySmall)
                         Text("• Enrollment Year (Optional, e.g., '2024-2025')", style = MaterialTheme.typography.bodySmall)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Student ID Format Warning
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF9800),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Student ID Format Requirements",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE65100)
+                                )
+                            }
+                            Text(
+                                text = "Format: YYYY-SEQUENCE",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF333333)
+                            )
+                            Column(
+                                modifier = Modifier.padding(start = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "• Year: Any 4-digit year (e.g., 1952, 2001, 2099)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                                Text(
+                                    text = "• Sequence: 1-99999",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                                Text(
+                                    text = "  - 1-2 digits: Auto-padded to 3 digits (1→001, 23→023, 7→007)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                                Text(
+                                    text = "  - 3-5 digits: Kept as-is (999, 1000, 15234)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+                                Text(
+                                    text = "• Examples: 2024-001, 2025-123, 2030-1000, 2030-15234",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "• Duplicate IDs will be rejected",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFD32F2F),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -157,12 +210,12 @@ fun AdminBulkImportStudentsScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { 
-                    android.util.Log.d("BulkImport", "File picker button clicked")
+                    
                     try {
                         // Try multiple MIME types to support different file managers
                         filePickerLauncher.launch("*/*")
                     } catch (e: Exception) {
-                        android.util.Log.e("BulkImport", "Error launching file picker", e)
+                        
                         viewModel.setError("Error opening file picker: ${e.message}")
                     }
                 }
@@ -182,7 +235,7 @@ fun AdminBulkImportStudentsScreen(
                         )
                         if (fileName == null) {
                             Text(
-                                text = "Click to browse and select a CSV or Excel (.xlsx) file",
+                                text = "Click to browse and select a CSV file",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -361,6 +414,9 @@ fun AdminBulkImportStudentsScreen(
                 }
             }
         }
+        
+        // Snackbar Host
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
     
     // Success message and auto-navigate

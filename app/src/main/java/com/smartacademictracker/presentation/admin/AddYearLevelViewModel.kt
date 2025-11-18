@@ -23,7 +23,7 @@ class AddYearLevelViewModel @Inject constructor(
     
     fun setCourseId(courseId: String) {
         _courseId = courseId
-        println("DEBUG: AddYearLevelViewModel - Set courseId: '$courseId'")
+        
     }
 
     fun setYearLevelName(name: String) {
@@ -65,7 +65,7 @@ class AddYearLevelViewModel @Inject constructor(
                     level = _uiState.value.level,
                     description = _uiState.value.description.trim()
                 )
-                println("DEBUG: AddYearLevelViewModel - Creating year level with courseId: '$_courseId'")
+                
                 
                 val createResult = yearLevelRepository.createYearLevel(yearLevel)
                 createResult.onSuccess {
@@ -73,7 +73,7 @@ class AddYearLevelViewModel @Inject constructor(
                         isLoading = false,
                         isSuccess = true
                     )
-                    println("DEBUG: AddYearLevelViewModel - Year level created successfully")
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

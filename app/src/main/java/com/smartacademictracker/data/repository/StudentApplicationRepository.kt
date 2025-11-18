@@ -1,8 +1,13 @@
 package com.smartacademictracker.data.repository
 
+import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.smartacademictracker.data.model.StudentApplication
 import com.smartacademictracker.data.model.StudentApplicationStatus
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,35 +20,25 @@ class StudentApplicationRepository @Inject constructor(
 
     suspend fun createApplication(application: StudentApplication): Result<StudentApplication> {
         return try {
-            println("DEBUG: StudentApplicationRepository - Creating application for student: ${application.studentId}, subject: ${application.subjectId}")
             val docRef = applicationsCollection.add(application).await()
             val createdApplication = application.copy(id = docRef.id)
-            println("DEBUG: StudentApplicationRepository - Created document with ID: ${docRef.id}")
             applicationsCollection.document(docRef.id).set(createdApplication).await()
-            println("DEBUG: StudentApplicationRepository - Application saved successfully with ID: ${createdApplication.id}")
             Result.success(createdApplication)
         } catch (e: Exception) {
-            println("DEBUG: StudentApplicationRepository - Error creating application: ${e.message}")
             Result.failure(e)
         }
     }
 
     suspend fun getApplicationsByStudent(studentId: String): Result<List<StudentApplication>> {
         return try {
-            println("DEBUG: StudentApplicationRepository - Querying applications for student: $studentId")
             val snapshot = applicationsCollection
                 .whereEqualTo("studentId", studentId)
                 .get()
                 .await()
             val applications = snapshot.toObjects(StudentApplication::class.java)
                 .sortedByDescending { it.appliedAt } // Sort in memory instead
-            println("DEBUG: StudentApplicationRepository - Found ${applications.size} applications for student $studentId")
-            applications.forEach { app ->
-                println("DEBUG: Application - ID: ${app.id}, Subject: ${app.subjectName}, Status: ${app.status}")
-            }
             Result.success(applications)
         } catch (e: Exception) {
-            println("DEBUG: StudentApplicationRepository - Error querying applications: ${e.message}")
             Result.failure(e)
         }
     }
@@ -78,10 +73,7 @@ class StudentApplicationRepository @Inject constructor(
     
     suspend fun getApplicationsForTeacherSubjects(teacherId: String, subjectIds: List<String>): Result<List<StudentApplication>> {
         return try {
-            println("DEBUG: StudentApplicationRepository - Querying applications for teacher: $teacherId, subjects: $subjectIds")
-            
             if (subjectIds.isEmpty()) {
-                println("DEBUG: StudentApplicationRepository - No subject IDs provided")
                 return Result.success(emptyList())
             }
             
@@ -91,26 +83,19 @@ class StudentApplicationRepository @Inject constructor(
             val batches = subjectIds.chunked(10)
             
             for (batch in batches) {
-                println("DEBUG: StudentApplicationRepository - Querying batch: $batch")
                 val snapshot = applicationsCollection
                     .whereIn("subjectId", batch)
                     .get()
                     .await()
                 val batchApplications = snapshot.toObjects(StudentApplication::class.java)
-                println("DEBUG: StudentApplicationRepository - Found ${batchApplications.size} applications in batch")
                 applications.addAll(batchApplications)
             }
             
             // Sort in memory instead of using orderBy
             val sortedApplications = applications.sortedByDescending { it.appliedAt }
-            println("DEBUG: StudentApplicationRepository - Total applications found: ${sortedApplications.size}")
-            sortedApplications.forEach { app ->
-                println("DEBUG: Application - ID: ${app.id}, Subject: ${app.subjectName}, Student: ${app.studentName}, Status: ${app.status}")
-            }
             
             Result.success(sortedApplications)
         } catch (e: Exception) {
-            println("DEBUG: StudentApplicationRepository - Error querying applications for teacher subjects: ${e.message}")
             Result.failure(e)
         }
     }
@@ -161,13 +146,15 @@ class StudentApplicationRepository @Inject constructor(
                 .whereEqualTo("subjectId", subjectId)
                 .get()
                 .await()
-            // Only return true if there's a PENDING or APPROVED application
+            // Only return true if there's a PENDING application
+            // APPROVED applications should only block if student has ACTIVE enrollment
+            // (This check is done in the ViewModel by checking enrollment status)
             // WITHDRAWN and REJECTED applications should allow reapplication
             val applications = snapshot.toObjects(StudentApplication::class.java)
-            val hasActiveApplication = applications.any { app ->
-                app.status == StudentApplicationStatus.PENDING || app.status == StudentApplicationStatus.APPROVED
+            val hasPendingApplication = applications.any { app ->
+                app.status == StudentApplicationStatus.PENDING
             }
-            Result.success(hasActiveApplication)
+            Result.success(hasPendingApplication)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -204,6 +191,105 @@ class StudentApplicationRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Get real-time flow of applications for teacher's subjects
+     */
+    fun getApplicationsForTeacherSubjectsFlow(teacherId: String, subjectIds: List<String>): Flow<List<StudentApplication>> = callbackFlow {
+        if (subjectIds.isEmpty()) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+
+        val listeners = mutableListOf<ListenerRegistration>()
+        val allApplications = mutableListOf<StudentApplication>()
+
+        try {
+            // Firestore doesn't support 'in' queries with more than 10 items, so we need to batch them
+            val batches = subjectIds.chunked(10)
+
+            batches.forEach { batch ->
+                val listener = applicationsCollection
+                    .whereIn("subjectId", batch)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.e("StudentApplicationRepo", "Real-time listener error: ${error.message}")
+                            close(error)
+                            return@addSnapshotListener
+                        }
+
+                        if (snapshot != null) {
+                            val batchApplications = snapshot.toObjects(StudentApplication::class.java)
+                            // Update applications for this batch
+                            allApplications.removeAll { it.subjectId in batch }
+                            allApplications.addAll(batchApplications)
+                            // Sort and send updated list
+                            val sorted = allApplications.sortedByDescending { it.appliedAt }
+                            trySend(sorted)
+                        }
+                    }
+                listeners.add(listener)
+            }
+        } catch (e: Exception) {
+            Log.e("StudentApplicationRepo", "Error setting up real-time listeners: ${e.message}")
+            close(e)
+        }
+
+        awaitClose {
+            listeners.forEach { it.remove() }
+        }
+    }
+
+    /**
+     * Get real-time flow of applications by student
+     */
+    fun getApplicationsByStudentFlow(studentId: String): Flow<List<StudentApplication>> = callbackFlow {
+        val listener = applicationsCollection
+            .whereEqualTo("studentId", studentId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("StudentApplicationRepo", "Real-time listener error: ${error.message}")
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val applications = snapshot.toObjects(StudentApplication::class.java)
+                        .sortedByDescending { it.appliedAt }
+                    trySend(applications)
+                }
+            }
+
+        awaitClose {
+            listener.remove()
+        }
+    }
+
+    /**
+     * Get real-time flow of applications by subject
+     */
+    fun getApplicationsBySubjectFlow(subjectId: String): Flow<List<StudentApplication>> = callbackFlow {
+        val listener = applicationsCollection
+            .whereEqualTo("subjectId", subjectId)
+            .orderBy("appliedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("StudentApplicationRepo", "Real-time listener error: ${error.message}")
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val applications = snapshot.toObjects(StudentApplication::class.java)
+                    trySend(applications)
+                }
+            }
+
+        awaitClose {
+            listener.remove()
         }
     }
 }

@@ -23,17 +23,12 @@ class StudentEnrollmentRepository @Inject constructor(
      */
     suspend fun getEnrollmentsByStudent(studentId: String): Result<List<StudentEnrollment>> {
         return try {
-            Log.d("StudentEnrollmentRepository", "Fetching enrollments for student: $studentId")
             val snapshot = enrollmentsCollection
                 .whereEqualTo("studentId", studentId)
                 .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
                 .get()
                 .await()
             val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
-            Log.d("StudentEnrollmentRepository", "Found ${enrollments.size} active enrollments for student $studentId")
-            enrollments.forEach { enrollment ->
-                Log.d("StudentEnrollmentRepository", "Enrollment: ${enrollment.subjectName} - ${enrollment.sectionName} (Status: ${enrollment.status})")
-            }
             Result.success(enrollments)
         } catch (e: Exception) {
             Log.e("StudentEnrollmentRepository", "Failed to get enrollments for student $studentId: ${e.message}")
@@ -45,30 +40,23 @@ class StudentEnrollmentRepository @Inject constructor(
      * Get real-time flow of enrollments for a specific student
      */
     fun getEnrollmentsByStudentFlow(studentId: String): Flow<List<StudentEnrollment>> = callbackFlow {
-        Log.d("StudentEnrollmentRepository", "Setting up real-time listener for student: $studentId")
-        
         val listenerRegistration = enrollmentsCollection
             .whereEqualTo("studentId", studentId)
             .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("StudentEnrollmentRepository", "Error in enrollment listener: ${error.message}")
+                    Log.e("StudentEnrollmentRepository", "Real-time listener error: ${error.message}")
                     close(error)
                     return@addSnapshotListener
                 }
                 
                 if (snapshot != null) {
                     val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
-                    Log.d("StudentEnrollmentRepository", "Real-time update: Found ${enrollments.size} active enrollments for student $studentId")
-                    enrollments.forEach { enrollment ->
-                        Log.d("StudentEnrollmentRepository", "Enrollment: ${enrollment.subjectName} (${enrollment.subjectCode}) - Section: ${enrollment.sectionName}, Status: ${enrollment.status}")
-                    }
                     trySend(enrollments)
                 }
             }
         
         awaitClose {
-            Log.d("StudentEnrollmentRepository", "Removing real-time listener for student: $studentId")
             listenerRegistration.remove()
         }
     }
@@ -78,38 +66,14 @@ class StudentEnrollmentRepository @Inject constructor(
      */
     suspend fun getStudentsBySection(subjectId: String, sectionName: String): Result<List<StudentEnrollment>> {
         return try {
-            Log.d("StudentEnrollmentRepository", "Fetching students for subject: $subjectId, section: $sectionName")
-            Log.d("StudentEnrollmentRepository", "Query: subjectId=$subjectId, sectionName=$sectionName, status=${EnrollmentStatus.ACTIVE.name}")
-            
             val snapshot = enrollmentsCollection
                 .whereEqualTo("subjectId", subjectId)
                 .whereEqualTo("sectionName", sectionName)
                 .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
                 .get()
                 .await()
-                
-            Log.d("StudentEnrollmentRepository", "Query completed. Document count: ${snapshot.size()}")
             
             val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
-            Log.d("StudentEnrollmentRepository", "Found ${enrollments.size} active students in section $sectionName for subject $subjectId")
-            
-            if (enrollments.isEmpty()) {
-                Log.w("StudentEnrollmentRepository", "No students found. Checking if there are any enrollments for this subject...")
-                // Let's also check if there are any enrollments for this subject at all
-                val allEnrollmentsSnapshot = enrollmentsCollection
-                    .whereEqualTo("subjectId", subjectId)
-                    .get()
-                    .await()
-                Log.d("StudentEnrollmentRepository", "Total enrollments for subject $subjectId: ${allEnrollmentsSnapshot.size()}")
-                allEnrollmentsSnapshot.documents.forEach { doc ->
-                    val data = doc.data
-                    Log.d("StudentEnrollmentRepository", "Enrollment doc: sectionName=${data?.get("sectionName")}, status=${data?.get("status")}")
-                }
-            }
-            
-            enrollments.forEach { enrollment ->
-                Log.d("StudentEnrollmentRepository", "Student: ${enrollment.studentName} (${enrollment.studentId}) - Status: ${enrollment.status}")
-            }
             Result.success(enrollments)
         } catch (e: Exception) {
             Log.e("StudentEnrollmentRepository", "Failed to get students for section $sectionName in subject $subjectId: ${e.message}")
@@ -156,14 +120,10 @@ class StudentEnrollmentRepository @Inject constructor(
      */
     suspend fun enrollStudent(enrollment: StudentEnrollment): Result<String> {
         return try {
-            Log.d("StudentEnrollmentRepository", "Creating enrollment for student: ${enrollment.studentName} in subject: ${enrollment.subjectName} - ${enrollment.sectionName}")
-            Log.d("StudentEnrollmentRepository", "Enrollment details: studentId=${enrollment.studentId}, subjectId=${enrollment.subjectId}, sectionName=${enrollment.sectionName}, status=${enrollment.status}")
-            
             val docRef = enrollmentsCollection.add(enrollment).await()
-            Log.d("StudentEnrollmentRepository", "Enrollment created successfully with ID: ${docRef.id}")
             Result.success(docRef.id)
         } catch (e: Exception) {
-            Log.e("StudentEnrollmentRepository", "Failed to create enrollment: ${e.message}", e)
+            Log.e("StudentEnrollmentRepository", "Enrollment creation failed: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -207,6 +167,25 @@ class StudentEnrollmentRepository @Inject constructor(
                 .await()
             Result.success(!snapshot.isEmpty)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get all enrollments for a student in a specific subject (regardless of status)
+     * This is useful for checking if a student was previously enrolled but removed
+     */
+    suspend fun getStudentEnrollmentsBySubject(studentId: String, subjectId: String): Result<List<StudentEnrollment>> {
+        return try {
+            val snapshot = enrollmentsCollection
+                .whereEqualTo("studentId", studentId)
+                .whereEqualTo("subjectId", subjectId)
+                .get()
+                .await()
+            val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
+            Result.success(enrollments)
+        } catch (e: Exception) {
+            Log.e("StudentEnrollmentRepository", "Failed to get enrollments for student $studentId in subject $subjectId: ${e.message}")
             Result.failure(e)
         }
     }
@@ -268,6 +247,82 @@ class StudentEnrollmentRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("StudentEnrollmentRepository", "Failed to get all enrollments: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Get real-time flow of students enrolled in a specific section
+     */
+    fun getStudentsBySectionFlow(subjectId: String, sectionName: String): Flow<List<StudentEnrollment>> = callbackFlow {
+        val listener = enrollmentsCollection
+            .whereEqualTo("subjectId", subjectId)
+            .whereEqualTo("sectionName", sectionName)
+            .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("StudentEnrollmentRepository", "Real-time listener error: ${error.message}")
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
+                    trySend(enrollments)
+                }
+            }
+
+        awaitClose {
+            listener.remove()
+        }
+    }
+
+    /**
+     * Get real-time flow of students enrolled in a subject (across all sections)
+     */
+    fun getStudentsBySubjectFlow(subjectId: String): Flow<List<StudentEnrollment>> = callbackFlow {
+        val listener = enrollmentsCollection
+            .whereEqualTo("subjectId", subjectId)
+            .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("StudentEnrollmentRepository", "Real-time listener error: ${error.message}")
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
+                    trySend(enrollments)
+                }
+            }
+
+        awaitClose {
+            listener.remove()
+        }
+    }
+
+    /**
+     * Get real-time flow of active enrollments for a teacher
+     */
+    fun getActiveEnrollmentsByTeacherFlow(teacherId: String): Flow<List<StudentEnrollment>> = callbackFlow {
+        val listener = enrollmentsCollection
+            .whereEqualTo("teacherId", teacherId)
+            .whereEqualTo("status", EnrollmentStatus.ACTIVE.name)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("StudentEnrollmentRepository", "Real-time listener error: ${error.message}")
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val enrollments = snapshot.toObjects(StudentEnrollment::class.java)
+                    trySend(enrollments)
+                }
+            }
+
+        awaitClose {
+            listener.remove()
         }
     }
 }

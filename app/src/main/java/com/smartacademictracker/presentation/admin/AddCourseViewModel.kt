@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.Course
 import com.smartacademictracker.data.repository.CourseRepository
+import com.smartacademictracker.data.repository.UserRepository
+import com.smartacademictracker.data.notification.NotificationSenderService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +15,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AddCourseViewModel @Inject constructor(
-    private val courseRepository: CourseRepository
+    private val courseRepository: CourseRepository,
+    private val userRepository: UserRepository,
+    private val notificationSenderService: NotificationSenderService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddCourseUiState())
@@ -68,11 +72,22 @@ class AddCourseViewModel @Inject constructor(
                 
                 val createResult = courseRepository.createCourse(course)
                 createResult.onSuccess {
+                    // Get all users to notify them
+                    val allUsersResult = userRepository.getAllUsers()
+                    allUsersResult.onSuccess { users ->
+                        val userIds = users.map { it.id }
+                        notificationSenderService.sendCourseCreatedNotification(
+                            userIds = userIds,
+                            courseName = course.name,
+                            courseCode = course.code
+                        )
+                    }
+                    
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         isSuccess = true
                     )
-                    println("DEBUG: AddCourseViewModel - Course created successfully")
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

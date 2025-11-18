@@ -57,9 +57,6 @@ fun NotificationScreen(
                 IconButton(onClick = { viewModel.clearAllNotifications() }) {
                     Icon(Icons.Default.ClearAll, contentDescription = "Clear all")
                 }
-                IconButton(onClick = { viewModel.createTestNotifications() }) {
-                    Icon(Icons.Default.Add, contentDescription = "Create test notifications")
-                }
                 IconButton(onClick = { viewModel.loadNotifications() }) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                 }

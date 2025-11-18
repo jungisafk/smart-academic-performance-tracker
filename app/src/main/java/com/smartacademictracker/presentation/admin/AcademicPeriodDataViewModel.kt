@@ -43,7 +43,7 @@ class AcademicPeriodDataViewModel @Inject constructor(
                 periodsResult.onSuccess { periods ->
                     _academicPeriods.value = periods
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    println("DEBUG: AcademicPeriodDataViewModel - Loaded ${periods.size} academic periods")
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -68,7 +68,7 @@ class AcademicPeriodDataViewModel @Inject constructor(
                 summariesResult.onSuccess { summaries ->
                     _periodSummaries.value = summaries
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    println("DEBUG: AcademicPeriodDataViewModel - Loaded ${summaries.size} period summaries")
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -99,16 +99,16 @@ class AcademicPeriodDataViewModel @Inject constructor(
                     
                     periodsResult.onSuccess { periods ->
                         _academicPeriods.value = periods
-                        println("DEBUG: AcademicPeriodDataViewModel - Loaded ${periods.size} academic periods")
+                        
                     }.onFailure { exception ->
-                        println("DEBUG: AcademicPeriodDataViewModel - Error loading periods: ${exception.message}")
+                        
                     }
                     
                     summariesResult.onSuccess { summaries ->
                         _periodSummaries.value = summaries
-                        println("DEBUG: AcademicPeriodDataViewModel - Loaded ${summaries.size} period summaries")
+                        
                     }.onFailure { exception ->
-                        println("DEBUG: AcademicPeriodDataViewModel - Error loading summaries: ${exception.message}")
+                        
                     }
                     
                     _uiState.value = _uiState.value.copy(isLoading = false)
@@ -131,7 +131,7 @@ class AcademicPeriodDataViewModel @Inject constructor(
                 dataResult.onSuccess { data ->
                     _selectedPeriodData.value = data
                     _uiState.value = _uiState.value.copy(isLoading = false)
-                    println("DEBUG: AcademicPeriodDataViewModel - Loaded data for period: ${data.academicPeriod?.name}")
+                    
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,

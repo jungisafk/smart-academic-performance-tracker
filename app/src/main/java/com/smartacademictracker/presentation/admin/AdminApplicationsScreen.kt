@@ -33,6 +33,7 @@ import com.smartacademictracker.presentation.admin.CollapsibleSubjectCard
 @Composable
 fun AdminApplicationsScreen(
     onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: AdminApplicationsViewModel = hiltViewModel(),
     sectionAssignmentViewModel: TeacherSectionAssignmentViewModel = hiltViewModel()
 ) {
@@ -42,7 +43,7 @@ fun AdminApplicationsScreen(
 
     // Load data in background - don't block navigation
     LaunchedEffect(Unit) {
-        android.util.Log.d("AdminApplications", "Loading applications on screen init")
+        
         viewModel.loadApplications()
         if (selectedTab == 1) {
             sectionAssignmentViewModel.loadData()
@@ -57,14 +58,14 @@ fun AdminApplicationsScreen(
     
     // Reload applications when screen becomes visible
     LaunchedEffect(applications.size) {
-        android.util.Log.d("AdminApplications", "Applications count: ${applications.size}")
+        
         applications.forEach { app ->
-            android.util.Log.d("AdminApplications", "Application: ${app.subjectName} - ${app.status} - Teacher: ${app.teacherName}")
+            
         }
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
@@ -80,71 +81,6 @@ fun AdminApplicationsScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Enhanced Header Section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = onNavigateBack,
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.2f))
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White
-                                )
-                            }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Teacher Management",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Manage applications and assignments",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
-                        
-                        // Applications Icon
-                        Box(
-                            modifier = Modifier
-                                .size(60.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFC107)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Assignment,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-                    }
-                }
-            
                 // Tab Row
                 TabRow(
                     selectedTabIndex = selectedTab,
@@ -309,7 +245,7 @@ fun AdminApplicationsScreen(
                             val sectionTeacherApplications by sectionAssignmentViewModel.teacherApplications.collectAsState()
                             val sectionYearLevels by sectionAssignmentViewModel.yearLevels.collectAsState()
                             
-                            android.util.Log.d("AdminApplications", "Assignments tab - Subjects: ${sectionSubjects.size}, Assignments: ${sectionAssignments.size}, Applications: ${sectionTeacherApplications.size}")
+                            
                             
                             if (sectionUiState.isLoading && sectionSubjects.isEmpty()) {
                                 Box(
@@ -536,12 +472,12 @@ fun EnhancedApplicationCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -555,7 +491,7 @@ fun EnhancedApplicationCard(
                     // Teacher Avatar
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFFF9800).copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
@@ -563,23 +499,23 @@ fun EnhancedApplicationCard(
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = "Teacher",
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(20.dp),
                             tint = Color(0xFFFF9800)
                         )
                     }
                     
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     
                     Column {
                         Text(
                             text = application.teacherName,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF333333)
                         )
                         Text(
                             text = application.subjectName,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF666666)
                         )
                         Text(
@@ -597,18 +533,18 @@ fun EnhancedApplicationCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Icon(
                             imageVector = getStatusIcon(application.status),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = getStatusColor(application.status)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = application.status.name,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = getStatusColor(application.status)
                         )
@@ -616,56 +552,18 @@ fun EnhancedApplicationCard(
                 }
             }
             
-            // Application Details
-            if (application.applicationReason.isNotBlank()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = "Reason",
-                                modifier = Modifier.size(16.dp),
-                                tint = Color(0xFF666666)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Reason:",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF666666)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = application.applicationReason,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF333333)
-                        )
-                    }
-                }
-            }
-            
             // Application Date
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     Icons.Default.CalendarToday,
                     contentDescription = "Date",
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
                     tint = Color(0xFF666666)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Applied on: ${java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault()).format(java.util.Date(application.appliedAt))}",
                     style = MaterialTheme.typography.bodySmall,
@@ -676,10 +574,10 @@ fun EnhancedApplicationCard(
             
             // Enhanced Action Buttons (only show for pending applications)
             if (application.status == ApplicationStatus.PENDING) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
                         onClick = onReject,
@@ -692,10 +590,10 @@ fun EnhancedApplicationCard(
                         Icon(
                             Icons.Default.Close,
                             contentDescription = "Reject",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Reject", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Reject", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                     }
                     
                     Button(
@@ -709,10 +607,10 @@ fun EnhancedApplicationCard(
                         Icon(
                             Icons.Default.Check,
                             contentDescription = "Approve",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Approve", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Approve", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

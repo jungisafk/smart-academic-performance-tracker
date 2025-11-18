@@ -135,8 +135,9 @@ object FirebaseModule {
     fun provideNotificationSenderService(
         notificationRepository: NotificationRepository,
         localNotificationService: LocalNotificationService,
-        templateService: NotificationTemplateService
+        templateService: NotificationTemplateService,
+        userRepository: com.smartacademictracker.data.repository.UserRepository
     ): NotificationSenderService {
-        return NotificationSenderService(notificationRepository, localNotificationService, templateService)
+        return NotificationSenderService(notificationRepository, localNotificationService, templateService, userRepository)
     }
 }

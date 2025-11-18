@@ -28,6 +28,7 @@ data class User(
     val courseId: String? = null,       // For students: Reference to Course document ID
     val section: String? = null,        // Student section (e.g., "A", "B", "1A")
     val enrollmentYear: String? = null, // Year enrolled (e.g., "2024-2025")
+    val lastAcademicPeriodId: String? = null, // Last academic period the student was in (for year level progression)
     
     // Teacher-specific fields
     val departmentCourseId: String? = null, // For teachers: Reference to Course document ID (department they teach in)
@@ -47,7 +48,8 @@ data class User(
     val lastLoginAt: Long? = null,
     val passwordChangedAt: Long? = null,
     val mustChangePassword: Boolean = false,
-    val accountSource: String = "MANUAL" // "MANUAL" or "PRE_REGISTERED"
+    val accountSource: String = "MANUAL", // "MANUAL" or "PRE_REGISTERED"
+    val actualEmail: String? = null // Actual email from CSV/pre-registration (for password reset)
 )
 
 enum class UserRole {

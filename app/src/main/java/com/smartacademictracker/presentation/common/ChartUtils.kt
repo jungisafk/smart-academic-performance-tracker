@@ -10,10 +10,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
+import com.github.mikephil.charting.components.YAxis
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
+import com.github.mikephil.charting.renderer.YAxisRenderer
+import com.github.mikephil.charting.utils.ViewPortHandler
+import com.github.mikephil.charting.utils.Transformer
+import android.graphics.Canvas
 import com.smartacademictracker.data.model.GradePeriod
 
 object ChartUtils {
@@ -120,6 +125,14 @@ object ChartUtils {
         setScaleEnabled(true)
         setPinchZoom(true)
         
+        // Calculate dynamic Y-axis range based on actual data
+        val minGrade = entries.minOfOrNull { it.y } ?: 70f
+        val maxGrade = entries.maxOfOrNull { it.y } ?: 100f
+        // Ensure minimum is at least 70, but allow lower if data requires it
+        val axisMin = minOf(minGrade - 2f, 70f).coerceAtLeast(0f)
+        // Ensure maximum is at least 100, but allow higher if data requires it
+        val axisMax = maxOf(maxGrade + 5f, 100f)
+        
         // Configure axes
         xAxis.apply {
             position = XAxis.XAxisPosition.BOTTOM
@@ -135,12 +148,65 @@ object ChartUtils {
         
         axisLeft.apply {
             setDrawGridLines(true)
-            axisMinimum = 0f
-            axisMaximum = 100f
-            granularity = 10f
+            axisMinimum = axisMin
+            axisMaximum = axisMax
+            granularity = 1f
+            setLabelCount(8, false) // Allow chart to determine positions, but show up to 8 labels
+            textColor = android.graphics.Color.parseColor("#666666")
+            textSize = 11f
+            setValueFormatter(object : ValueFormatter() {
+                override fun getFormattedValue(value: Float): String {
+                    val intValue = value.toInt()
+                    // Show 70, 74, 75, and then every 5 after that (80, 85, 90, 95, 100)
+                    return when {
+                        intValue == 70 -> "70"
+                        intValue == 74 -> "74"
+                        intValue == 75 -> "75"
+                        intValue % 5 == 0 && intValue >= 80 -> intValue.toString()
+                        else -> ""
+                    }
+                }
+            })
         }
         
         axisRight.isEnabled = false
+        
+        // Set custom Y-axis renderer on the chart to color 74 red
+        val leftAxis = axisLeft
+        val customRenderer = object : YAxisRenderer(viewPortHandler, leftAxis, getTransformer(YAxis.AxisDependency.LEFT)) {
+            override fun renderAxisLabels(canvas: Canvas?) {
+                if (!mYAxis.isEnabled || !mYAxis.isDrawLabelsEnabled || canvas == null) return
+                
+                val positions = getTransformedPositions()
+                if (positions.isEmpty()) return
+                
+                val labelCount = positions.size / 2
+                
+                for (i in 0 until labelCount) {
+                    val y = positions[i * 2 + 1]
+                    if (y < viewPortHandler.contentTop() || y > viewPortHandler.contentBottom()) continue
+                    
+                    val value = if (i < mYAxis.mEntries.size) mYAxis.mEntries[i] else 0f
+                    val label = mYAxis.getFormattedLabel(i)
+                    
+                    if (label.isNotEmpty()) {
+                        // Create a copy of the paint to avoid affecting other labels
+                        val paint = android.graphics.Paint(mAxisLabelPaint)
+                        // Set color to red for 74, default for others
+                        if (value.toInt() == 74) {
+                            paint.color = android.graphics.Color.parseColor("#F44336") // Red
+                        } else {
+                            paint.color = android.graphics.Color.parseColor("#666666") // Gray
+                        }
+                        
+                        val x = viewPortHandler.offsetLeft()
+                        val yOffset = mYAxis.yOffset
+                        canvas.drawText(label, x, y + yOffset, paint)
+                    }
+                }
+            }
+        }
+        rendererLeftYAxis = customRenderer
         
         // Animate chart
         animateX(1000)
@@ -175,6 +241,14 @@ object ChartUtils {
         setScaleEnabled(true)
         setPinchZoom(true)
         
+        // Calculate dynamic Y-axis range based on actual data
+        val minGrade = entries.minOfOrNull { it.y } ?: 70f
+        val maxGrade = entries.maxOfOrNull { it.y } ?: 100f
+        // Ensure minimum is at least 70, but allow lower if data requires it
+        val axisMin = minOf(minGrade - 2f, 70f).coerceAtLeast(0f)
+        // Ensure maximum is at least 100, but allow higher if data requires it
+        val axisMax = maxOf(maxGrade + 5f, 100f)
+        
         // Configure axes
         xAxis.apply {
             position = XAxis.XAxisPosition.BOTTOM
@@ -190,12 +264,65 @@ object ChartUtils {
         
         axisLeft.apply {
             setDrawGridLines(true)
-            axisMinimum = 0f
-            axisMaximum = 100f
-            granularity = 10f
+            axisMinimum = axisMin
+            axisMaximum = axisMax
+            granularity = 1f
+            setLabelCount(8, false) // Allow chart to determine positions, but show up to 8 labels
+            textColor = android.graphics.Color.parseColor("#666666")
+            textSize = 11f
+            setValueFormatter(object : ValueFormatter() {
+                override fun getFormattedValue(value: Float): String {
+                    val intValue = value.toInt()
+                    // Show 70, 74, 75, and then every 5 after that (80, 85, 90, 95, 100)
+                    return when {
+                        intValue == 70 -> "70"
+                        intValue == 74 -> "74"
+                        intValue == 75 -> "75"
+                        intValue % 5 == 0 && intValue >= 80 -> intValue.toString()
+                        else -> ""
+                    }
+                }
+            })
         }
         
         axisRight.isEnabled = false
+        
+        // Set custom Y-axis renderer on the chart to color 74 red
+        val leftAxis = axisLeft
+        val customRenderer = object : YAxisRenderer(viewPortHandler, leftAxis, getTransformer(YAxis.AxisDependency.LEFT)) {
+            override fun renderAxisLabels(canvas: Canvas?) {
+                if (!mYAxis.isEnabled || !mYAxis.isDrawLabelsEnabled || canvas == null) return
+                
+                val positions = getTransformedPositions()
+                if (positions.isEmpty()) return
+                
+                val labelCount = positions.size / 2
+                
+                for (i in 0 until labelCount) {
+                    val y = positions[i * 2 + 1]
+                    if (y < viewPortHandler.contentTop() || y > viewPortHandler.contentBottom()) continue
+                    
+                    val value = if (i < mYAxis.mEntries.size) mYAxis.mEntries[i] else 0f
+                    val label = mYAxis.getFormattedLabel(i)
+                    
+                    if (label.isNotEmpty()) {
+                        // Create a copy of the paint to avoid affecting other labels
+                        val paint = android.graphics.Paint(mAxisLabelPaint)
+                        // Set color to red for 74, default for others
+                        if (value.toInt() == 74) {
+                            paint.color = android.graphics.Color.parseColor("#F44336") // Red
+                        } else {
+                            paint.color = android.graphics.Color.parseColor("#666666") // Gray
+                        }
+                        
+                        val x = viewPortHandler.offsetLeft()
+                        val yOffset = mYAxis.yOffset
+                        canvas.drawText(label, x, y + yOffset, paint)
+                    }
+                }
+            }
+        }
+        rendererLeftYAxis = customRenderer
         
         // Animate chart
         animateX(1000)

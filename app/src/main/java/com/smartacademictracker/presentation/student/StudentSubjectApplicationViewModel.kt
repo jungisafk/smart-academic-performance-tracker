@@ -9,11 +9,14 @@ import com.smartacademictracker.data.repository.StudentApplicationRepository
 import com.smartacademictracker.data.repository.SubjectRepository
 import com.smartacademictracker.data.repository.UserRepository
 import com.smartacademictracker.data.repository.YearLevelRepository
+import com.smartacademictracker.data.manager.StudentDataCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 
 @HiltViewModel
@@ -22,7 +25,10 @@ class StudentSubjectApplicationViewModel @Inject constructor(
     private val subjectRepository: SubjectRepository,
     private val yearLevelRepository: YearLevelRepository,
     private val studentApplicationRepository: StudentApplicationRepository,
-    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService
+    private val sectionAssignmentRepository: com.smartacademictracker.data.repository.SectionAssignmentRepository,
+    private val studentEnrollmentRepository: com.smartacademictracker.data.repository.StudentEnrollmentRepository,
+    private val notificationSenderService: com.smartacademictracker.data.notification.NotificationSenderService,
+    private val studentDataCache: StudentDataCache
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StudentSubjectApplicationUiState())
@@ -40,16 +46,36 @@ class StudentSubjectApplicationViewModel @Inject constructor(
     private val _selectedCourse = MutableStateFlow("")
     val selectedCourse: StateFlow<String> = _selectedCourse.asStateFlow()
 
-    fun loadAvailableSubjects() {
+    // Map to track which subjects the student can apply for (considering enrollment status)
+    private val _canApplyForSubject = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val canApplyForSubject: StateFlow<Map<String, Boolean>> = _canApplyForSubject.asStateFlow()
+
+    init {
+        // Load cached applications immediately if available (these are already student-specific)
+        val cachedApplications = studentDataCache.cachedStudentApplications.value
+        if (cachedApplications.isNotEmpty() && studentDataCache.isCacheValid()) {
+            _myApplications.value = cachedApplications
+        }
+        // Note: Don't load cached subjects here - they need to be filtered first
+        // Filtering will happen in loadAvailableSubjects()
+    }
+
+    fun loadAvailableSubjects(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // Check cache first
+            val cachedSubjects = studentDataCache.cachedSubjects.value
+            
+            // Only show loading if no cached data or cache is invalid
+            if (forceRefresh || !studentDataCache.isCacheValid() || cachedSubjects.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            }
             
             try {
                 // Get current user to filter by year level and course
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        // Load all year levels to create a map for level number matching
+                        // Load all year levels first (needed for filtering)
                         val allYearLevelsResult = yearLevelRepository.getAllYearLevels()
                         allYearLevelsResult.onSuccess { allYearLevels ->
                             // Create a map of yearLevelId -> level number
@@ -58,36 +84,9 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                             // Get student's year level number
                             val studentYearLevelNumber = user.yearLevelId?.let { yearLevelIdToLevelMap[it] }
                             
-                            println("DEBUG: StudentSubjectApplicationViewModel - Student YearLevelId: ${user.yearLevelId}, YearLevelNumber: $studentYearLevelNumber")
-                            
-                            // Load all active subjects
-                            val subjectsResult = subjectRepository.getAllSubjects()
-                            subjectsResult.onSuccess { subjectsList ->
-                                println("DEBUG: StudentSubjectApplicationViewModel - Loaded ${subjectsList.size} total subjects")
-                                
-                                // Debug: Log ALL subjects before filtering
-                                println("DEBUG: StudentSubjectApplicationViewModel - === ALL SUBJECTS BEFORE FILTERING ===")
-                                subjectsList.forEachIndexed { index, subject ->
-                                    val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
-                                    println("DEBUG: StudentSubjectApplicationViewModel - Subject[$index]: ${subject.name} (${subject.code}) - Type: ${subject.subjectType}, YearLevelId: ${subject.yearLevelId} (Level: $subjectLevel, ${subject.yearLevelName}), CourseId: ${subject.courseId}, Active: ${subject.active}")
-                                }
-                                
-                                // Debug: Log student's year level and course
-                                println("DEBUG: StudentSubjectApplicationViewModel - Student YearLevelId: ${user.yearLevelId}, YearLevelName: ${user.yearLevelName}, YearLevelNumber: $studentYearLevelNumber")
-                                println("DEBUG: StudentSubjectApplicationViewModel - Student CourseId: ${user.courseId}, CourseCode: ${user.courseCode}")
-                                
-                                // Debug: Count minor subjects in all subjects
-                                val allMinorSubjects = subjectsList.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
-                                println("DEBUG: StudentSubjectApplicationViewModel - Total minor subjects in database: ${allMinorSubjects.size}")
-                                allMinorSubjects.forEachIndexed { index, subject ->
-                                    val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
-                                    println("DEBUG: StudentSubjectApplicationViewModel - All Minor[$index]: ${subject.name} (${subject.code}) - YearLevelId: ${subject.yearLevelId} (Level: $subjectLevel, ${subject.yearLevelName}), CourseId: ${subject.courseId}, Active: ${subject.active}")
-                                }
-                                
-                                // Filter subjects based on user's year level and course
-                                // - Major subjects: must match both year level ID AND course
-                                // - Minor subjects: must match year level NUMBER (not ID) to allow cross-course matching
-                                val filteredSubjects = subjectsList.filter { subject ->
+                            // Helper function to filter subjects
+                            fun filterSubjectsList(subjects: List<Subject>): List<Subject> {
+                                return subjects.filter { subject ->
                                     val subjectLevel = yearLevelIdToLevelMap[subject.yearLevelId] ?: 0
                                     val isActive = subject.active
                                     val matchesYearLevelById = user.yearLevelId == null || subject.yearLevelId == user.yearLevelId
@@ -97,58 +96,130 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                                     
                                     // For major subjects: match by year level ID and course
                                     // For minor subjects: match by year level NUMBER (allows cross-course matching)
-                                    val passesFilter = if (isMinor) {
+                                    if (isMinor) {
                                         isActive && matchesYearLevelByNumber
                                     } else {
                                         isActive && matchesYearLevelById && matchesCourse
                                     }
-                                    
-                                    // Debug each minor subject's filter evaluation
-                                    if (subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR) {
-                                        println("DEBUG: StudentSubjectApplicationViewModel - Minor Subject Filter Check: ${subject.name} (${subject.code})")
-                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Is Active: $isActive")
-                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Subject Level: $subjectLevel, Student Level: $studentYearLevelNumber")
-                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Matches YearLevel by Number: $matchesYearLevelByNumber")
-                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Is Minor: $isMinor")
-                                        println("DEBUG: StudentSubjectApplicationViewModel -   - Passes Filter: $passesFilter")
+                                }
+                            }
+                            
+                            // Use cached data immediately if available and valid, but FILTER it first
+                            if (!forceRefresh && studentDataCache.isCacheValid() && cachedSubjects.isNotEmpty()) {
+                                val filteredCachedSubjects = filterSubjectsList(cachedSubjects)
+                                
+                                // Load section assignments to filter out subjects without teachers
+                                val studentCourseId = user.courseId
+                                val allAssignments = mutableListOf<com.smartacademictracker.data.model.SectionAssignment>()
+                                
+                                // Load assignments for each filtered subject in parallel
+                                coroutineScope {
+                                    val assignmentDeferreds = filteredCachedSubjects.map { subject ->
+                                        async {
+                                            val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                                            val result = if (isMinor) {
+                                                sectionAssignmentRepository.getSectionAssignmentsBySubject(subject.id)
+                                            } else {
+                                                if (studentCourseId != null) {
+                                                    sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subject.id, studentCourseId)
+                                                } else {
+                                                    return@async emptyList()
+                                                }
+                                            }
+                                            result.getOrNull() ?: emptyList()
+                                        }
                                     }
                                     
-                                    passesFilter
+                                    // Wait for all assignments to load
+                                    val assignmentResults = assignmentDeferreds.map { it.await() }
+                                    allAssignments.addAll(assignmentResults.flatten())
                                 }
                                 
-                                _availableSubjects.value = filteredSubjects
+                                // Filter subjects to only include those with at least one active teacher assignment
+                                val subjectsWithTeachers = filteredCachedSubjects.filter { subject ->
+                                    allAssignments.any { assignment ->
+                                        assignment.subjectId == subject.id &&
+                                        assignment.teacherId.isNotEmpty() &&
+                                        assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                                    }
+                                }
+                                
+                                _availableSubjects.value = subjectsWithTeachers
                                 _selectedYearLevel.value = user.yearLevelName ?: ""
                                 _selectedCourse.value = user.courseCode ?: ""
                                 _uiState.value = _uiState.value.copy(isLoading = false)
                                 
-                                val majorCount = filteredSubjects.count { it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR }
-                                val minorCount = filteredSubjects.count { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
-                                println("DEBUG: StudentSubjectApplicationViewModel - Loaded ${filteredSubjects.size} subjects for ${user.yearLevelName} ${user.courseCode} (${majorCount} major, ${minorCount} minor)")
+                                // Update canApplyForSubject map after loading subjects
+                                updateCanApplyForSubjects(user.id)
+                            }
+                            
+                            // Load all active subjects in background
+                            val subjectsResult = subjectRepository.getAllSubjects()
+                            subjectsResult.onSuccess { subjectsList ->
+                                // Update cache with all subjects (unfiltered)
+                                studentDataCache.updateSubjects(subjectsList)
                                 
-                                // Debug: Log details of minor subjects
-                                val minorSubjects = filteredSubjects.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR }
-                                println("DEBUG: StudentSubjectApplicationViewModel - Minor subjects found: ${minorSubjects.size}")
-                                minorSubjects.forEachIndexed { index, subject ->
-                                    println("DEBUG: StudentSubjectApplicationViewModel - Minor[$index]: ${subject.name} (${subject.code}) - YearLevel: ${subject.yearLevelId} (${subject.yearLevelName}), CourseId: ${subject.courseId}")
+                                // Filter subjects based on user's year level and course
+                                val filteredSubjects = filterSubjectsList(subjectsList)
+                                
+                                // Load section assignments to filter out subjects without teachers
+                                val studentCourseId = user.courseId
+                                val allAssignments = mutableListOf<com.smartacademictracker.data.model.SectionAssignment>()
+                                
+                                // Load assignments for each filtered subject in parallel
+                                coroutineScope {
+                                    val assignmentDeferreds = filteredSubjects.map { subject ->
+                                        async {
+                                            val isMinor = subject.subjectType == com.smartacademictracker.data.model.SubjectType.MINOR
+                                            val result = if (isMinor) {
+                                                sectionAssignmentRepository.getSectionAssignmentsBySubject(subject.id)
+                                            } else {
+                                                if (studentCourseId != null) {
+                                                    sectionAssignmentRepository.getSectionAssignmentsBySubjectAndCourse(subject.id, studentCourseId)
+                                                } else {
+                                                    return@async emptyList()
+                                                }
+                                            }
+                                            result.getOrNull() ?: emptyList()
+                                        }
+                                    }
+                                    
+                                    // Wait for all assignments to load
+                                    val assignmentResults = assignmentDeferreds.map { it.await() }
+                                    allAssignments.addAll(assignmentResults.flatten())
                                 }
                                 
-                                // Debug: Log details of major subjects
-                                val majorSubjects = filteredSubjects.filter { it.subjectType == com.smartacademictracker.data.model.SubjectType.MAJOR }
-                                println("DEBUG: StudentSubjectApplicationViewModel - Major subjects found: ${majorSubjects.size}")
-                                majorSubjects.forEachIndexed { index, subject ->
-                                    println("DEBUG: StudentSubjectApplicationViewModel - Major[$index]: ${subject.name} (${subject.code}) - YearLevel: ${subject.yearLevelId} (${subject.yearLevelName}), CourseId: ${subject.courseId}")
+                                // Filter subjects to only include those with at least one active teacher assignment
+                                val subjectsWithTeachers = filteredSubjects.filter { subject ->
+                                    allAssignments.any { assignment ->
+                                        assignment.subjectId == subject.id &&
+                                        assignment.teacherId.isNotEmpty() &&
+                                        assignment.status == com.smartacademictracker.data.model.AssignmentStatus.ACTIVE
+                                    }
                                 }
+                                
+                                _availableSubjects.value = subjectsWithTeachers
+                                _selectedYearLevel.value = user.yearLevelName ?: ""
+                                _selectedCourse.value = user.courseCode ?: ""
+                                _uiState.value = _uiState.value.copy(isLoading = false)
+                                
+                                // Update canApplyForSubject map after loading subjects
+                                updateCanApplyForSubjects(user.id)
                             }.onFailure { exception ->
-                                _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
-                                    error = exception.message ?: "Failed to load subjects"
-                                )
+                                if (!studentDataCache.isCacheValid()) {
+                                    _uiState.value = _uiState.value.copy(
+                                        isLoading = false,
+                                        error = exception.message ?: "Failed to load subjects"
+                                    )
+                                }
                             }
                         }.onFailure { exception ->
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = exception.message ?: "Failed to load year levels"
-                            )
+                            if (!studentDataCache.isCacheValid()) {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = exception.message ?: "Failed to load year levels"
+                                )
+                            }
                         }
                     } else {
                         _uiState.value = _uiState.value.copy(
@@ -171,36 +242,95 @@ class StudentSubjectApplicationViewModel @Inject constructor(
         }
     }
 
-    fun loadMyApplications() {
+    fun loadMyApplications(forceRefresh: Boolean = false) {
         viewModelScope.launch {
+            // Check cache first
+            val cachedApplications = studentDataCache.cachedStudentApplications.value
+            
+            // Use cached data immediately if available and valid
+            if (!forceRefresh && studentDataCache.isCacheValid() && cachedApplications.isNotEmpty()) {
+                val currentUserResult = userRepository.getCurrentUser()
+                currentUserResult.onSuccess { user ->
+                    if (user != null) {
+                        _myApplications.value = cachedApplications.filter { it.studentId == user.id }
+                        // Update canApplyForSubject map
+                        updateCanApplyForSubjects(user.id)
+                    }
+                }
+            }
+            
             try {
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        println("DEBUG: StudentSubjectApplicationViewModel - Loading applications for user: ${user.id}")
                         val applicationsResult = studentApplicationRepository.getApplicationsByStudent(user.id)
                         applicationsResult.onSuccess { applicationsList ->
                             _myApplications.value = applicationsList
-                            println("DEBUG: StudentSubjectApplicationViewModel - Loaded ${applicationsList.size} applications")
-                            applicationsList.forEach { app ->
-                                println("DEBUG: Application - ID: ${app.id}, Subject: ${app.subjectName}, Status: ${app.status}")
-                            }
+                            studentDataCache.updateStudentApplications(applicationsList)
+                            // Update canApplyForSubject map after loading applications
+                            updateCanApplyForSubjects(user.id)
                         }.onFailure { exception ->
-                            println("DEBUG: StudentSubjectApplicationViewModel - Failed to load applications: ${exception.message}")
-                            _uiState.value = _uiState.value.copy(error = "Failed to load applications: ${exception.message}")
+                            if (!studentDataCache.isCacheValid()) {
+                                _uiState.value = _uiState.value.copy(error = "Failed to load applications: ${exception.message}")
+                            }
                         }
-                    } else {
-                        println("DEBUG: StudentSubjectApplicationViewModel - User is null")
                     }
                 }.onFailure { exception ->
-                    println("DEBUG: StudentSubjectApplicationViewModel - Failed to get current user: ${exception.message}")
-                    _uiState.value = _uiState.value.copy(error = "Failed to get user: ${exception.message}")
+                    if (!studentDataCache.isCacheValid()) {
+                        _uiState.value = _uiState.value.copy(error = "Failed to get user: ${exception.message}")
+                    }
                 }
             } catch (e: Exception) {
-                println("DEBUG: StudentSubjectApplicationViewModel - Exception loading applications: ${e.message}")
-                _uiState.value = _uiState.value.copy(error = "Exception loading applications: ${e.message}")
+                if (!studentDataCache.isCacheValid()) {
+                    _uiState.value = _uiState.value.copy(error = "Exception loading applications: ${e.message}")
+                }
             }
         }
+    }
+
+    /**
+     * Update the canApplyForSubject map by checking enrollment status for each subject
+     * Checks all available subjects, not just those with applications
+     */
+    private suspend fun updateCanApplyForSubjects(studentId: String) {
+        val canApplyMap = mutableMapOf<String, Boolean>()
+        
+        // Get all subject IDs from available subjects
+        val allSubjectIds = _availableSubjects.value.map { it.id }.distinct()
+        
+        // Check each subject
+        for (subjectId in allSubjectIds) {
+            val applications = _myApplications.value.filter { it.subjectId == subjectId }
+            
+            // Check if there's a PENDING application - can't apply
+            val hasPending = applications.any { it.status == StudentApplicationStatus.PENDING }
+            if (hasPending) {
+                canApplyMap[subjectId] = false
+                continue
+            }
+            
+            // Check if there's an APPROVED application - need to check enrollment
+            val hasApproved = applications.any { it.status == StudentApplicationStatus.APPROVED }
+            if (hasApproved) {
+                // Check enrollment status
+                val enrollmentsResult = studentEnrollmentRepository.getStudentEnrollmentsBySubject(studentId, subjectId)
+                val hasActiveEnrollment = if (enrollmentsResult.isSuccess) {
+                    val enrollments = enrollmentsResult.getOrNull().orEmpty()
+                    enrollments.any { 
+                        it.status == com.smartacademictracker.data.model.EnrollmentStatus.ACTIVE 
+                    }
+                } else {
+                    false
+                }
+                // Can apply if there's APPROVED application but NO active enrollment (was KICKED/DROPPED)
+                canApplyMap[subjectId] = !hasActiveEnrollment
+            } else {
+                // No PENDING or APPROVED application - can apply
+                canApplyMap[subjectId] = true
+            }
+        }
+        
+        _canApplyForSubject.value = canApplyMap
     }
 
     fun applyForSubject(subjectId: String) {
@@ -214,17 +344,59 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                 val currentUserResult = userRepository.getCurrentUser()
                 currentUserResult.onSuccess { user ->
                     if (user != null) {
-                        // Check if already applied
-                        val hasAppliedResult = studentApplicationRepository.hasStudentAppliedForSubject(user.id, subjectId)
-                        hasAppliedResult.onSuccess { hasApplied ->
-                            if (hasApplied) {
-                                _uiState.value = _uiState.value.copy(
-                                    applyingSubjects = _uiState.value.applyingSubjects - subjectId,
-                                    error = "You have already applied for this subject"
-                                )
-                            } else {
-                                // Get subject details
-                                val subjectResult = subjectRepository.getSubjectById(subjectId)
+                        // IMPORTANT: Check enrollment status first
+                        // If student was KICKED or DROPPED, allow reapplication even if there's an APPROVED application
+                        // Check ALL enrollments for this student in this subject (including KICKED/DROPPED)
+                        val enrollmentsResult = studentEnrollmentRepository.getStudentEnrollmentsBySubject(user.id, subjectId)
+                        val hasActiveEnrollment = if (enrollmentsResult.isSuccess) {
+                            val enrollments = enrollmentsResult.getOrNull().orEmpty()
+                            enrollments.any { 
+                                it.status == com.smartacademictracker.data.model.EnrollmentStatus.ACTIVE 
+                            }
+                        } else {
+                            false
+                        }
+                        
+                        if (hasActiveEnrollment) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "You are already enrolled in this subject"
+                            )
+                            return@onSuccess
+                        }
+                        
+                        // Check for PENDING applications - always block these
+                        val pendingApplication = _myApplications.value.find { 
+                            it.subjectId == subjectId && 
+                            it.status == StudentApplicationStatus.PENDING 
+                        }
+                        if (pendingApplication != null) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "You already have a pending application for this subject"
+                            )
+                            return@onSuccess
+                        }
+                        
+                        // Check for APPROVED applications - only block if student has ACTIVE enrollment
+                        // If student was KICKED or DROPPED, allow reapplication
+                        val approvedApplication = _myApplications.value.find { 
+                            it.subjectId == subjectId && 
+                            it.status == StudentApplicationStatus.APPROVED 
+                        }
+                        if (approvedApplication != null && hasActiveEnrollment) {
+                            _uiState.value = _uiState.value.copy(
+                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
+                                error = "You are already enrolled in this subject"
+                            )
+                            return@onSuccess
+                        }
+                        // If there's an APPROVED application but NO active enrollment,
+                        // the student was likely KICKED or DROPPED - allow reapplication
+                        
+                        // Proceed with application creation
+                        // Get subject details
+                        val subjectResult = subjectRepository.getSubjectById(subjectId)
                                 subjectResult.onSuccess { subject ->
                                     // Validate that the subject has an assigned teacher
                                     if (subject.teacherId == null || subject.teacherId.isEmpty()) {
@@ -261,19 +433,20 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                             isApplicationSuccess = true
                                         )
-                                        println("DEBUG: StudentSubjectApplicationViewModel - Application created successfully with ID: ${createdApplication.id}")
                                         
                                         // Add a small delay to ensure the application is saved before reloading
                                         kotlinx.coroutines.delay(500)
                                         
                                         // Reload applications to update UI
-                                        loadMyApplications()
+                                        loadMyApplications(forceRefresh = true)
+                                        
+                                        // Update canApplyForSubject map after creating application
+                                        updateCanApplyForSubjects(user.id)
                                     }.onFailure { exception ->
                                         _uiState.value = _uiState.value.copy(
                                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
                                             error = exception.message ?: "Failed to create application"
                                         )
-                                        println("DEBUG: StudentSubjectApplicationViewModel - Failed to create application: ${exception.message}")
                                     }
                                 }.onFailure { exception ->
                                     _uiState.value = _uiState.value.copy(
@@ -281,13 +454,6 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                                         error = exception.message ?: "Failed to get subject details"
                                     )
                                 }
-                            }
-                        }.onFailure { exception ->
-                            _uiState.value = _uiState.value.copy(
-                                applyingSubjects = _uiState.value.applyingSubjects - subjectId,
-                                error = exception.message ?: "Failed to check application status"
-                            )
-                        }
                     } else {
                         _uiState.value = _uiState.value.copy(
                             applyingSubjects = _uiState.value.applyingSubjects - subjectId,
@@ -324,8 +490,16 @@ class StudentSubjectApplicationViewModel @Inject constructor(
     private fun filterSubjects() {
         viewModelScope.launch {
             try {
-                val subjectsResult = subjectRepository.getAllSubjects()
-                subjectsResult.onSuccess { subjectsList ->
+                // Check cache first
+                val cachedSubjects = studentDataCache.cachedSubjects.value
+                val subjectsList = if (cachedSubjects.isNotEmpty() && studentDataCache.isCacheValid()) {
+                    cachedSubjects
+                } else {
+                    val subjectsResult = subjectRepository.getAllSubjects()
+                    subjectsResult.getOrElse { emptyList() }
+                }
+                
+                if (subjectsList.isNotEmpty()) {
                     // Filter subjects based on selected year level and course
                     // - Major subjects: must match both year level AND course
                     // - Minor subjects: must match year level (regardless of course)
@@ -339,13 +513,13 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                     _availableSubjects.value = filteredSubjects
                 }
             } catch (e: Exception) {
-                println("DEBUG: StudentSubjectApplicationViewModel - Error filtering subjects: ${e.message}")
+                // Silently fail - use cached data if available
             }
         }
     }
 
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.value = _uiState.value.copy(error = null, successMessage = null)
     }
     
     fun clearApplicationSuccess() {
@@ -353,8 +527,36 @@ class StudentSubjectApplicationViewModel @Inject constructor(
     }
     
     fun refreshData() {
-        loadAvailableSubjects()
-        loadMyApplications()
+        loadAvailableSubjects(forceRefresh = true)
+        loadMyApplications(forceRefresh = true)
+    }
+    
+    fun cancelApplication(applicationId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            
+            try {
+                val result = studentApplicationRepository.deleteApplication(applicationId)
+                result.onSuccess {
+                    // Reload applications to update UI
+                    loadMyApplications(forceRefresh = true)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        successMessage = "Application cancelled successfully"
+                    )
+                }.onFailure { exception ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = exception.message ?: "Failed to cancel application"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to cancel application"
+                )
+            }
+        }
     }
     
     /**
@@ -376,7 +578,7 @@ class StudentSubjectApplicationViewModel @Inject constructor(
                 )
             }
         } catch (e: Exception) {
-            android.util.Log.e("StudentApplication", "Failed to notify teacher of student application: ${e.message}")
+            // Silently fail notification
         }
     }
 }
@@ -385,5 +587,6 @@ data class StudentSubjectApplicationUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val applyingSubjects: Set<String> = emptySet(),
-    val isApplicationSuccess: Boolean = false
+    val isApplicationSuccess: Boolean = false,
+    val successMessage: String? = null
 )
