@@ -3,7 +3,7 @@ package com.smartacademictracker.presentation.student
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartacademictracker.data.model.User
-import com.smartacademictracker.data.repository.EnrollmentRepository
+import com.smartacademictracker.data.repository.StudentEnrollmentRepository
 import com.smartacademictracker.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +16,7 @@ import javax.inject.Inject
 @HiltViewModel
 class StudentProfileViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val enrollmentRepository: EnrollmentRepository
+    private val studentEnrollmentRepository: StudentEnrollmentRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StudentProfileUiState())
@@ -86,16 +86,26 @@ class StudentProfileViewModel @Inject constructor(
     
     private fun loadEnrollmentsCount(userId: String) {
         viewModelScope.launch {
-            val enrollmentsResult = enrollmentRepository.getEnrollmentsByStudent(userId)
-            enrollmentsResult.onSuccess { enrollments ->
+            try {
+                val enrollmentsResult = studentEnrollmentRepository.getEnrollmentsByStudent(userId)
+                enrollmentsResult.onSuccess { enrollments ->
+                    android.util.Log.d("StudentProfileViewModel", "Loaded ${enrollments.size} enrollments for student: $userId")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        enrolledSubjects = enrollments.size
+                    )
+                }.onFailure { exception ->
+                    android.util.Log.e("StudentProfileViewModel", "Failed to load enrollments: ${exception.message}", exception)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = exception.message ?: "Failed to load enrollments"
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("StudentProfileViewModel", "Exception loading enrollments: ${e.message}", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    enrolledSubjects = enrollments.size
-                )
-            }.onFailure { exception ->
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = exception.message ?: "Failed to load enrollments"
+                    error = e.message ?: "Failed to load enrollments"
                 )
             }
         }

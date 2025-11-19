@@ -456,17 +456,24 @@ class UserRepository @Inject constructor(
         userType: UserRole
     ): Result<User> {
         return try {
-            // Check if login is allowed (rate limiting)
-            when (val attemptResult = loginAttemptTracker.checkLoginAllowed(userId)) {
+            // Normalize userId (trim whitespace) to ensure consistent lockout checks
+            val normalizedUserId = userId.trim()
+            
+            // Check if login is allowed (rate limiting) - check using the exact userId being attempted
+            when (val attemptResult = loginAttemptTracker.checkLoginAllowed(normalizedUserId)) {
                 is com.smartacademictracker.data.model.LoginAttemptResult.Locked -> {
+                    android.util.Log.w("UserRepository", "Login blocked - account locked for userId: $normalizedUserId")
                     return Result.failure(Exception(attemptResult.getLockMessage()))
                 }
-                else -> { /* Continue */ }
+                else -> { 
+                    android.util.Log.d("UserRepository", "Login allowed for userId: $normalizedUserId")
+                    /* Continue */ 
+                }
             }
             
-            // Convert ID to email format for Firebase
-            val convertedEmail = convertIdToEmail(userId, userType)
-            android.util.Log.d("UserRepository", "signInWithId - userId: $userId, converted email: $convertedEmail, userType: $userType")
+            // Convert ID to email format for Firebase (use normalized userId)
+            val convertedEmail = convertIdToEmail(normalizedUserId, userType)
+            android.util.Log.d("UserRepository", "signInWithId - userId: $normalizedUserId, converted email: $convertedEmail, userType: $userType")
             
             // Try to get actual email from User document first (for activated accounts)
             // Then try pre-registration (for accounts not yet activated)
@@ -476,11 +483,11 @@ class UserRepository @Inject constructor(
             try {
                 val userDoc = when (userType) {
                     UserRole.STUDENT -> {
-                        usersCollection.whereEqualTo("studentId", userId).limit(1).get().await()
+                        usersCollection.whereEqualTo("studentId", normalizedUserId).limit(1).get().await()
                             .documents.firstOrNull()
                     }
                     UserRole.TEACHER -> {
-                        usersCollection.whereEqualTo("teacherId", userId).limit(1).get().await()
+                        usersCollection.whereEqualTo("teacherId", normalizedUserId).limit(1).get().await()
                             .documents.firstOrNull()
                     }
                     else -> null
@@ -502,11 +509,11 @@ class UserRepository @Inject constructor(
             if (actualEmail.isNullOrBlank()) {
                 actualEmail = when (userType) {
                     UserRole.STUDENT -> {
-                        val preReg = preRegisteredRepository.getPreRegisteredStudent(userId).getOrNull()
+                        val preReg = preRegisteredRepository.getPreRegisteredStudent(normalizedUserId).getOrNull()
                         preReg?.email?.takeIf { it.isNotBlank() }
                     }
                     UserRole.TEACHER -> {
-                        val preReg = preRegisteredRepository.getPreRegisteredTeacher(userId).getOrNull()
+                        val preReg = preRegisteredRepository.getPreRegisteredTeacher(normalizedUserId).getOrNull()
                         preReg?.email?.takeIf { it.isNotBlank() }
                     }
                     else -> null
@@ -542,14 +549,16 @@ class UserRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 android.util.Log.e("UserRepository", "Firebase Auth sign in failed for all emails - last error: ${e.message}", e)
-                // Record failed attempt
-                when (val result = loginAttemptTracker.recordFailedAttempt(userId)) {
+                // Record failed attempt using normalized userId
+                when (val result = loginAttemptTracker.recordFailedAttempt(normalizedUserId)) {
                     is com.smartacademictracker.data.model.LoginAttemptResult.Failed -> {
+                        android.util.Log.w("UserRepository", "Failed attempt recorded for userId: $normalizedUserId, remaining: ${result.remainingAttempts}")
                         return Result.failure(
                             Exception("Invalid credentials. ${result.remainingAttempts} attempt(s) remaining.")
                         )
                     }
                     is com.smartacademictracker.data.model.LoginAttemptResult.Locked -> {
+                        android.util.Log.w("UserRepository", "Account locked for userId: $normalizedUserId")
                         return Result.failure(Exception(result.getLockMessage()))
                     }
                     else -> {
@@ -564,8 +573,9 @@ class UserRepository @Inject constructor(
             // Fetch user data
             val user = getUserById(firebaseUserId).getOrThrow()
             
-            // Clear login attempts on successful login
-            loginAttemptTracker.clearAttempts(userId)
+            // Clear login attempts on successful login using normalized userId
+            loginAttemptTracker.clearAttempts(normalizedUserId)
+            android.util.Log.d("UserRepository", "Successful login for userId: $normalizedUserId, cleared attempts")
             
             // Update last login
             updateLastLogin(firebaseUserId)

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Responsive dimensions for authentication screens -->
+    <!-- Base dimensions scaled for different screen sizes -->
+    <dimen name="auth_container_padding_horizontal">24dp</dimen>
+    <dimen name="auth_container_padding_top">32dp</dimen>
+    
+    <!-- Header -->
+    <dimen name="auth_logo_size">80dp</dimen>
+    <dimen name="auth_title_margin_top">12dp</dimen>
+    <dimen name="auth_subtitle_margin_top">4dp</dimen>
+    <dimen name="auth_header_bottom_margin">32dp</dimen>
+    
+    <!-- Card -->
+    <dimen name="auth_card_padding_horizontal">24dp</dimen>
+    <dimen name="auth_card_padding_vertical">32dp</dimen>
+    <dimen name="auth_card_border_radius">16dp</dimen>
+    <dimen name="auth_card_max_width">440dp</dimen>
+    
+    <!-- Card Icon -->
+    <dimen name="auth_card_icon_size">56dp</dimen>
+    <dimen name="auth_card_title_margin_top">16dp</dimen>
+    <dimen name="auth_card_subtitle_margin_top">8dp</dimen>
+    <dimen name="auth_card_section_bottom_margin">24dp</dimen>
+    
+    <!-- Role Selection -->
+    <dimen name="auth_role_label_margin_bottom">16dp</dimen>
+    <dimen name="auth_role_button_height">48dp</dimen>
+    <dimen name="auth_role_button_gap">12dp</dimen>
+    <dimen name="auth_role_section_bottom_margin">20dp</dimen>
+    
+    <!-- Input Fields -->
+    <dimen name="auth_input_height">48dp</dimen>
+    <dimen name="auth_input_border_radius">8dp</dimen>
+    <dimen name="auth_input_gap">12dp</dimen>
+    <dimen name="auth_input_icon_size">20dp</dimen>
+    <dimen name="auth_input_section_bottom_margin">24dp</dimen>
+    
+    <!-- Buttons -->
+    <dimen name="auth_button_height">48dp</dimen>
+    <dimen name="auth_button_border_radius">8dp</dimen>
+    <dimen name="auth_button_bottom_margin">16dp</dimen>
+    
+    <!-- Divider -->
+    <dimen name="auth_divider_margin_vertical">16dp</dimen>
+</resources>
+

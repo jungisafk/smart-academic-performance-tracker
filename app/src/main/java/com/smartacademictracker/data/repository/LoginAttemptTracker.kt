@@ -24,13 +24,24 @@ class LoginAttemptTracker @Inject constructor(
     }
     
     /**
+     * Normalize userId to ensure consistent lookups
+     * Trims whitespace and ensures consistent formatting
+     */
+    private fun normalizeUserId(userId: String): String {
+        return userId.trim()
+    }
+    
+    /**
      * Check if user is allowed to attempt login
      * @param userId The student ID or teacher ID
      * @return LoginAttemptResult indicating if login is allowed or account is locked
      */
     suspend fun checkLoginAllowed(userId: String): LoginAttemptResult {
         return try {
-            val doc = collection.document(userId).get().await()
+            // Normalize userId to ensure consistent lookups
+            val normalizedUserId = normalizeUserId(userId)
+            
+            val doc = collection.document(normalizedUserId).get().await()
             
             if (!doc.exists()) {
                 return LoginAttemptResult.Allowed
@@ -38,22 +49,31 @@ class LoginAttemptTracker @Inject constructor(
             
             val attempt = doc.toObject(LoginAttempt::class.java) ?: return LoginAttemptResult.Allowed
             
-            // Check if account is locked
-            if (attempt.lockedUntil != null && attempt.lockedUntil > System.currentTimeMillis()) {
-                return LoginAttemptResult.Locked(attempt.lockedUntil)
+            // Check if lockout has expired
+            if (attempt.lockedUntil != null) {
+                val currentTime = System.currentTimeMillis()
+                if (attempt.lockedUntil > currentTime) {
+                    // Still locked
+                    return LoginAttemptResult.Locked(attempt.lockedUntil)
+                } else {
+                    // Lockout expired, clear it
+                    clearAttempts(normalizedUserId)
+                    return LoginAttemptResult.Allowed
+                }
             }
             
             // Check if attempts should be reset (after ATTEMPT_RESET_DURATION)
             val timeSinceLastAttempt = System.currentTimeMillis() - attempt.lastAttemptAt
             if (timeSinceLastAttempt > ATTEMPT_RESET_DURATION) {
                 // Reset attempts
-                clearAttempts(userId)
+                clearAttempts(normalizedUserId)
                 return LoginAttemptResult.Allowed
             }
             
             LoginAttemptResult.Allowed
         } catch (e: Exception) {
             // If we can't check, allow the attempt (fail-open for availability)
+            android.util.Log.e("LoginAttemptTracker", "Error checking login allowed for userId: $userId", e)
             LoginAttemptResult.Allowed
         }
     }
@@ -71,23 +91,30 @@ class LoginAttemptTracker @Inject constructor(
         deviceInfo: String? = null
     ): LoginAttemptResult {
         return try {
-            val docRef = collection.document(userId)
+            // Normalize userId to ensure consistent lookups
+            val normalizedUserId = normalizeUserId(userId)
+            
+            val docRef = collection.document(normalizedUserId)
             val snapshot = docRef.get().await()
             
             val current = if (snapshot.exists()) {
-                snapshot.toObject(LoginAttempt::class.java) ?: LoginAttempt(id = userId, userId = userId)
+                snapshot.toObject(LoginAttempt::class.java) ?: LoginAttempt(id = normalizedUserId, userId = normalizedUserId)
             } else {
-                LoginAttempt(id = userId, userId = userId)
+                LoginAttempt(id = normalizedUserId, userId = normalizedUserId)
             }
             
-            // Check if account is already locked
-            if (current.lockedUntil != null && current.lockedUntil > System.currentTimeMillis()) {
+            // Check if account is already locked and lockout hasn't expired
+            val currentTime = System.currentTimeMillis()
+            if (current.lockedUntil != null && current.lockedUntil > currentTime) {
                 return LoginAttemptResult.Locked(current.lockedUntil)
             }
             
-            // Check if attempts should be reset
-            val timeSinceLastAttempt = System.currentTimeMillis() - current.lastAttemptAt
-            val newAttempts = if (timeSinceLastAttempt > ATTEMPT_RESET_DURATION) {
+            // If lockout expired, reset attempts
+            val shouldReset = current.lockedUntil != null && current.lockedUntil <= currentTime
+            
+            // Check if attempts should be reset (after ATTEMPT_RESET_DURATION or expired lockout)
+            val timeSinceLastAttempt = currentTime - current.lastAttemptAt
+            val newAttempts = if (shouldReset || timeSinceLastAttempt > ATTEMPT_RESET_DURATION) {
                 1 // Reset and start fresh
             } else {
                 current.attempts + 1
@@ -95,17 +122,17 @@ class LoginAttemptTracker @Inject constructor(
             
             // Determine if account should be locked
             val newLockout = if (newAttempts >= MAX_ATTEMPTS) {
-                System.currentTimeMillis() + LOCKOUT_DURATION
+                currentTime + LOCKOUT_DURATION
             } else {
                 null
             }
             
             // Save updated attempt record
             val updated = LoginAttempt(
-                id = userId,
-                userId = userId,
+                id = normalizedUserId,
+                userId = normalizedUserId,
                 attempts = newAttempts,
-                lastAttemptAt = System.currentTimeMillis(),
+                lastAttemptAt = currentTime,
                 lockedUntil = newLockout,
                 ipAddress = ipAddress,
                 deviceInfo = deviceInfo,
@@ -114,6 +141,8 @@ class LoginAttemptTracker @Inject constructor(
             
             docRef.set(updated).await()
             
+            android.util.Log.d("LoginAttemptTracker", "Recorded failed attempt for userId: $normalizedUserId, attempts: $newAttempts, lockedUntil: $newLockout")
+            
             // Return result
             if (newLockout != null) {
                 LoginAttemptResult.Locked(newLockout)
@@ -121,6 +150,7 @@ class LoginAttemptTracker @Inject constructor(
                 LoginAttemptResult.Failed(MAX_ATTEMPTS - newAttempts)
             }
         } catch (e: Exception) {
+            android.util.Log.e("LoginAttemptTracker", "Error recording failed attempt for userId: $userId", e)
             // If we can't record, return a generic failed result
             LoginAttemptResult.Failed(MAX_ATTEMPTS - 1)
         }
@@ -132,8 +162,11 @@ class LoginAttemptTracker @Inject constructor(
      */
     suspend fun clearAttempts(userId: String) {
         try {
-            collection.document(userId).delete().await()
+            val normalizedUserId = normalizeUserId(userId)
+            collection.document(normalizedUserId).delete().await()
+            android.util.Log.d("LoginAttemptTracker", "Cleared attempts for userId: $normalizedUserId")
         } catch (e: Exception) {
+            android.util.Log.e("LoginAttemptTracker", "Error clearing attempts for userId: $userId", e)
             // Ignore errors when clearing
         }
     }
@@ -144,7 +177,8 @@ class LoginAttemptTracker @Inject constructor(
      */
     suspend fun unlockAccount(userId: String): Result<Unit> {
         return try {
-            collection.document(userId).delete().await()
+            val normalizedUserId = normalizeUserId(userId)
+            collection.document(normalizedUserId).delete().await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -157,7 +191,8 @@ class LoginAttemptTracker @Inject constructor(
      */
     suspend fun getAttemptInfo(userId: String): Result<LoginAttempt?> {
         return try {
-            val doc = collection.document(userId).get().await()
+            val normalizedUserId = normalizeUserId(userId)
+            val doc = collection.document(normalizedUserId).get().await()
             val attempt = if (doc.exists()) {
                 doc.toObject(LoginAttempt::class.java)
             } else {

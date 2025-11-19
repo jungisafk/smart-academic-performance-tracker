@@ -11,7 +11,8 @@ data class User(
     // ID-based authentication fields
     val studentId: String? = null,      // For students: e.g., "2024-1234"
     val teacherId: String? = null,      // For teachers: e.g., "T-2024-001"
-    val employeeId: String? = null,     // Alternative employee identifier for teachers
+    val adminId: String? = null,        // For admins: e.g., "ADMIN-2024-001" or "A-2024-001"
+    val employeeId: String? = null,     // Alternative employee identifier for teachers/admins
     
     // Personal information
     val firstName: String = "",

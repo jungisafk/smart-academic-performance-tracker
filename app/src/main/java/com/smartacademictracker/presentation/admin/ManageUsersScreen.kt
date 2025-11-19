@@ -248,7 +248,11 @@ fun ManageUsersScreen(
                             val matchesSearch = searchQuery.isEmpty() ||
                                     user.firstName.contains(searchQuery, ignoreCase = true) ||
                                     user.lastName.contains(searchQuery, ignoreCase = true) ||
-                                    user.email.contains(searchQuery, ignoreCase = true)
+                                    user.email.contains(searchQuery, ignoreCase = true) ||
+                                    user.studentId?.contains(searchQuery, ignoreCase = true) == true ||
+                                    user.teacherId?.contains(searchQuery, ignoreCase = true) == true ||
+                                    user.adminId?.contains(searchQuery, ignoreCase = true) == true ||
+                                    user.employeeId?.contains(searchQuery, ignoreCase = true) == true
 
                             // Create a local variable for selectedRole
                             val currentSelectedRole = selectedRole
@@ -492,6 +496,28 @@ fun EnhancedUserCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF666666)
                         )
+                        
+                        // Display ID based on role
+                        val displayId = when (user.role.uppercase()) {
+                            "STUDENT" -> user.studentId
+                            "TEACHER" -> user.teacherId ?: user.employeeId
+                            "ADMIN" -> user.adminId ?: user.employeeId
+                            else -> null
+                        }
+                        
+                        if (displayId != null && displayId.isNotEmpty()) {
+                            Text(
+                                text = when (user.role.uppercase()) {
+                                    "STUDENT" -> "Student ID: $displayId"
+                                    "TEACHER" -> "Teacher ID: $displayId"
+                                    "ADMIN" -> "Admin ID: $displayId"
+                                    else -> "ID: $displayId"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF2196F3),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(6.dp))
 
