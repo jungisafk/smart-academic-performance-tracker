@@ -17,10 +17,12 @@ local.properties
 
 # Firebase
 google-services.json
+firebase.json
 firebase-debug.log
 firebase-debug.*.log
 firestore.rules
 firestore.indexes.json
+firestore_security_rules*.rules
 google-services.json.template
 
 # Personal/Sensitive Information
@@ -88,8 +90,10 @@ Thumbs.db
 *.apk
 *.aab
 
-# Data files (CSV samples, etc.)
+# Data files (CSV samples, templates, etc.)
 *.csv
+*_template.csv
+*_import*.csv
 sample_*.csv
 
 # Firebase scripts and migration files
@@ -109,3 +113,14 @@ firestore_security_rules_id_auth.rules
 # Documentation that may contain sensitive info
 *_SUMMARY.md
 *_INSTRUCTIONS.md
+*_TESTING*.md
+*_FLOWCHART.md
+*_DIAGRAM.md
+ARCHITECTURE_DESIGN*.html
+ARCHITECTURE_DESIGN*.md
+CSV_IMPORT*.md
+DATA_DICTIONARY*.md
+DEPLOY_INDEXES.md
+AUTOMATED_*.md
+EXCEL_IMPORT*.md
+NATIVE_EXCEL*.md
